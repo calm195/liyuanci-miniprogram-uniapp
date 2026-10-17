@@ -18,3 +18,11 @@ Thumbs.db
 # 微信小程序生成或相关配置（视情况选择是否忽略）
 # miniprogram_npm/
 
+
+# T004: 保留模板锁文件，隔离本地配置与构建结果
+!package-lock.json
+dist/
+.env*
+!.env.example
+*.local
+coverage/
