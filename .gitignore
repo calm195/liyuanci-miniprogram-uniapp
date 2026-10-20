@@ -19,7 +19,7 @@ Thumbs.db
 # miniprogram_npm/
 
 
-# T004: 保留模板锁文件，隔离本地配置与构建结果
+# 保留模板锁文件，隔离本地配置与构建结果
 !package-lock.json
 dist/
 .env*

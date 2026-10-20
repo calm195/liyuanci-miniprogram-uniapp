@@ -1,4 +1,4 @@
-// T009 / REQ-002、018；共享契约 0.1.0 的最小学生端投影。
+// 学生端使用的认证状态、本人资料与会话接口类型。
 export type VerificationState = 'unverified' | 'pending' | 'verified' | 'rejected'
 export interface UserInfo {
   id: string

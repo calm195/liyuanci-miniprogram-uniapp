@@ -17,7 +17,7 @@ type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete
   auth?: boolean
   silent?: boolean
 }
-// T009 / REQ-002、018：只向配置的 API 发送内存会话；不记录请求正文或凭据。
+// 仅向配置的接口地址发送内存会话令牌；不记录请求正文或凭据。
 export async function request<T>(options: RequestOptions): Promise<T> {
   try {
     if (config.useMock) throw new RequestError('合成模式不发送 API 请求', -1)

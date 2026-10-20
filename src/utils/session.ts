@@ -1,4 +1,4 @@
-// T009 / REQ-002、018：真实会话仅留内存，合成身份不能进入请求头。
+// 真实会话令牌仅保存在内存中，合成身份不得用于接口认证。
 let token = ''
 let epoch = 0
 export const session = {
