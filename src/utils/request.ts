@@ -17,12 +17,36 @@ type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete
   auth?: boolean
   silent?: boolean
 }
+// 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
+function isAllowedApiBaseUrl(value: string): boolean {
+  if (/^https:\/\/[^/]+(?:\/[^?#]*)?$/.test(value)) return true
+  if (!config.isDev) return false
+  const match = /^http:\/\/(localhost|\[::1\]|[0-9.]+)(?::([0-9]{1,5}))?(?:\/[^?#]*)?$/.exec(value)
+  if (!match || (match[2] && (+match[2] < 1 || +match[2] > 65535))) return false
+  if (match[1] === 'localhost' || match[1] === '[::1]') return true
+  const octets = match[1]!.split('.')
+  if (octets.some((part) => !/^(0|[1-9][0-9]{0,2})$/.test(part))) return false
+  const parts = octets.map(Number)
+  if (parts.length !== 4 || parts.some((part) => part < 0 || part > 255)) return false
+  const [first, second] = parts
+  return (
+    first === 127 ||
+    first === 10 ||
+    (first === 172 && second! >= 16 && second! <= 31) ||
+    (first === 192 && second === 168)
+  )
+}
 // 仅向配置的接口地址发送内存会话令牌；不记录请求正文或凭据。
 export async function request<T>(options: RequestOptions): Promise<T> {
   try {
     if (config.useMock) throw new RequestError('合成模式不发送 API 请求', -1)
-    if (!/^https:\/\/[^/]+(?:\/[^?#]*)?$/.test(config.apiBaseUrl))
-      throw new RequestError('请配置 HTTPS API 地址（含 /api/v1）', -1)
+    if (!isAllowedApiBaseUrl(config.apiBaseUrl))
+      throw new RequestError(
+        config.isDev
+          ? '请配置 HTTPS 或本机、局域网 HTTP API 地址（含 /api/v1）'
+          : '请配置 HTTPS API 地址（含 /api/v1）',
+        -1,
+      )
     if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%-]*$/.test(options.url) || options.url.includes('..'))
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()
