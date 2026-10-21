@@ -1,0 +1,89 @@
+import type { UserInfo, Verification, VerificationInput, StudentCardAsset } from '../types/api.ts'
+import type { WishResult } from '../types/wish.ts'
+
+// 仅消费正式索引中本端适用的写提示；目录本身不赋予权限。
+export const meActions = [
+  'postMeStudentCardAssets',
+  'postMeVerificationRequests',
+  'postWishes',
+] as const
+export const wishActions = [
+  'putWishesIdContent',
+  'deleteWishesIdDraft',
+  'postWishesIdSubmitReview',
+  'postWishesIdPublish',
+] as const
+export type WishAction = (typeof wishActions)[number]
+const validVersion = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0
+export function canMeAction(
+  me: UserInfo | null,
+  targetId: string,
+  action: string,
+  validated: boolean,
+): boolean {
+  if (
+    !validated ||
+    !me ||
+    !targetId ||
+    me.id !== targetId ||
+    !meActions.some((known) => known === action)
+  )
+    return false
+  if (!Array.isArray(me.allowed_actions) || !me.allowed_actions.includes(action)) return false
+  return action === 'postWishes'
+    ? me.verification === 'verified'
+    : ['unverified', 'rejected'].includes(me.verification)
+}
+export function canWishAction(
+  me: UserInfo | null,
+  validated: boolean,
+  wish: WishResult | null,
+  targetId: string,
+  action: string,
+): boolean {
+  return (
+    !!me &&
+    validated &&
+    me.verification === 'verified' &&
+    !!wish &&
+    !!targetId &&
+    wish.id === targetId &&
+    validVersion(wish.version) &&
+    !wish.privacy_review_required &&
+    wishActions.some((known) => known === action) &&
+    Array.isArray(wish.allowed_actions) &&
+    wish.allowed_actions.includes(action) &&
+    (action !== 'postWishesIdSubmitReview' || validVersion(wish.content_version))
+  )
+}
+export type ReviewSnapshot = {
+  state: 'unknown' | 'absent' | 'present'
+  record: Verification | null
+}
+// 仅明确无记录才省略版本；所有读取错误都保持未知，不能降级成首次。
+export function verificationInput(
+  name: string,
+  studentNumber: string,
+  asset: StudentCardAsset | null,
+  review: ReviewSnapshot,
+): VerificationInput {
+  if (!name.trim() || !studentNumber.trim()) throw new Error('请填写姓名和学号')
+  if (!asset?.asset_id || asset.scan_status !== 'approved')
+    throw new Error('学生卡安全扫描尚未通过')
+  if (review.state === 'unknown') throw new Error('请先读取当前审核记录')
+  const input: VerificationInput = {
+    name: name.trim(),
+    student_number: studentNumber.trim(),
+    asset_id: asset.asset_id,
+  }
+  if (review.state === 'present') {
+    if (
+      !review.record ||
+      review.record.status !== 'rejected' ||
+      !validVersion(review.record.version)
+    )
+      throw new Error('当前审核记录不可重提，请重新读取')
+    input.expected_version = review.record.version
+  } else if (review.record !== null) throw new Error('审核记录状态不一致，请重新读取')
+  return input
+}
