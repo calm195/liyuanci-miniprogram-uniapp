@@ -30,7 +30,20 @@ export type WishState =
   | 'withdrawn'
   | 'expired'
   | 'rejected'
+export const genders = [
+  { value: 'male', label: '男' },
+  { value: 'female', label: '女' },
+  { value: 'undisclosed', label: '保密' },
+] as const
+export interface IdentityTags {
+  campus?: (typeof campuses)[number]['value']
+  // 在读年级字典尚未交付，不从年份推断或编造选项。
+  grade?: string
+  // 省略表示未填写，与主动选择保密不同。
+  gender?: (typeof genders)[number]['value']
+}
 export interface WishInput {
+  identity_tags?: IdentityTags
   category: (typeof categories)[number]['value']
   body: string
   campus: (typeof campuses)[number]['value']

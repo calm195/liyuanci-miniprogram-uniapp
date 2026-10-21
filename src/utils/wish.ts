@@ -1,4 +1,4 @@
-import { categories, campuses, rewards } from '../types/wish.ts'
+import { categories, campuses, rewards, genders } from '../types/wish.ts'
 import type { WishInput, WishResult, WishState } from '../types/wish.ts'
 
 export function emptyWish(): WishInput {
@@ -18,6 +18,15 @@ export function validateWish(input: WishInput): string {
   if (!categories.some((item) => item.value === input.category)) return '请选择有效分类'
   if (!campuses.some((item) => item.value === input.campus)) return '请选择有效校区'
   if (!rewards.some((item) => item.value === input.reward_method)) return '请选择有效报答方式'
+  const tags = input.identity_tags
+  if (tags) {
+    if (tags.gender !== undefined && !genders.some((item) => item.value === tags.gender))
+      return '请选择有效性别标签'
+    if (tags.grade !== undefined && (typeof tags.grade !== 'string' || tags.grade.length === 0))
+      return '在读年级不能为空'
+    if (tags.campus !== undefined && !campuses.some((item) => item.value === tags.campus))
+      return '请选择有效身份校区标签'
+  }
   return ''
 }
 export const wishStateLabels: Record<WishState, string> = {

@@ -182,3 +182,73 @@ test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及
   )
   assert.equal(uploadCalls, before)
 })
+
+// 复用实际请求层执行认证适配，平台传输仍为合成替代。
+Object.assign(globalThis, { __verificationTest: { request } })
+const verificationSource = readFileSync(
+  new URL('../src/api/verification.ts', import.meta.url),
+  'utf8',
+).replace(
+  "import { request } from '@/utils/request'",
+  'const { request } = globalThis.__verificationTest',
+)
+const verificationCompiled = ts.transpileModule(verificationSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+}).outputText
+const verificationApi = await import(
+  `data:text/javascript;base64,${Buffer.from(verificationCompiled).toString('base64')}`
+)
+test('T013 / REQ-002、015、018：0.2.0扫描单次查询、首次省略及重提审核版本与错误分支', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  session.setToken('synthetic-verification-token')
+  statusCode = 200
+  for (const scan_status of ['pending', 'approved', 'rejected']) {
+    data = {
+      code: 0,
+      request_id: 'synthetic-scan',
+      data: { asset_id: 'synthetic/asset', scan_status },
+    }
+    assert.deepEqual(
+      await verificationApi.getStudentCardAsset('synthetic/asset'),
+      (data as { data: unknown }).data,
+    )
+    assert.equal(sent.url, config.apiBaseUrl + '/me/student-card-assets/synthetic%2Fasset')
+    assert.equal(sent.method, 'GET')
+  }
+  const input = { student_number: '合成学号', name: '合成姓名', asset_id: 'synthetic-asset' }
+  statusCode = 202
+  data = {
+    code: 0,
+    request_id: 'synthetic-submit',
+    data: { request_id: 'synthetic-review', version: 1, status: 'pending' },
+  }
+  await verificationApi.submitVerification(input, 'synthetic-first')
+  assert.equal(Object.prototype.hasOwnProperty.call(sent.data as object, 'expected_version'), false)
+  assert.equal((sent.header as Record<string, string>)['Idempotency-Key'], 'synthetic-first')
+  const review = { version: 3 }
+  await verificationApi.submitVerification(
+    { ...input, expected_version: review.version },
+    'synthetic-resubmit',
+  )
+  assert.equal((sent.data as { expected_version: number }).expected_version, 3)
+  for (const [status, error_code] of [
+    [400, 'VALIDATION_FAILED'],
+    [409, 'VERSION_CONFLICT'],
+    [409, 'ASSET_NOT_READY'],
+  ] as const) {
+    statusCode = status
+    data = { code: status, error_code, request_id: 'synthetic-error' }
+    const before = calls
+    await assert.rejects(verificationApi.submitVerification(input, 'synthetic-error'), {
+      error_code,
+      request_id: 'synthetic-error',
+    })
+    assert.equal(calls, before + 1)
+  }
+  statusCode = 404
+  data = { code: 404, error_code: 'NOT_FOUND' }
+  await assert.rejects(verificationApi.getStudentCardAsset('synthetic-other'), {
+    error_code: 'NOT_FOUND',
+  })
+})

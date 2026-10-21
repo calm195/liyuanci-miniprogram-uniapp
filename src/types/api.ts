@@ -36,5 +36,6 @@ export interface VerificationInput {
   student_number: string
   name: string
   asset_id: string
-  expected_version: number
+  // 首次无审核记录时省略；重提取当前审核记录版本，不能使用本人或资产版本。
+  expected_version?: number
 }

@@ -4,7 +4,8 @@ import { test } from 'node:test'
 import { createPinia, setActivePinia } from 'pinia'
 import ts from 'typescript'
 import { emptyWish, validateWish, publicWishBody, ownWishBody } from '../src/utils/wish.ts'
-import type { WishResult } from '../src/types/wish.ts'
+import { genders } from '../src/types/wish.ts'
+import type { WishResult, WishInput } from '../src/types/wish.ts'
 
 test('T015 / REQ-003：500 Unicode 码点、默认值、期限和枚举边界', () => {
   const input = emptyWish()
@@ -100,4 +101,27 @@ test('T015 / REQ-004、005、015：合成审核不直通，驳回改版重审，
   config.useMock = false
   assert.throws(() => store.save(input))
   assert.throws(() => store.transition(changed.id, 'publish'))
+})
+
+test('T015 / REQ-003、018：可选标签省略与保密不同，性别映射及空年级边界', () => {
+  const input = { ...emptyWish(), body: '合成标签心愿' }
+  assert.equal(Object.prototype.hasOwnProperty.call(input, 'identity_tags'), false)
+  assert.equal(validateWish(input), '')
+  assert.deepEqual(
+    genders.map(({ value, label }) => [value, label]),
+    [
+      ['male', '男'],
+      ['female', '女'],
+      ['undisclosed', '保密'],
+    ],
+  )
+  for (const { value: gender } of genders) {
+    assert.equal(validateWish({ ...input, identity_tags: { gender } }), '')
+  }
+  assert.equal(validateWish({ ...input, identity_tags: {} }), '')
+  assert.ok(validateWish({ ...input, identity_tags: { grade: '' } }))
+  assert.ok(validateWish({ ...input, identity_tags: { gender: '其他' } } as unknown as WishInput))
+  assert.ok(
+    validateWish({ ...input, identity_tags: { campus: 'invalid' } } as unknown as WishInput),
+  )
 })
