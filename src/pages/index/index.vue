@@ -47,7 +47,8 @@ async function logout() {
     </view>
     <view class="card">
       <text>首发文字心愿互助</text>
-      <text>学生卡上传与认证页面尚待接入；发布、申请、聊天将在后续任务开放。</text>
+      <navigator url="/pages/verification/index">学生认证</navigator>
+      <text>学生认证可进入查看；发布、申请、聊天将在后续任务开放。</text>
       <button disabled>发布心愿（待接入）</button>
       <button disabled>申请应愿（待接入）</button>
       <button disabled>聊天（待接入）</button>

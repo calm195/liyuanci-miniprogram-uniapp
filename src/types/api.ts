@@ -27,3 +27,14 @@ export interface ApiResponse<T> {
   request_id: string
   error_code?: string
 }
+
+export interface StudentCardAsset {
+  asset_id: string
+  scan_status: 'pending' | 'approved' | 'rejected'
+}
+export interface VerificationInput {
+  student_number: string
+  name: string
+  asset_id: string
+  expected_version: number
+}

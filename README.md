@@ -4,10 +4,10 @@
 
 鲤源池微信小程序基于 uni-app、Vue3 和 TypeScript 开发，使用 Pinia 管理共享状态，面向微信小程序运行环境。
 
-目前提供工程基础、微信登录与会话适配，以及合成认证状态展示。真实微信登录、学生认证闭环和后续业务仍需联调验收。任务、REQ、契约版本、设计取舍、验证结果及接入条件按阶段保存在 [docs/milestones/](docs/milestones/)：
+目前提供工程基础、微信登录与会话适配，以及学生认证页面与合成流程（扫描、待审、驳回重提、通过）。真实认证提交仍待契约协调，真实微信登录、学生认证闭环和后续业务仍需联调验收。任务、REQ、契约版本、设计取舍、验证结果及接入条件按阶段保存在 [docs/milestones/](docs/milestones/)：
 
 - [阶段一：T004 / T009 工程基础与微信会话](docs/milestones/01-T004-T009-foundation-session.md)
-- [阶段二：T013 学生认证接入（待启动）](docs/milestones/02-T013-verification.md)
+- [阶段二：T013 学生认证页面与待接入事项](docs/milestones/02-T013-verification.md)
 
 ## 2. 项目选项与目录结构
 

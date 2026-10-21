@@ -11,6 +11,12 @@
       "style": {
         "navigationBarTitleText": "登录"
       }
+    },
+    {
+      "path": "pages/verification/index",
+      "style": {
+        "navigationBarTitleText": "学生认证"
+      }
     }
   ],
   "globalStyle": {

@@ -118,3 +118,67 @@ test('T009 / REQ-018：仅开发环境放行本机与私网 HTTP，生产强制 
     await request({ url: '/me' })
   }
 })
+
+test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及会话失效隔离', async () => {
+  config.useMock = false
+  config.isDev = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  let uploadStatus = 202
+  let uploadBody = JSON.stringify({
+    code: 0,
+    request_id: 'synthetic-upload',
+    data: { asset_id: 'synthetic-asset', scan_status: 'pending' },
+  })
+  let uploadOptions: Record<string, unknown> = {}
+  let changeSession = false
+  let uploadCalls = 0
+  Object.assign(uni, {
+    uploadFile(options: { success: (response: unknown) => void }) {
+      uploadCalls++
+      uploadOptions = options
+      if (changeSession) session.clear()
+      options.success({ statusCode: uploadStatus, data: uploadBody })
+    },
+  })
+  session.setToken('synthetic-upload-token')
+  assert.deepEqual(
+    await request({
+      url: '/me/student-card-assets',
+      method: 'POST',
+      filePath: 'synthetic-local-card',
+      header: { 'Idempotency-Key': 'synthetic-key' },
+    }),
+    { asset_id: 'synthetic-asset', scan_status: 'pending' },
+  )
+  assert.equal(uploadOptions.name, 'file')
+  assert.equal(uploadOptions.filePath, 'synthetic-local-card')
+  const header = uploadOptions.header as Record<string, string>
+  assert.equal(header.Authorization, 'Bearer synthetic-upload-token')
+  assert.equal(header['Idempotency-Key'], 'synthetic-key')
+  assert.equal(header['Content-Type'], undefined)
+  uploadBody = 'invalid JSON'
+  await assert.rejects(
+    request({ url: '/me/student-card-assets', filePath: 'synthetic-local-card' }),
+  )
+  uploadStatus = 401
+  const beforeExpired = expired
+  await assert.rejects(
+    request({ url: '/me/student-card-assets', filePath: 'synthetic-local-card' }),
+  )
+  assert.equal(session.getToken(), '')
+  assert.equal(expired, beforeExpired + 1)
+  session.setToken('synthetic-new-token')
+  uploadStatus = 202
+  uploadBody = JSON.stringify({ code: 0, request_id: 'synthetic-upload', data: {} })
+  changeSession = true
+  await assert.rejects(
+    request({ url: '/me/student-card-assets', filePath: 'synthetic-local-card' }),
+    /会话已变化/,
+  )
+  config.useMock = true
+  const before = uploadCalls
+  await assert.rejects(
+    request({ url: '/me/student-card-assets', filePath: 'synthetic-local-card' }),
+  )
+  assert.equal(uploadCalls, before)
+})

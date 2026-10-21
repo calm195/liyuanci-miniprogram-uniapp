@@ -16,6 +16,7 @@ type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete
   url: string
   auth?: boolean
   silent?: boolean
+  filePath?: string
 }
 // 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
 function isAllowedApiBaseUrl(value: string): boolean {
@@ -51,17 +52,17 @@ export async function request<T>(options: RequestOptions): Promise<T> {
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()
     const epoch = session.getEpoch()
-    return await new Promise<T>((resolve, reject) =>
-      uni.request({
+    return await new Promise<T>((resolve, reject) => {
+      const transport = {
         ...options,
         url: config.apiBaseUrl.replace(/\/$/, '') + options.url,
         timeout: options.timeout ?? 15000,
         header: {
-          'Content-Type': 'application/json',
+          ...(options.filePath ? {} : { 'Content-Type': 'application/json' }),
           ...options.header,
           ...(options.auth !== false && token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        success: (response) => {
+        success: (response: { statusCode: number; data: unknown }) => {
           const body = response.data as ApiResponse<T>
           if (response.statusCode === 401 && epoch === session.getEpoch()) {
             session.clear()
@@ -93,8 +94,30 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           resolve(body.data)
         },
         fail: () => reject(new RequestError('网络异常，请检查网络后重试', -1)),
-      }),
-    )
+      }
+      if (options.filePath) {
+        uni.uploadFile({
+          url: transport.url,
+          filePath: options.filePath,
+          name: 'file',
+          header: transport.header,
+          timeout: transport.timeout,
+          success: (response) => {
+            let body: unknown
+            try {
+              body = JSON.parse(response.data)
+            } catch {
+              // 无效正文仍走统一状态处理，确保上传返回 401 时清理会话。
+              body = null
+            }
+            transport.success({ statusCode: response.statusCode, data: body })
+          },
+          fail: transport.fail,
+        })
+      } else {
+        uni.request(transport)
+      }
+    })
   } catch (error) {
     const failure = error instanceof RequestError ? error : new RequestError('请求处理失败', -1)
     if (!options.silent) uni.showToast({ title: failure.message, icon: 'none' })
