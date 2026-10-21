@@ -17,6 +17,12 @@
       "style": {
         "navigationBarTitleText": "学生认证"
       }
+    },
+    {
+      "path": "pages/wishes/index",
+      "style": {
+        "navigationBarTitleText": "文字心愿"
+      }
     }
   ],
   "globalStyle": {
