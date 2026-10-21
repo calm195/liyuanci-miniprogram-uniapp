@@ -16,6 +16,7 @@ const me: UserInfo = {
 const config = { useMock: false }
 const listeners = new Map<string, () => void>()
 let codes: string[] = []
+let requestIds: string[] = []
 let failLogin = false
 let failRevoke = false
 let loadMe = async (): Promise<UserInfo> => me
@@ -23,8 +24,9 @@ const auth = {
   async wechatCode() {
     return `synthetic-code-${codes.length + 1}`
   },
-  async login(code: string) {
+  async login(code: string, clientRequestId: string) {
     codes.push(code)
+    requestIds.push(clientRequestId)
     if (failLogin) throw new Error('合成登录失败')
     return { token: 'synthetic-token', me }
   },
@@ -68,6 +70,7 @@ function setup() {
   session.clear()
   config.useMock = false
   codes = []
+  requestIds = []
   failLogin = false
   failRevoke = false
   loadMe = async () => me
@@ -92,6 +95,9 @@ test('T009 / REQ-002：登录失败重试重新取 code，成功后刷新本人�
   failLogin = false
   await store.login()
   assert.deepEqual(codes, ['synthetic-code-1', 'synthetic-code-2'])
+  assert.equal(requestIds.length, 2)
+  assert.ok(requestIds.every(Boolean))
+  assert.notEqual(requestIds[0], requestIds[1])
   assert.equal(store.isLoggedIn, true)
   assert.equal(store.validated, true)
   assert.equal(session.getToken(), 'synthetic-token')
@@ -105,6 +111,7 @@ test('T009 / REQ-018：重复点击登录只交换一次 code', async () => {
   pending.resolve(me)
   await login
   assert.equal(codes.length, 1)
+  assert.equal(requestIds.length, 1)
 })
 test('T009 / REQ-002：驳回展示建议，刷新失败关闭资格', async () => {
   const store = setup()
@@ -149,4 +156,17 @@ test('T009 / REQ-018：过期事件清理身份并丢弃迟到的登录结果', 
   assert.equal(store.expired, true)
   assert.equal(store.validated, false)
   assert.equal(session.getToken(), '')
+})
+
+test('REQ-002：认证页可只刷新本人资格，由页面独立读取审核记录', async () => {
+  const store = setup()
+  loadMe = async () => ({ ...me, verification: 'rejected' })
+  await store.login()
+  assert.ok(store.verification)
+  await store.refresh(false)
+  assert.equal(store.validated, true)
+  assert.equal(store.user.verification, 'rejected')
+  assert.equal(store.verification, null)
+  await store.refresh()
+  assert.equal(store.verification.version, 1)
 })

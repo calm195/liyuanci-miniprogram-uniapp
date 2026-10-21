@@ -9,7 +9,8 @@ export function login(code: string, clientRequestId: string) {
   })
 }
 export const getMe = () => request<UserInfo>({ url: '/me' })
-export const getVerification = () => request<Verification>({ url: '/me/verification-request' })
+export const getVerification = (silent = false) =>
+  request<Verification>({ url: '/me/verification-request', silent })
 export const revokeSession = (key: string) =>
   request<void>({ url: '/auth/session', method: 'DELETE', header: { 'Idempotency-Key': key } })
 export function wechatCode(): Promise<string> {

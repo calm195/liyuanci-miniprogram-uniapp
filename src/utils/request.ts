@@ -7,6 +7,7 @@ export class RequestError extends Error {
     public readonly code: number,
     public readonly error_code = '',
     public readonly request_id = '',
+    public readonly statusCode = 0,
   ) {
     super(message)
     this.name = 'RequestError'
@@ -48,7 +49,17 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           : '请配置 HTTPS API 地址（含 /api/v1）',
         -1,
       )
-    if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%-]*$/.test(options.url) || options.url.includes('..'))
+    // 游标是不透明字符串，点号等合法查询字符不能当作路径穿越。
+    const pathname = options.url.split('?')[0]!
+    const invalidPath = pathname.split('/').some((part) => {
+      try {
+        const decoded = decodeURIComponent(part)
+        return decoded === '.' || decoded === '..'
+      } catch {
+        return true
+      }
+    })
+    if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%~.!'()*-]*$/.test(options.url) || invalidPath)
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()
     const epoch = session.getEpoch()
@@ -64,7 +75,11 @@ export async function request<T>(options: RequestOptions): Promise<T> {
         },
         success: (response: { statusCode: number; data: unknown }) => {
           const body = response.data as ApiResponse<T>
-          if (response.statusCode === 401 && epoch === session.getEpoch()) {
+          if (
+            response.statusCode === 401 &&
+            options.auth !== false &&
+            epoch === session.getEpoch()
+          ) {
             session.clear()
             uni.$emit('auth:expired')
           }
@@ -79,10 +94,15 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           if (response.statusCode < 200 || response.statusCode >= 300 || body?.code !== 0) {
             reject(
               new RequestError(
-                response.statusCode === 401 ? '登录已过期，请重新登录' : '请求未完成，请稍后重试',
+                response.statusCode === 401
+                  ? options.auth === false
+                    ? '微信登录凭据无效，请重新登录'
+                    : '登录已过期，请重新登录'
+                  : '请求未完成，请稍后重试',
                 body?.code || response.statusCode,
                 body?.error_code,
                 body?.request_id,
+                response.statusCode,
               ),
             )
             return

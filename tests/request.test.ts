@@ -48,8 +48,10 @@ test('T009 / REQ-002、018：成功、错误标识、204、401与 Mock 隔离', 
   assert.equal(sent.url, config.apiBaseUrl + '/me')
   assert.equal((sent.header as Record<string, string>).Authorization, 'Bearer synthetic-test-only')
   statusCode = 409
-  data = { code: 409, error_code: 'VERSION_CONFLICT', request_id: 'synthetic-conflict' }
+  data = { code: 1009, error_code: 'VERSION_CONFLICT', request_id: 'synthetic-conflict' }
   await assert.rejects(request({ url: '/me' }), {
+    code: 1009,
+    statusCode: 409,
     error_code: 'VERSION_CONFLICT',
     request_id: 'synthetic-conflict',
   })
@@ -251,4 +253,75 @@ test('T013 / REQ-002、015、018：0.2.0扫描单次查询、首次省略及重�
   await assert.rejects(verificationApi.getStudentCardAsset('synthetic-other'), {
     error_code: 'NOT_FOUND',
   })
+})
+
+async function loadApi(name: string) {
+  Object.assign(globalThis, { __auditedRequest: request })
+  const source = readFileSync(new URL(`../src/api/${name}.ts`, import.meta.url), 'utf8').replace(
+    "import { request } from '@/utils/request'",
+    'const request = globalThis.__auditedRequest',
+  )
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+  }).outputText
+  return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
+}
+
+test('REQ-002、018：实际会话API符合契约，微信code无效不撤销现有Bearer会话', async () => {
+  const api = await loadApi('auth')
+  config.useMock = false
+  session.setToken('synthetic-existing-token')
+  const me = { id: 'synthetic-user', version: 1, verification: 'unverified', allowed_actions: [] }
+  statusCode = 200
+  data = { code: 0, request_id: 'synthetic-login', data: { token: 'synthetic-new-token', me } }
+  await api.login('synthetic-code', 'synthetic-attempt')
+  assert.equal(sent.url, config.apiBaseUrl + '/auth/wechat-sessions')
+  assert.equal(sent.method, 'POST')
+  assert.deepEqual(sent.data, { code: 'synthetic-code', client_request_id: 'synthetic-attempt' })
+  assert.equal((sent.header as Record<string, string>).Authorization, undefined)
+  assert.equal((sent.header as Record<string, string>)['Idempotency-Key'], undefined)
+  statusCode = 401
+  data = { code: 1001, error_code: 'UNAUTHENTICATED', request_id: 'synthetic-code-invalid' }
+  const beforeExpired = expired
+  await assert.rejects(api.login('synthetic-invalid', 'synthetic-attempt-2'), {
+    statusCode: 401,
+    message: '微信登录凭据无效，请重新登录',
+  })
+  assert.equal(expired, beforeExpired)
+  assert.equal(session.getToken(), 'synthetic-existing-token')
+  statusCode = 200
+  data = { code: 0, request_id: 'synthetic-me', data: me }
+  assert.deepEqual(await api.getMe(), me)
+  assert.equal(sent.url, config.apiBaseUrl + '/me')
+  assert.equal(
+    (sent.header as Record<string, string>).Authorization,
+    'Bearer synthetic-existing-token',
+  )
+  data = { code: 0, request_id: 'synthetic-review', data: { version: 3, status: 'rejected' } }
+  await api.getVerification(true)
+  assert.equal(sent.url, config.apiBaseUrl + '/me/verification-request')
+  assert.equal(sent.silent, true)
+  statusCode = 204
+  data = ''
+  await api.revokeSession('synthetic-logout-key')
+  assert.equal(sent.url, config.apiBaseUrl + '/auth/session')
+  assert.equal(sent.method, 'DELETE')
+  assert.equal((sent.header as Record<string, string>)['Idempotency-Key'], 'synthetic-logout-key')
+})
+
+test('T009 / REQ-002、018：登录409不自动重发，调用方网络重发保持凭据对不变', async () => {
+  const api = await loadApi('auth')
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  statusCode = 409
+  data = { code: 409, message: '请求未完成', request_id: 'synthetic-conflict' }
+  const before = calls
+  await assert.rejects(api.login('synthetic-code', 'synthetic-attempt'), { statusCode: 409 })
+  assert.equal(calls, before + 1)
+  const original = { ...(sent.data as Record<string, string>) }
+  statusCode = 200
+  data = { code: 0, request_id: 'synthetic-replay', data: { token: 'synthetic-token' } }
+  await api.login('synthetic-code', 'synthetic-attempt')
+  assert.deepEqual(sent.data, original)
+  assert.equal(calls, before + 2)
 })

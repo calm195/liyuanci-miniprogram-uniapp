@@ -21,7 +21,7 @@ export const useUserStore = defineStore('user', () => {
     verification.value = null
     validated.value = false
   }
-  async function refresh() {
+  async function refresh(includeVerification = true) {
     if (!session.getToken() || config.useMock) return
     const current = generation
     validated.value = false
@@ -30,7 +30,7 @@ export const useUserStore = defineStore('user', () => {
     if (current !== generation) return
     user.value = me
     validated.value = true
-    if (me.verification === 'pending' || me.verification === 'rejected') {
+    if (includeVerification && (me.verification === 'pending' || me.verification === 'rejected')) {
       const result = await auth.getVerification()
       if (current === generation) verification.value = result
     }
@@ -42,10 +42,9 @@ export const useUserStore = defineStore('user', () => {
     try {
       const code = await auth.wechatCode()
       if (current !== generation) return
-      const result = await auth.login(
-        code,
-        `wx-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      )
+      // 每次重新登录成对获取凭据；同次网络重发必须复用这两个值，不单独更换请求标识。
+      const clientRequestId = `wx-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const result = await auth.login(code, clientRequestId)
       if (current !== generation) return
       session.setToken(result.token)
       user.value = result.me
