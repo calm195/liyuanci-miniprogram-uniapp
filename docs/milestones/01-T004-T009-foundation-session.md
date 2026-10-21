@@ -13,7 +13,7 @@
 
 ## 验证与状态
 
-实际结果：`npm ci --ignore-scripts --offline` 成功安装 871 个包；`npm run check`（ESLint、Prettier、TypeScript、5 项单元测试）通过；`npm run build:mp-weixin` 通过，产物 dist/build/mp-weixin；`git diff --check` 通过。首次格式失败已 format 修复重跑，首次构建 Sass 变量失败已修复重跑。Node 提示模板缺少 type=module；构建提示未配置 AppID，均未阻止通过。未执行微信开发者工具、实机或真实 API 联调。T004 仅小程序工程可核验；T009 为契约适配/合成展示实现，真实 API 与微信联调未验收。T003 外部依赖交付未核实，不能签整体 T004/T009 完成。未启动 T013 及后续业务实现。
+实际结果：`npm ci --ignore-scripts --offline` 成功安装 871 个包；`npm run check`（ESLint、Prettier、TypeScript、5 项单元测试）通过；`npm run build:mp-weixin` 通过，产物 dist/build/mp-weixin；`git diff --check` 通过。首次格式失败已 format 修复重跑，首次构建 Sass 变量失败已修复重跑。Node 提示模板缺少 type=module；构建提示未配置 AppID，均未阻止通过。未执行微信开发者工具、实机或真实 API 联调。T004 仅小程序工程可核验；T009 为契约适配/合成展示实现，真实 API 与微信联调未验收。当时 T003 外部依赖交付未核实，未签整体 T004/T009 完成；后续本仓库 T004 验收结论见下文。未启动 T013 及后续业务实现。
 
 构建修正：T004 / REQ-020，模板 styles/index.scss 显式 @use uni.scss，修复 Sass 模块变量不可见；不升级依赖。
 
@@ -57,3 +57,13 @@ Pinia 维护本人投影与认证状态，会话令牌仅留内存，重启需�
 真实/模拟状态：新增验证使用替代传输与合成响应，无真实微信、后端或真机联调；既有合成展示与真实接口适配边界不变。后端服务、AppID、微信网络调试配置与生产 HTTPS 合法域名仍需实际交付。
 
 验证结果：`npm run check` 通过（ESLint、Prettier、TypeScript 与 6 项单元测试）；`npm run build:mp-weixin` 通过；`git diff --check` 通过。Node 的模块类型及构建缺少 AppID 提示仍存在，不影响命令通过。未执行微信开发者工具、真机或真实 API 联调。新增请求层测试覆盖开发本机/私网放行、生产拒绝 HTTP、公网及伪装主机拒绝、无效端口和地址拒绝，以及两种模式 HTTPS 放行。
+
+## T004 小程序工程验收通过（2026-10-20）
+
+状态：本仓库 T004 小程序工程范围验收通过。确认依据为用户在本会话明确要求“更新通过T004验收”，对应代码提交为 `f8e2258`，已合入远程主分支。关联 REQ-001、020；共享契约 0.1.0。
+
+验收范围：uni-app Vue3 TypeScript 工程、页面注册、Pinia、SCSS/Tailwind、依赖锁定与检查流水线、开发合成模式隔离，以及本机/私网 HTTP 开发联调配置；生产仍强制 HTTPS。工程检查与构建为实际执行，合成状态和请求测试使用虚构数据及替代传输，不代表真实微信身份或真实 API 联调通过。
+
+验证证据：该提交的 `npm run check` 通过（ESLint、Prettier、TypeScript 与 6 项单元测试），`npm run build:mp-weixin` 通过，`git diff --check` 通过。现存模块类型和未配置 AppID 提示不影响工程命令通过；未新增微信开发者工具或实机验收证据。
+
+范围边界：总实施计划的 T004 还包含 Web、Go API/任务进程及 PG/Redis/MQ 连接和 Producer/Consumer 往返；这些跨仓库内容不在本次小程序验收结论内，需由集成方汇总相应证据。T003 外部资源实际交付状态仍待协调核实。T009 真实微信/API 联调与 T013 学生认证闭环仍待验收，不因本次 T004 小程序工程通过而自动完成。共享计划与契约保持只读，本次仅更新本仓库阶段记录。
