@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
 import { session } from '../src/utils/session.ts'
+import { studentCardMultipart } from '../src/utils/student-card.ts'
 // T009 / REQ-002、018：替换平台传输，直接执行生产请求层；不访问网络。
 const config = { apiBaseUrl: 'https://synthetic.invalid/api/v1', useMock: false, isDev: false }
 let statusCode = 200
@@ -186,15 +187,14 @@ test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及
 })
 
 // 复用实际请求层执行认证适配，平台传输仍为合成替代。
-Object.assign(globalThis, { __verificationTest: { request } })
+Object.assign(globalThis, { __verificationTest: { request, session, studentCardMultipart } })
 const verificationSource = readFileSync(
   new URL('../src/api/verification.ts', import.meta.url),
   'utf8',
-).replace(
-  "import { request } from '@/utils/request'",
-  'const { request } = globalThis.__verificationTest',
-)
-const verificationCompiled = ts.transpileModule(verificationSource, {
+).replace(/^import .*\n/gm, '')
+const verificationPrelude =
+  'const { request, session, studentCardMultipart } = globalThis.__verificationTest;\n'
+const verificationCompiled = ts.transpileModule(verificationPrelude + verificationSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText
 const verificationApi = await import(
@@ -307,6 +307,32 @@ test('REQ-002、018：实际会话API符合契约，微信code无效不撤销现
   assert.equal(sent.url, config.apiBaseUrl + '/auth/session')
   assert.equal(sent.method, 'DELETE')
   assert.equal((sent.header as Record<string, string>)['Idempotency-Key'], 'synthetic-logout-key')
+})
+
+test('T013：二进制 multipart 实际请求层保留 boundary、学生 Bearer 与幂等键', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  session.setToken('synthetic-student-token')
+  statusCode = 202
+  data = {
+    code: 0,
+    request_id: 'synthetic-card',
+    data: { asset_id: 'synthetic', scan_status: 'pending' },
+  }
+  Object.assign(uni, {
+    getImageInfo: async () => ({ type: 'jpeg' }),
+    getFileSystemManager: () => ({
+      readFile: (options: { success: (value: { data: ArrayBuffer }) => void }) =>
+        options.success({ data: new Uint8Array([255, 216, 255]).buffer }),
+    }),
+  })
+  await verificationApi.uploadStudentCard('synthetic-local', 'synthetic-card-key')
+  assert.ok(sent.data instanceof ArrayBuffer)
+  const headers = sent.header as Record<string, string>
+  assert.equal(headers.Authorization, 'Bearer synthetic-student-token')
+  assert.equal(headers['Idempotency-Key'], 'synthetic-card-key')
+  assert.match(headers['Content-Type']!, /^multipart\/form-data; boundary=/)
+  assert.equal(sent.formData, undefined)
 })
 
 test('T009 / REQ-002、018：登录409不自动重发，调用方网络重发保持凭据对不变', async () => {

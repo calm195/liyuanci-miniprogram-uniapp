@@ -119,3 +119,21 @@ test('B14 / 002-A/B/C：首次省略版本，重提只取审核记录，扫描�
     false,
   )
 })
+
+test('REQ-002：认证材料原样传递，UTF-8 安全边界不截断输入', () => {
+  const asset = { asset_id: 'synthetic-card', scan_status: 'approved' } as const
+  const review = { state: 'absent', record: null } as const
+  const input = verificationInput(' 合成姓名 ', ' synthetic-number ', asset, review)
+  assert.equal(input.name, ' 合成姓名 ')
+  assert.equal(input.student_number, ' synthetic-number ')
+  assert.equal(
+    verificationInput('😀'.repeat(64), '号'.repeat(42) + 'ab', asset, review).name.length,
+    128,
+  )
+  for (const [name, number] of [
+    ['😀'.repeat(64) + 'a', '合成学号'],
+    ['合成姓名', '号'.repeat(43)],
+    ['合成姓名', 'a'.repeat(129)],
+  ])
+    assert.throws(() => verificationInput(name!, number!, asset, review), /输入大小限制/)
+})

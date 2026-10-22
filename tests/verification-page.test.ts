@@ -47,7 +47,7 @@ async function setup() {
       useUserStore: () => store,
       getVerification: () => read(),
       RequestError,
-      uploadStudentCard: async () => {},
+      uploadStudentCard: async () => ({ asset_id: 'synthetic-upload', scan_status: 'pending' }),
       session: { getEpoch: () => epoch },
       onShow: (fn: () => void) => {
         hooks.show = fn
@@ -68,7 +68,7 @@ async function setup() {
     .split('</script>')[0]!
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload };`
+  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
@@ -242,4 +242,45 @@ test('B14 / I1-S01/S02：单次查询不自动认证，离开丢弃、重入不�
   })
   await page.queryAsset()
   assert.equal(page.asset.value, null)
+})
+
+test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可提交，正常离开仍清理', async () => {
+  const { page, hooks, config, store } = await setup()
+  hooks.show!()
+  await settle()
+  config.verificationWritesReady = true
+  page.name.value = '合成姓名'
+  page.studentNumber.value = '合成学号'
+  let choose!: (result: { tempFilePaths: string[] }) => void
+  Object.assign(globalThis, {
+    uni: {
+      chooseImage: (options: { success: typeof choose }) => {
+        hooks.hide!()
+        choose = options.success
+      },
+    },
+  })
+  try {
+    const pending = page.chooseCard()
+    assert.equal(page.name.value, '合成姓名')
+    hooks.show!()
+    // 应用返回前台刷新资格时，会先临时撤销 validated。
+    store.validated = false
+    store.refresh = async () => {
+      store.validated = true
+    }
+    choose({ tempFilePaths: ['synthetic-path'] })
+    await pending
+    assert.equal(page.asset.value.asset_id, 'synthetic-upload')
+    assert.equal(page.canSubmitReal.value, false)
+    await page.queryAsset()
+    assert.equal(page.canSubmitReal.value, true)
+    page.studentNumber.value = ' '
+    assert.equal(page.canSubmitReal.value, false)
+    hooks.hide!()
+    assert.equal(page.name.value, '')
+    assert.equal(page.asset.value, null)
+  } finally {
+    Reflect.deleteProperty(globalThis, 'uni')
+  }
 })

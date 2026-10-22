@@ -1,7 +1,7 @@
 export const config = {
   title: '鲤源池',
-  // 真实业务服务及资源准入尚未完成；只在联调证据具备后修改。
-  verificationWritesReady: false,
+  // 真实写入入口已开放，具体操作仍检查当前会话、服务端动作与对象版本。
+  verificationWritesReady: true,
   wishWritesReady: false,
   isDev: import.meta.env.DEV,
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '',

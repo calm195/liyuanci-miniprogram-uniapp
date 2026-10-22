@@ -29,6 +29,8 @@ const canUpload = computed(() =>
 const canSubmitReal = computed(
   () =>
     config.verificationWritesReady &&
+    !!name.value.trim() &&
+    !!studentNumber.value.trim() &&
     !busy.value &&
     !refreshing.value &&
     !querying.value &&
@@ -43,6 +45,7 @@ const demoStatus = ref<'draft' | 'pending' | 'rejected' | 'approved'>('draft')
 const demoMessage = ref('')
 let generation = 0
 let visible = false
+let selectingCard = false
 const canSubmitDemo = computed(
   () =>
     config.useMock &&
@@ -78,10 +81,10 @@ async function refreshReview() {
   reviewState.value = 'unknown'
   error.value = ''
   try {
-    await store.refresh()
+    await store.refresh(false)
     if (!isCurrent() || !store.isLoggedIn || !store.validated) return
     try {
-      const review = await getVerification()
+      const review = await getVerification(true)
       if (!isCurrent()) return
       if (!Number.isInteger(review.version) || review.version < 1) throw new Error('审核版本无效')
       currentReview.value = review
@@ -90,7 +93,7 @@ async function refreshReview() {
       reviewOwner.value = store.user?.id || ''
     } catch (failure) {
       if (!isCurrent()) return
-      if (failure instanceof RequestError && failure.code === 404) {
+      if (failure instanceof RequestError && (failure.statusCode || failure.code) === 404) {
         reviewState.value = 'absent'
         reviewEpoch.value = epoch
         reviewOwner.value = store.user?.id || ''
@@ -118,11 +121,24 @@ async function chooseCard() {
   const epoch = session.getEpoch()
   busy.value = true
   try {
-    const result = await new Promise<{ tempFilePaths: string | string[] }>((resolve, reject) => {
-      uni.chooseImage({ count: 1, success: resolve, fail: reject })
-    })
-    if (!visible || current !== generation || epoch !== session.getEpoch() || !canUpload.value)
+    // 微信选图会临时隐藏页面，此时保留内存表单；选图结束后恢复正常离开清理。
+    selectingCard = true
+    let result: { tempFilePaths: string | string[] }
+    try {
+      result = await new Promise<{ tempFilePaths: string | string[] }>((resolve, reject) => {
+        uni.chooseImage({ count: 1, sizeType: ['original'], success: resolve, fail: reject })
+      })
+    } finally {
+      selectingCard = false
+    }
+    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    // 选图返回会触发应用刷新资格，等待本人资格确认后再判断上传权限。
+    if (!store.validated) await store.refresh(false)
+    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    if (!canUpload.value) {
+      error.value = '当前账号暂不能上传学生卡，请刷新账号状态后重试。'
       return
+    }
     const path =
       typeof result.tempFilePaths === 'string' ? result.tempFilePaths : result.tempFilePaths[0]
     if (!path) return
@@ -134,9 +150,9 @@ async function chooseCard() {
       asset.value = uploaded
       assetEpoch.value = epoch
     }
-  } catch {
+  } catch (failure) {
     if (visible && current === generation && epoch === session.getEpoch())
-      error.value = '未完成选图或上传，请重试。'
+      error.value = failure instanceof Error ? failure.message : '未完成选图或上传，请重试。'
   } finally {
     if (current === generation) busy.value = false
   }
@@ -167,7 +183,10 @@ async function queryAsset() {
     asset.value = result
   } catch (failure) {
     if (!isCurrent()) return
-    if (failure instanceof RequestError && (failure.code === 404 || failure.code === 401))
+    if (
+      failure instanceof RequestError &&
+      ((failure.statusCode || failure.code) === 404 || (failure.statusCode || failure.code) === 401)
+    )
       asset.value = null
     error.value = '无法确认图片扫描结果，请重新查询或选择图片。'
   } finally {
@@ -230,13 +249,15 @@ function reviewDemo(approved: boolean) {
 }
 onShow(() => {
   visible = true
-  if (!config.useMock) void refreshReview()
+  if (!config.useMock && !selectingCard) void refreshReview()
 })
 onHide(() => {
+  if (selectingCard) return
   visible = false
   clearPrivateData()
 })
 onUnload(() => {
+  selectingCard = false
   visible = false
   clearPrivateData()
 })
@@ -274,9 +295,10 @@ onUnload(() => {
           重新读取审核记录
         </button>
       </view>
-      <text v-if="!config.useMock">认证提交服务待联调，当前不能完成真实申请。</text>
+      <text v-if="!config.useMock && !config.verificationWritesReady">认证提交暂未开放。</text>
       <input
         v-model="name"
+        :maxlength="-1"
         placeholder="姓名（演示时填写虚构姓名）"
         :disabled="
           (!config.useMock && !config.verificationWritesReady) ||
@@ -287,6 +309,7 @@ onUnload(() => {
       />
       <input
         v-model="studentNumber"
+        :maxlength="-1"
         placeholder="学号（演示时填写虚构学号）"
         :disabled="
           (!config.useMock && !config.verificationWritesReady) ||
@@ -307,6 +330,9 @@ onUnload(() => {
       >
         {{ config.useMock ? '选择合成学生卡' : '选择并上传学生卡' }}
       </button>
+      <text v-if="!config.useMock && !asset && !busy">
+        请选择真实 PNG/JPEG 图片。上传成功后显示扫描查询按钮。
+      </text>
       <text v-if="asset"
         >图片扫描状态：{{
           asset.scan_status === 'pending'
@@ -335,7 +361,7 @@ onUnload(() => {
         :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
         @click="config.useMock ? submitDemo() : submitReal()"
       >
-        {{ config.useMock ? '提交合成认证申请' : '提交认证申请（待联调）' }}
+        {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
       </button>
       <text v-if="error">{{ error }}</text>
       <text v-if="demoMessage">{{ demoMessage }}</text>
