@@ -2,15 +2,20 @@ import { request } from '@/utils/request'
 import type { WishFilters, WishInput, WishPage, WishResult } from '@/types/wish'
 function query(filters: WishFilters) {
   return Object.entries(filters)
-    .filter(([, value]) => value)
-    .map(([key, value]) => `${key}=${encodeURIComponent(value!)}`)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
     .join('&')
 }
 export function listWishes(own: boolean, filters: WishFilters) {
   const search = query(
     own
-      ? { state: filters.state, cursor: filters.cursor }
-      : { category: filters.category, campus: filters.campus, cursor: filters.cursor },
+      ? { state: filters.state, cursor: filters.cursor, limit: filters.limit }
+      : {
+          category: filters.category,
+          campus: filters.campus,
+          cursor: filters.cursor,
+          limit: filters.limit,
+        },
   )
   return request<WishPage>({
     url: `${own ? '/me/wishes' : '/wishes'}${search ? '?' + search : ''}`,

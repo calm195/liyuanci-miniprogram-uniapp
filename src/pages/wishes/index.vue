@@ -114,7 +114,7 @@ function edit(wish?: WishResult) {
   editing.value = true
   editingWish.value = wish || null
   editingId.value = wish?.id
-  form.value = wish?.own_content ? { ...wish.own_content } : emptyWish()
+  form.value = wish?.own_content ? { ...emptyWish(), ...wish.own_content } : emptyWish()
 }
 async function save() {
   error.value = validateWish(form.value)
@@ -187,7 +187,7 @@ async function write(command: (key: string) => Promise<unknown>) {
   } catch (failure) {
     if (!isCurrent()) return
     cancelEdit()
-    if (failure instanceof RequestError && failure.code === 409) {
+    if (failure instanceof RequestError && (failure.statusCode || failure.code) === 409) {
       await load()
       if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
         error.value = '心愿状态已变化，已重新读取，请确认后手动操作。'
@@ -272,7 +272,7 @@ onUnload(leave)
     >
     <button v-if="config.useMock" @click="edit()">写一条合成心愿</button>
     <view v-else>
-      <text>真实写入待服务联调，当前可查询列表。</text>
+      <text>发布心愿须通过学生认证，具体操作以当前账号和心愿状态为准。</text>
       <button :disabled="!config.wishWritesReady || !canCreate || writing" @click="edit()">
         写一条心愿
       </button>

@@ -249,3 +249,19 @@ test('B14 / REQ-018：409只重读，403停止且不自动重试；离开隔离�
   assert.equal(page.items.value.length, 0)
   assert.equal(page.editing.value, false)
 })
+
+test('REQ-003：编辑服务端省略可选默认字段的草稿时补全默认报答和期限', async () => {
+  const { page, config, setRows } = await setup()
+  config.wishWritesReady = true
+  const wish = structuredClone(sample)
+  // 契约允许服务器省略可选默认字段，不能因此把合法草稿拦为无效输入。
+  Reflect.deleteProperty(wish.own_content!, 'reward_method')
+  Reflect.deleteProperty(wish.own_content!, 'duration_days')
+  setRows([wish])
+  await page.load()
+  page.edit(page.items.value[0])
+  assert.equal(page.form.value.reward_method, 'sincere_thanks')
+  assert.equal(page.form.value.duration_days, 7)
+  assert.equal(page.form.value.body, wish.own_content!.body)
+  assert.equal(validateWish(page.form.value), '')
+})

@@ -267,6 +267,29 @@ async function loadApi(name: string) {
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`)
 }
 
+test('REQ-003、018：真实列表适配透传不透明签名游标与分页，不把查询点号当路径穿越', async () => {
+  const api = await loadApi('wishes')
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  statusCode = 200
+  data = { code: 0, request_id: 'synthetic-list', data: { items: [], next_cursor: null } }
+  const cursor = "opaque.payload..signature~!'()*+/="
+  await api.listWishes(false, { cursor, limit: 20, category: 'help', state: 'draft' })
+  assert.equal(
+    sent.url,
+    `${config.apiBaseUrl}/wishes?category=help&cursor=${encodeURIComponent(cursor)}&limit=20`,
+  )
+  await api.listWishes(true, { cursor, limit: 50, state: 'draft', category: 'help' })
+  assert.equal(
+    sent.url,
+    `${config.apiBaseUrl}/me/wishes?state=draft&cursor=${encodeURIComponent(cursor)}&limit=50`,
+  )
+  const before = calls
+  for (const url of ['/../me', '/%2e%2e/me', '/./me', '//other.invalid/me'])
+    await assert.rejects(request({ url }), /接口路径无效/)
+  assert.equal(calls, before)
+})
+
 test('REQ-002、018：实际会话API符合契约，微信code无效不撤销现有Bearer会话', async () => {
   const api = await loadApi('auth')
   config.useMock = false

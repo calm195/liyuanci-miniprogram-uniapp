@@ -48,7 +48,7 @@ async function logout() {
     <view class="card">
       <text>首发文字心愿互助</text>
       <navigator url="/pages/verification/index">学生认证</navigator>
-      <text>学生认证可进入查看；发布、申请、聊天将在后续任务开放。</text>
+      <text>学生认证通过后，可按当前权限创建、编辑和提交心愿审核；申请与聊天待接入。</text>
       <navigator url="/pages/wishes/index">心愿广场 / 我的心愿</navigator>
       <button disabled>申请应愿（待接入）</button>
       <button disabled>聊天（待接入）</button>

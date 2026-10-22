@@ -57,7 +57,8 @@ export interface WishResult {
   current_state: WishState
   allowed_actions: string[]
   privacy_review_required?: boolean
-  own_content?: WishInput
+  own_content?: Omit<WishInput, 'reward_method' | 'duration_days'> &
+    Partial<Pick<WishInput, 'reward_method' | 'duration_days'>>
   public?: {
     id: string
     body: string
@@ -84,4 +85,5 @@ export interface WishFilters {
   campus?: WishInput['campus']
   state?: WishState
   cursor?: string
+  limit?: number
 }
