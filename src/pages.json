@@ -41,6 +41,18 @@
       "style": {
         "navigationBarTitleText": "公开主页"
       }
+    },
+    {
+      "path": "pages/inbox/index",
+      "style": {
+        "navigationBarTitleText": "聊天与通知"
+      }
+    },
+    {
+      "path": "pages/chat/index",
+      "style": {
+        "navigationBarTitleText": "匿名聊天"
+      }
     }
   ],
   "globalStyle": {

@@ -302,6 +302,13 @@ onUnload(leave)
         异常退出
       </button>
     </view>
+    <navigator
+      v-if="
+        currentWish && ['matching', 'realized', 'fulfilled'].includes(currentWish.current_state)
+      "
+      url="/pages/inbox/index"
+      >查看聊天会话</navigator
+    >
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </view>

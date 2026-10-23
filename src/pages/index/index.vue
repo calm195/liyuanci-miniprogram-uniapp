@@ -49,11 +49,11 @@ async function logout() {
       <text>首发文字心愿互助</text>
       <navigator url="/pages/verification/index">学生认证</navigator>
       <text
-        >学生认证通过后，可按当前权限创建、编辑和提交心愿审核；可申请应愿并确定匹配；聊天待接入。</text
+        >学生认证通过后，可按当前权限创建、编辑和提交心愿审核；可申请应愿并确定匹配；可通过会话入口聊天并查看通知。</text
       >
       <navigator url="/pages/wishes/index">心愿广场 / 我的心愿</navigator>
       <navigator url="/pages/applications/index">我的应愿</navigator>
-      <button disabled>聊天（待接入）</button>
+      <navigator url="/pages/inbox/index">聊天与通知</navigator>
     </view>
     <view v-if="config.useMock" class="card">
       <text>仅用于检查状态展示</text>

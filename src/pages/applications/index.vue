@@ -336,6 +336,7 @@ onUnload(leave)
     <button v-if="scoped && cursor" :disabled="busy || writing" @click="load(true)">
       加载下一页
     </button>
+    <navigator url="/pages/inbox/index">前往聊天与通知</navigator>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </view>
