@@ -117,6 +117,10 @@ onUnload(leave)
     <view v-for="item in rows" :key="`${item.kind}-${item.content.id}`" class="card">
       <text>{{ item.kind === 'wish' ? '公开心愿' : '还愿故事' }}</text>
       <text>{{ item.content.body }}</text>
+      <navigator
+        :url="`/pages/report/index?kind=${item.kind}&id=${encodeURIComponent(item.content.id)}`"
+        >举报此内容</navigator
+      >
       <text v-if="item.content.school_related">未经证实</text>
       <navigator
         v-if="item.kind === 'wish'"

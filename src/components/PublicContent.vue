@@ -8,6 +8,11 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story' }>()
     <text class="body">{{ content.body }}</text>
     <text v-if="content.school_related">未经证实</text>
     <text v-if="content.notice_text">{{ content.notice_text }}</text>
+    <navigator
+      v-if="kind"
+      :url="`/pages/report/index?kind=${kind}&id=${encodeURIComponent(content.id)}`"
+      >举报此内容</navigator
+    >
     <template v-if="content.author">
       <navigator :url="`/pages/public-profile/index?id=${encodeURIComponent(content.author.id)}`">{{
         content.author.nickname || '查看公开主页'

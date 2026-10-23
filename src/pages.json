@@ -77,6 +77,18 @@
       "style": {
         "navigationBarTitleText": "个人资料与隐私"
       }
+    },
+    {
+      "path": "pages/report/index",
+      "style": {
+        "navigationBarTitleText": "举报内容"
+      }
+    },
+    {
+      "path": "pages/safety/index",
+      "style": {
+        "navigationBarTitleText": "警告与申诉"
+      }
     }
   ],
   "globalStyle": {

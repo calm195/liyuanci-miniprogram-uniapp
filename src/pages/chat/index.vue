@@ -255,6 +255,10 @@ onUnload(leave)
     <button :disabled="reading || sending" @click="refresh()">刷新聊天</button>
     <view v-for="message in timeline" :key="message.message_id" class="card">
       <text class="body">{{ message.body }}</text>
+      <navigator
+        :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
+        >举报此消息</navigator
+      >
       <text class="secondary">送达时间：{{ message.delivered_at }}</text>
     </view>
     <text v-if="currentConversation && !timeline.length && !reading">暂无已送达消息</text>

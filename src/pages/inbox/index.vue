@@ -183,6 +183,7 @@ onUnload(leave)
 <template>
   <view class="page">
     <text class="title">聊天与通知</text>
+    <navigator url="/pages/safety/index">警告与申诉</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <view class="tabs">
       <button :disabled="busy || writing" @click="selectTab('conversations')">聊天</button>
@@ -206,6 +207,16 @@ onUnload(leave)
       <text v-if="scoped">已加载通知中有 {{ unreadCount }} 条未读</text>
       <text v-if="scoped && !busy && !notificationRows.length">暂无通知</text>
       <view v-for="notification in notificationRows" :key="notification.id" class="card">
+        <navigator
+          v-if="notification.kind === 'penalty_notice' && notification.target_ref"
+          :url="`/pages/safety/index?tab=appeals&penaltyId=${encodeURIComponent(notification.target_ref)}&notificationId=${encodeURIComponent(notification.id)}`"
+          >查看警告或对此处罚申诉</navigator
+        >
+        <navigator
+          v-if="notification.kind === 'appeal_result'"
+          url="/pages/safety/index?tab=appeals"
+          >查看当前申诉结果</navigator
+        >
         <text>{{ notification.read ? '已读' : '未读' }}</text>
         <text>{{ notification.notice || '有新进展，请查看相关页面。' }}</text>
         <button

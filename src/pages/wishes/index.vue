@@ -362,6 +362,11 @@ onUnload(leave)
         <text>{{ wishStateLabels[wish.current_state] }}</text>
         <text v-if="wish.privacy_review_required">内容暂不可查看</text>
         <text v-else>{{ own ? ownWishBody(wish) : publicWishBody(wish) }}</text>
+        <navigator
+          v-if="!config.useMock && !wish.privacy_review_required && wish.public"
+          :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(wish.id)}`"
+          >举报此心愿</navigator
+        >
         <text v-if="wish.public?.school_related">未经证实</text>
         <text v-if="own && wish.review_result?.reason"
           >驳回原因：{{ wish.review_result.reason }}</text

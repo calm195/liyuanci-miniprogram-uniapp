@@ -247,6 +247,9 @@ onUnload(leave)
           :url="`/pages/settings/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
           >拉黑与隐私设置</navigator
         >
+        <navigator :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(id)}`"
+          >举报此心愿</navigator
+        >
         <text v-if="currentWish.expires_at">截止时间：{{ currentWish.expires_at }}</text>
       </template>
       <text v-else>当前没有可展示的正文。</text>

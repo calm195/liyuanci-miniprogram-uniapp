@@ -305,6 +305,10 @@ onUnload(leave)
         >查看目标心愿</navigator
       >
       <template v-if="ownerMode && application.status === 'active'">
+        <navigator
+          :url="`/pages/report/index?kind=application&id=${encodeURIComponent(application.id)}&contextId=${encodeURIComponent(wishId)}`"
+          >举报此申请留言</navigator
+        >
         <text>{{ application.message || '对方未填写留言' }}</text>
         <navigator
           v-if="application.applicant"
