@@ -16,6 +16,7 @@ export const wishActions = [
   'postWishesIdRollback',
   'postWishesIdComplete',
   'postWishesIdExceptionExit',
+  'postWishesIdApplications',
 ] as const
 export type WishAction = (typeof wishActions)[number]
 const validVersion = (value: unknown) => Number.isSafeInteger(value) && (value as number) > 0

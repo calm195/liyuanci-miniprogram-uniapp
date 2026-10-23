@@ -70,6 +70,7 @@ export interface WishResult {
   }
 }
 export interface WishPublicContent {
+  author?: { id: string; nickname: string; identity_tags?: IdentityTags }
   id: string
   body: string
   content_version: number

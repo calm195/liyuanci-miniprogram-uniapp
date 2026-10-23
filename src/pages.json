@@ -29,6 +29,18 @@
       "style": {
         "navigationBarTitleText": "文字心愿"
       }
+    },
+    {
+      "path": "pages/applications/index",
+      "style": {
+        "navigationBarTitleText": "应愿申请"
+      }
+    },
+    {
+      "path": "pages/public-profile/index",
+      "style": {
+        "navigationBarTitleText": "公开主页"
+      }
     }
   ],
   "globalStyle": {

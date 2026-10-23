@@ -9,6 +9,7 @@ import type { WishLifecycleAction } from '@/api/wishes'
 import type { WishResult } from '@/types/wish'
 import { categories, campuses, rewards } from '@/types/wish'
 import { canWishAction } from '@/utils/actions'
+import { canApplyToWish } from '@/utils/application'
 import { RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
 import { wishStateLabels } from '@/utils/wish'
@@ -235,6 +236,12 @@ onUnload(leave)
           >报答：{{ rewards.find((item) => item.value === content?.reward_method)?.label }}</text
         >
         <text v-if="publicContent?.school_related">未经证实</text>
+        <navigator
+          v-if="publicContent?.author"
+          :url="`/pages/public-profile/index?id=${encodeURIComponent(publicContent.author.id)}`"
+        >
+          {{ publicContent.author.nickname || '查看公开主页' }}
+        </navigator>
         <text v-if="currentWish.expires_at">截止时间：{{ currentWish.expires_at }}</text>
       </template>
       <text v-else>当前没有可展示的正文。</text>
@@ -248,6 +255,16 @@ onUnload(leave)
       </template>
     </view>
     <view v-if="currentWish && !config.useMock" class="card">
+      <navigator
+        v-if="!writing && !busy && canApplyToWish(user.user, user.validated, currentWish)"
+        :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
+        >申请应愿</navigator
+      >
+      <navigator
+        v-if="!writing && !busy && currentWish.own_content"
+        :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
+        >查看应愿申请</navigator
+      >
       <text>可用操作以当前账号、心愿状态和服务端授权为准。</text>
       <button v-if="allowed('withdraw')" :disabled="writing || busy" @click="act('withdraw')">
         撤下心愿
