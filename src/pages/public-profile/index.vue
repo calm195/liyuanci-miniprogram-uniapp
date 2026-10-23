@@ -118,6 +118,11 @@ onUnload(leave)
         :url="`/pages/wish-detail/index?id=${encodeURIComponent(item.content.id)}`"
         >查看心愿详情</navigator
       >
+      <navigator
+        v-if="item.kind === 'story'"
+        :url="`/pages/stories/index?id=${encodeURIComponent(item.content.id)}`"
+        >查看还愿故事</navigator
+      >
     </view>
     <text v-if="currentProfile && !busy && !rows.length">暂无可展示的公开内容</text>
     <button v-if="currentProfile && cursor" :disabled="busy" @click="load(true)">加载下一页</button>

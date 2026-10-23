@@ -53,6 +53,24 @@
       "style": {
         "navigationBarTitleText": "匿名聊天"
       }
+    },
+    {
+      "path": "pages/stories/index",
+      "style": {
+        "navigationBarTitleText": "还愿故事"
+      }
+    },
+    {
+      "path": "pages/story-editor/index",
+      "style": {
+        "navigationBarTitleText": "我的还愿故事"
+      }
+    },
+    {
+      "path": "pages/share/index",
+      "style": {
+        "navigationBarTitleText": "分享"
+      }
     }
   ],
   "globalStyle": {

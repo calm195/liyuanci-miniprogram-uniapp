@@ -54,6 +54,7 @@ async function logout() {
       <navigator url="/pages/wishes/index">心愿广场 / 我的心愿</navigator>
       <navigator url="/pages/applications/index">我的应愿</navigator>
       <navigator url="/pages/inbox/index">聊天与通知</navigator>
+      <navigator url="/pages/stories/index">还愿墙</navigator>
     </view>
     <view v-if="config.useMock" class="card">
       <text>仅用于检查状态展示</text>

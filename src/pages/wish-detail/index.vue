@@ -309,6 +309,25 @@ onUnload(leave)
       url="/pages/inbox/index"
       >查看聊天会话</navigator
     >
+    <navigator
+      v-if="
+        currentWish?.own_content &&
+        !currentWish.privacy_review_required &&
+        ['realized', 'fulfilled'].includes(currentWish.current_state) &&
+        !config.useMock
+      "
+      :url="`/pages/story-editor/index?wishId=${encodeURIComponent(currentWish.id)}`"
+      >管理我的还愿故事</navigator
+    >
+    <navigator
+      v-if="
+        currentWish?.current_state === 'published' &&
+        !currentWish.privacy_review_required &&
+        !config.useMock
+      "
+      :url="`/pages/share/index?kind=wish&id=${encodeURIComponent(currentWish.id)}`"
+      >分享当前公开心愿</navigator
+    >
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </view>

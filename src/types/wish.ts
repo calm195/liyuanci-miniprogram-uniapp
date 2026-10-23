@@ -57,6 +57,12 @@ export interface WishResult {
   current_state: WishState
   allowed_actions: string[]
   privacy_review_required?: boolean
+  story_review_result?: {
+    decision: 'pending' | 'approved' | 'rejected'
+    content_version: number
+    reason?: string
+    revision_suggestion?: string
+  }
   expires_at?: string | null
   participant?: WishPublicContent
   own_content?: Omit<WishInput, 'reward_method' | 'duration_days'> &
