@@ -356,6 +356,9 @@ onUnload(leave)
       <button :disabled="busy || writing" @click="load()">刷新</button>
       <text v-if="busy">加载中…</text><text v-if="!busy && !rows.length">暂无符合条件的心愿</text>
       <view v-for="wish in rows" :key="wish.id" class="card">
+        <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}`">
+          查看心愿详情
+        </navigator>
         <text>{{ wishStateLabels[wish.current_state] }}</text>
         <text v-if="wish.privacy_review_required">内容暂不可查看</text>
         <text v-else>{{ own ? ownWishBody(wish) : publicWishBody(wish) }}</text>

@@ -1,5 +1,24 @@
 import { request } from '@/utils/request'
 import type { WishFilters, WishInput, WishPage, WishResult } from '@/types/wish'
+export const getWish = (id: string) =>
+  request<WishResult>({ url: `/wishes/${encodeURIComponent(id)}` })
+
+export type WishLifecycleAction = 'withdraw' | 'rollback' | 'complete' | 'exception-exit'
+export function changeWishState(
+  wish: WishResult,
+  action: WishLifecycleAction,
+  key: string,
+  rollback?: { target: 'matching' | 'published'; refresh_expiry: boolean },
+) {
+  if (action === 'rollback' && !rollback) throw new Error('请选择回退目标')
+  return request<WishResult>({
+    url: `/wishes/${encodeURIComponent(wish.id)}/${action}`,
+    method: 'POST',
+    data: { expected_version: wish.version, ...(action === 'rollback' ? rollback : {}) },
+    header: { 'Idempotency-Key': key },
+  })
+}
+
 function query(filters: WishFilters) {
   return Object.entries(filters)
     .filter(([, value]) => value !== undefined && value !== '')

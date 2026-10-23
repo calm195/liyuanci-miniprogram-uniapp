@@ -57,24 +57,29 @@ export interface WishResult {
   current_state: WishState
   allowed_actions: string[]
   privacy_review_required?: boolean
+  expires_at?: string | null
+  participant?: WishPublicContent
   own_content?: Omit<WishInput, 'reward_method' | 'duration_days'> &
     Partial<Pick<WishInput, 'reward_method' | 'duration_days'>>
-  public?: {
-    id: string
-    body: string
-    content_version: number
-    school_related: boolean
-    notice_codes: string[]
-    notice_text: string
-    category?: WishInput['category']
-    campus?: WishInput['campus']
-  }
+  public?: WishPublicContent
   review_result?: {
     decision: 'pending' | 'approved' | 'rejected'
     content_version: number
     reason?: string
     revision_suggestion?: string
   }
+}
+export interface WishPublicContent {
+  id: string
+  body: string
+  content_version: number
+  school_related: boolean
+  notice_codes: string[]
+  notice_text: string
+  category?: WishInput['category']
+  campus?: WishInput['campus']
+  reward_method?: WishInput['reward_method']
+  expires_at?: string
 }
 export interface WishPage {
   items: WishResult[]

@@ -19,6 +19,12 @@
       }
     },
     {
+      "path": "pages/wish-detail/index",
+      "style": {
+        "navigationBarTitleText": "心愿详情"
+      }
+    },
+    {
       "path": "pages/wishes/index",
       "style": {
         "navigationBarTitleText": "文字心愿"
