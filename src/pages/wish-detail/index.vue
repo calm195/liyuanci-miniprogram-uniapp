@@ -242,6 +242,11 @@ onUnload(leave)
         >
           {{ publicContent.author.nickname || '查看公开主页' }}
         </navigator>
+        <navigator
+          v-if="publicContent?.author && currentWish.current_state === 'published'"
+          :url="`/pages/settings/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
+          >拉黑与隐私设置</navigator
+        >
         <text v-if="currentWish.expires_at">截止时间：{{ currentWish.expires_at }}</text>
       </template>
       <text v-else>当前没有可展示的正文。</text>

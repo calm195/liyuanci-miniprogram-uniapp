@@ -132,7 +132,7 @@ onUnload(leave)
     <text v-if="busy">加载中…</text>
     <view v-if="currentTarget" class="card">
       <text>{{ currentTarget.target_kind === 'story' ? '还愿故事' : '公开心愿' }}</text>
-      <PublicContent :content="currentTarget.target" />
+      <PublicContent :content="currentTarget.target" :kind="currentTarget.target_kind" />
       <navigator
         :url="`/pages/${currentTarget.target_kind === 'story' ? 'stories' : 'wish-detail'}/index?id=${encodeURIComponent(currentTarget.target.id)}`"
         >查看当前详情</navigator

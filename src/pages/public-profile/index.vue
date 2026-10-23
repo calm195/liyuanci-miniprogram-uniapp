@@ -95,6 +95,11 @@ onUnload(leave)
     <text v-if="busy">加载中…</text>
     <view v-if="currentProfile" class="card">
       <text>{{ currentProfile.nickname }}</text>
+      <navigator
+        v-if="user.user && currentProfile.id !== user.user.id"
+        :url="`/pages/settings/index?targetId=${encodeURIComponent(currentProfile.id)}`"
+        >拉黑与隐私设置</navigator
+      >
       <text v-if="currentProfile.identity_tags?.campus"
         >校区：{{
           campuses.find((item) => item.value === currentProfile?.identity_tags?.campus)?.label

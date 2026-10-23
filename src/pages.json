@@ -71,6 +71,12 @@
       "style": {
         "navigationBarTitleText": "分享"
       }
+    },
+    {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "个人资料与隐私"
+      }
     }
   ],
   "globalStyle": {

@@ -105,7 +105,7 @@ onUnload(leave)
     <navigator url="/pages/wishes/index">从我的心愿管理还愿故事</navigator>
     <text v-if="busy">加载中…</text>
     <view v-for="content in rows" :key="content.id" class="card">
-      <PublicContent :content="content" />
+      <PublicContent :content="content" kind="story" />
       <navigator v-if="!id" :url="`/pages/stories/index?id=${encodeURIComponent(content.id)}`"
         >查看故事</navigator
       >
