@@ -89,6 +89,12 @@
       "style": {
         "navigationBarTitleText": "警告与申诉"
       }
+    },
+    {
+      "path": "pages/care/index",
+      "style": {
+        "navigationBarTitleText": "关怀与援助"
+      }
     }
   ],
   "globalStyle": {

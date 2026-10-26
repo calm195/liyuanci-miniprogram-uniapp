@@ -184,6 +184,7 @@ onUnload(leave)
   <view class="page">
     <text class="title">聊天与通知</text>
     <navigator url="/pages/safety/index">警告与申诉</navigator>
+    <navigator url="/pages/care/index">关怀与援助</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <view class="tabs">
       <button :disabled="busy || writing" @click="selectTab('conversations')">聊天</button>
@@ -216,6 +217,11 @@ onUnload(leave)
           v-if="notification.kind === 'appeal_result'"
           url="/pages/safety/index?tab=appeals"
           >查看当前申诉结果</navigator
+        >
+        <navigator
+          v-if="notification.kind === 'crisis_care' && notification.target_ref"
+          :url="`/pages/care/index?id=${encodeURIComponent(notification.target_ref)}`"
+          >查看关怀与援助资料</navigator
         >
         <text>{{ notification.read ? '已读' : '未读' }}</text>
         <text>{{ notification.notice || '有新进展，请查看相关页面。' }}</text>

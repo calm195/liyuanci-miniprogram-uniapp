@@ -57,6 +57,7 @@ async function logout() {
       <navigator url="/pages/stories/index">还愿墙</navigator>
       <navigator url="/pages/settings/index">个人资料与隐私</navigator>
       <navigator url="/pages/safety/index">警告与申诉</navigator>
+      <navigator url="/pages/care/index">关怀与援助</navigator>
     </view>
     <view v-if="config.useMock" class="card">
       <text>仅用于检查状态展示</text>
