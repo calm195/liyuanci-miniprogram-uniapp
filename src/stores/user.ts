@@ -96,5 +96,6 @@ export const useUserStore = defineStore('user', () => {
     logout,
     refresh,
     simulate,
+    clearSession: clear,
   }
 })

@@ -282,6 +282,7 @@ onUnload(leave)
 </script>
 <template>
   <view class="page">
+    <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">个人资料与隐私</text>
     <button :disabled="busy || writing" @click="load()">刷新设置（清空未保存修改）</button>
     <text v-if="busy">加载中…</text>

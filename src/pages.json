@@ -95,6 +95,12 @@
       "style": {
         "navigationBarTitleText": "关怀与援助"
       }
+    },
+    {
+      "path": "pages/deletion/index",
+      "style": {
+        "navigationBarTitleText": "账号注销"
+      }
     }
   ],
   "globalStyle": {

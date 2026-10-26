@@ -24,6 +24,7 @@ async function logout() {
 </script>
 <template>
   <view class="page">
+    <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">鲤源池</text>
     <view v-if="config.useMock" class="notice">合成 Mock · 无真实微信身份，不发送 API</view>
     <view class="card">
