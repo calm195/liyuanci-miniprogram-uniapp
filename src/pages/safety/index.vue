@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -375,22 +376,32 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">警告与申诉</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text v-if="scoped && user.user?.penalty_notice">{{ user.user.penalty_notice }}</text>
-    <button :disabled="busy || writing || uncertain" @click="selectTab('warnings')">
+    <button
+      :disabled="busy || writing || uncertain"
+      @click="runPageAction(() => selectTab('warnings'))"
+    >
       本人警告
     </button>
-    <button :disabled="busy || writing || uncertain" @click="selectTab('appeals')">本人申诉</button>
-    <button :disabled="busy || writing || uncertain" @click="load()">刷新</button>
+    <button
+      :disabled="busy || writing || uncertain"
+      @click="runPageAction(() => selectTab('appeals'))"
+    >
+      本人申诉
+    </button>
+    <button :disabled="busy || writing || uncertain" @click="runPageAction(() => load())">
+      刷新
+    </button>
     <template v-if="tab === 'warnings'">
       <text v-if="scoped && !busy && !warningRows.length">暂无未确认警告</text>
       <view v-for="warning in warningRows" :key="warning.id" class="card">
         <text>{{ warning.notice }}</text>
         <button
           :disabled="busy || writing || !permitted('postMeWarningsIdDisplay')"
-          @click="warningAction(warning, 'display')"
+          @click="runPageAction(() => warningAction(warning, 'display'))"
         >
           阅读警告并核验计时
         </button>
@@ -398,14 +409,19 @@ onUnload(leave)
           <text>首次展示：{{ warning.first_displayed_at }}</text>
           <text>可确认时间：{{ warning.confirmable_at }}</text>
           <text>约剩 {{ countdown }} 秒；确认资格以服务端时间为准，重新进入不重置计时。</text>
-          <button :disabled="busy || writing" @click="refreshWarning">核对服务端确认时间</button>
-          <button :disabled="busy || writing || !mayAck" @click="warningAction(warning, 'ack')">
+          <button :disabled="busy || writing" @click="runPageAction(() => refreshWarning())">
+            核对服务端确认时间
+          </button>
+          <button
+            :disabled="busy || writing || !mayAck"
+            @click="runPageAction(() => warningAction(warning, 'ack'))"
+          >
             已阅读并确认
           </button>
         </template>
         <button
           :disabled="busy || writing || !permitted('postMeAppeals')"
-          @click="openAppeal(warning)"
+          @click="runPageAction(() => openAppeal(warning))"
         >
           对此警告申诉
         </button>
@@ -416,11 +432,15 @@ onUnload(leave)
         <text>针对当前核验的本人处罚提交申诉。受理不会自动解除处罚。</text>
         <textarea
           v-model="body"
+          placeholder-class="field-placeholder"
           :maxlength="-1"
           :disabled="writing || uncertain"
           placeholder="请填写申诉说明"
         />
-        <button :disabled="busy || writing || !permitted('postMeAppeals')" @click="appeal">
+        <button
+          :disabled="busy || writing || !permitted('postMeAppeals')"
+          @click="runPageAction(() => appeal())"
+        >
           {{ uncertain ? '重试同一次申诉' : '提交申诉' }}
         </button>
       </view>
@@ -432,42 +452,15 @@ onUnload(leave)
       </view>
       <text v-if="scoped && !busy && !appealRows.length">暂无申诉记录</text>
     </template>
-    <button v-if="scoped && cursor" :disabled="busy || writing || uncertain" @click="load(true)">
+    <button
+      v-if="scoped && cursor"
+      :disabled="busy || writing || uncertain"
+      @click="runPageAction(() => load(true))"
+    >
       加载下一页
     </button>
     <navigator url="/pages/inbox/index">查看处罚通知</navigator>
     <text v-if="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin: 20rpx 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-button {
-  margin-top: 16rpx;
-}
-textarea {
-  width: 100%;
-  padding: 20rpx 0;
-}
-.error {
-  color: #b42318;
-}
-</style>

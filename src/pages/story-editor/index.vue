@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -167,9 +168,11 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">我的还愿故事</text>
-    <button :disabled="busy || writing" @click="load">刷新状态（清空输入）</button>
+    <button :disabled="busy || writing" @click="runPageAction(() => load())">
+      刷新状态（清空输入）
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <text>心愿状态：{{ wishStateLabels[currentWish.current_state] }}</text>
@@ -198,58 +201,35 @@ onUnload(leave)
         <text>请填写完整故事正文；已提交的非公开原文不会在此恢复。修改会替换全文并重新审核。</text>
         <textarea
           v-model="body"
+          placeholder-class="field-placeholder"
           :maxlength="-1"
           :disabled="busy || writing"
           placeholder="写下你的还愿故事"
         />
-        <button v-if="allowed('submit')" :disabled="busy || writing" @click="act('submit')">
+        <button
+          v-if="allowed('submit')"
+          :disabled="busy || writing"
+          @click="runPageAction(() => act('submit'))"
+        >
           提交还愿故事
         </button>
-        <button v-if="allowed('update')" :disabled="busy || writing" @click="act('update')">
+        <button
+          v-if="allowed('update')"
+          :disabled="busy || writing"
+          @click="runPageAction(() => act('update'))"
+        >
           提交故事新版本
         </button>
       </template>
-      <button v-if="allowed('withdraw')" :disabled="busy || writing" @click="act('withdraw')">
+      <button
+        v-if="allowed('withdraw')"
+        :disabled="busy || writing"
+        @click="runPageAction(() => act('withdraw'))"
+      >
         撤回故事
       </button>
     </view>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-button {
-  margin-top: 16rpx;
-}
-textarea {
-  width: 100%;
-  margin-top: 20rpx;
-  border: 1px solid #d0d5dd;
-}
-.notice {
-  margin-top: 24rpx;
-  background: #fff1cc;
-  padding: 20rpx;
-}
-.error {
-  margin-top: 24rpx;
-  color: #b42318;
-}
-</style>

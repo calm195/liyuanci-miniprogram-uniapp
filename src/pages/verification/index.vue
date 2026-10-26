@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import AppPage from '@/components/AppPage.vue'
+import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
@@ -231,6 +232,13 @@ async function submitReal() {
     if (current === generation) busy.value = false
   }
 }
+function scanDemo(status: 'approved' | 'rejected') {
+  if (config.useMock && asset.value?.scan_status === 'pending') asset.value.scan_status = status
+}
+function submit() {
+  return config.useMock ? submitDemo() : submitReal()
+}
+watch(() => store.user?.id, clearPrivateData, { flush: 'sync' })
 function submitDemo() {
   if (!canSubmitDemo.value) return
   demoStatus.value = 'pending'
@@ -263,7 +271,7 @@ onUnload(() => {
 })
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">学生认证</text>
     <text v-if="config.useMock" class="notice"
       >合成演示 · 请仅填写虚构资料，不选择或上传真实学生卡</text
@@ -290,7 +298,7 @@ onUnload(() => {
         <button
           :disabled="refreshing || busy || querying"
           :loading="refreshing"
-          @click="refreshReview"
+          @click="runPageAction(() => refreshReview())"
         >
           重新读取审核记录
         </button>
@@ -298,6 +306,7 @@ onUnload(() => {
       <text v-if="!config.useMock && !config.verificationWritesReady">认证提交暂未开放。</text>
       <input
         v-model="name"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="姓名（演示时填写虚构姓名）"
         :disabled="
@@ -309,6 +318,7 @@ onUnload(() => {
       />
       <input
         v-model="studentNumber"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="学号（演示时填写虚构学号）"
         :disabled="
@@ -326,7 +336,7 @@ onUnload(() => {
           (config.useMock && (demoStatus === 'pending' || demoStatus === 'approved'))
         "
         :loading="busy"
-        @click="chooseCard"
+        @click="runPageAction(() => chooseCard())"
       >
         {{ config.useMock ? '选择合成学生卡' : '选择并上传学生卡' }}
       </button>
@@ -349,56 +359,26 @@ onUnload(() => {
         v-if="!config.useMock && asset"
         :disabled="querying || busy"
         :loading="querying"
-        @click="queryAsset"
+        @click="runPageAction(() => queryAsset())"
       >
         查询图片扫描状态
       </button>
       <view v-if="config.useMock && asset?.scan_status === 'pending'">
-        <button @click="asset.scan_status = 'approved'">演示：扫描通过</button>
-        <button @click="asset.scan_status = 'rejected'">演示：扫描失败</button>
+        <button @click="runPageAction(() => scanDemo('approved'))">演示：扫描通过</button>
+        <button @click="runPageAction(() => scanDemo('rejected'))">演示：扫描失败</button>
       </view>
       <button
         :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
-        @click="config.useMock ? submitDemo() : submitReal()"
+        @click="runPageAction(() => submit())"
       >
         {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
       </button>
       <text v-if="error">{{ error }}</text>
       <text v-if="demoMessage">{{ demoMessage }}</text>
       <view v-if="config.useMock && demoStatus === 'pending'">
-        <button @click="reviewDemo(false)">演示：人工驳回</button>
-        <button @click="reviewDemo(true)">演示：人工通过</button>
+        <button @click="runPageAction(() => reviewDemo(false))">演示：人工驳回</button>
+        <button @click="runPageAction(() => reviewDemo(true))">演示：人工通过</button>
       </view>
     </view>
-  </view>
+  </AppPage>
 </template>
-<style scoped lang="scss">
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-input {
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #ddd;
-}
-button {
-  margin-top: 20rpx;
-}
-.notice {
-  padding: 20rpx;
-  background: #fff1cc;
-}
-</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -121,14 +122,22 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">分享</text>
     <text>分享内容以打开时的公开状态为准。</text>
-    <button v-if="!reference && kind && id" :disabled="busy" @click="load(true)">生成分享</button>
+    <button
+      v-if="!reference && kind && id"
+      :disabled="busy"
+      @click="runPageAction(() => load(true))"
+    >
+      生成分享
+    </button>
     <navigator v-if="!reference && !user.isLoggedIn" url="/pages/login/index"
       >登录后生成分享</navigator
     >
-    <button v-if="reference" :disabled="busy" @click="load()">重新读取分享内容</button>
+    <button v-if="reference" :disabled="busy" @click="runPageAction(() => load())">
+      重新读取分享内容
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentTarget" class="card">
       <text>{{ currentTarget.target_kind === 'story' ? '还愿故事' : '公开心愿' }}</text>
@@ -142,32 +151,5 @@ onUnload(leave)
     <text v-if="!reference && (!kind || !id)" class="error">分享链接无效。</text>
     <text v-if="error" class="error">{{ error }}</text>
     <navigator url="/pages/stories/index">前往还愿墙</navigator>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text,
-navigator {
-  display: block;
-  margin-bottom: 20rpx;
-}
-button {
-  margin-bottom: 20rpx;
-}
-.error {
-  color: #b42318;
-  margin-top: 24rpx;
-}
-</style>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -181,16 +182,20 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">聊天与通知</text>
     <navigator url="/pages/safety/index">警告与申诉</navigator>
     <navigator url="/pages/care/index">关怀与援助</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <view class="tabs">
-      <button :disabled="busy || writing" @click="selectTab('conversations')">聊天</button>
-      <button :disabled="busy || writing" @click="selectTab('notifications')">通知</button>
+    <view class="flex flex-wrap gap-3">
+      <button :disabled="busy || writing" @click="runPageAction(() => selectTab('conversations'))">
+        聊天
+      </button>
+      <button :disabled="busy || writing" @click="runPageAction(() => selectTab('notifications'))">
+        通知
+      </button>
     </view>
-    <button :disabled="busy || writing" @click="load()">刷新</button>
+    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
     <text v-if="busy">加载中…</text>
     <template v-if="tab === 'conversations'">
       <text v-if="scoped && !busy && !conversationRows.length">暂无可访问会话</text>
@@ -228,64 +233,34 @@ onUnload(leave)
         <button
           v-if="notificationConversation(notification)"
           :disabled="busy || writing"
-          @click="openNotification(notification)"
+          @click="runPageAction(() => openNotification(notification))"
         >
           打开聊天
         </button>
         <button
           v-if="notification.kind === 'message_reviewed'"
           :disabled="busy || writing"
-          @click="selectTab('conversations')"
+          @click="runPageAction(() => selectTab('conversations'))"
         >
           查看聊天列表
         </button>
         <button
           v-if="!notification.read"
           :disabled="busy || writing"
-          @click="markRead(notification)"
+          @click="runPageAction(() => markRead(notification))"
         >
           标为已读
         </button>
       </view>
     </template>
-    <button v-if="scoped && cursor" :disabled="busy || writing" @click="load(true)">
+    <button
+      v-if="scoped && cursor"
+      :disabled="busy || writing"
+      @click="runPageAction(() => load(true))"
+    >
       加载下一页
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  display: block;
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-.tabs {
-  display: flex;
-  gap: 20rpx;
-}
-text {
-  display: block;
-  margin: 16rpx 0;
-}
-button {
-  margin-top: 16rpx;
-}
-.notice {
-  padding: 20rpx;
-  background: #fff1cc;
-}
-.error {
-  color: #b42318;
-}
-</style>

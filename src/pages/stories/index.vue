@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -99,9 +100,9 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">{{ id ? '还愿故事' : '还愿墙' }}</text>
-    <button :disabled="busy" @click="load()">刷新</button>
+    <button :disabled="busy" @click="runPageAction(() => load())">刷新</button>
     <navigator url="/pages/wishes/index">从我的心愿管理还愿故事</navigator>
     <text v-if="busy">加载中…</text>
     <view v-for="content in rows" :key="content.id" class="card">
@@ -114,31 +115,9 @@ onUnload(leave)
       >
     </view>
     <text v-if="!busy && !error && !rows.length">暂无可展示的公开故事</text>
-    <button v-if="cursor && rows.length" :disabled="busy" @click="load(true)">加载下一页</button>
+    <button v-if="cursor && rows.length" :disabled="busy" @click="runPageAction(() => load(true))">
+      加载下一页
+    </button>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text,
-navigator {
-  display: block;
-  margin-bottom: 20rpx;
-}
-.error {
-  color: #b42318;
-  margin-top: 24rpx;
-}
-</style>

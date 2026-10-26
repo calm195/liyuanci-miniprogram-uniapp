@@ -12,6 +12,7 @@ export const useUserStore = defineStore('user', () => {
   const validated = ref(false)
   const expired = ref(false)
   let generation = 0
+  let refreshGeneration = 0
   const isLoggedIn = computed(() => !!user.value)
   const label = computed(() => verificationLabel(user.value))
   function clear() {
@@ -24,17 +25,30 @@ export const useUserStore = defineStore('user', () => {
   async function refresh(includeVerification = true) {
     if (!session.getToken() || config.useMock) return
     const current = generation
+    const request = ++refreshGeneration
+    const epoch = session.getEpoch()
+    const active = () =>
+      current === generation && request === refreshGeneration && epoch === session.getEpoch()
     validated.value = false
     verification.value = null
-    const me = await auth.getMe()
-    if (current !== generation) return
-    user.value = me
-    validated.value = true
-    if (includeVerification && (me.verification === 'pending' || me.verification === 'rejected')) {
-      const result = await auth.getVerification()
-      if (current === generation) verification.value = result
+    try {
+      const me = await auth.getMe()
+      // 页面显示和应用恢复可能并发刷新，只接受最新一轮资格与审核资料。
+      if (!active()) return
+      user.value = me
+      validated.value = true
+      if (
+        includeVerification &&
+        (me.verification === 'pending' || me.verification === 'rejected')
+      ) {
+        const result = await auth.getVerification()
+        if (active()) verification.value = result
+      }
+    } catch (failure) {
+      if (active()) throw failure
     }
   }
+
   async function login() {
     if (busy.value) return
     busy.value = true

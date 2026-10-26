@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -119,7 +120,7 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">账号注销与删除进度</text>
     <view class="card">
       <text
@@ -137,11 +138,13 @@ onUnload(leave)
     <text v-if="config.useMock">合成模式不提交注销，也不查询真实回执。</text>
     <template v-if="!deletion.receipt && !deletion.uncertain">
       <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-      <button :disabled="busy || config.useMock" @click="refresh">重新读取账号资格</button>
+      <button :disabled="busy || config.useMock" @click="runPageAction(() => refresh())">
+        重新读取账号资格
+      </button>
       <text v-if="user.isLoggedIn && !canDeleteAccount(user.user, user.validated)"
         >当前服务未授予注销动作或资格尚未校验。</text
       >
-      <checkbox-group @change="toggle">
+      <checkbox-group @change="runPageAction(() => toggle($event))">
         <label
           ><checkbox
             value="ack"
@@ -150,18 +153,24 @@ onUnload(leave)
           />我已阅读注销影响，确认申请注销本人账号</label
         >
       </checkbox-group>
-      <button :disabled="!maySubmit" @click="confirmDeletion">申请注销账号</button>
+      <button :disabled="!maySubmit" @click="runPageAction(() => confirmDeletion())">
+        申请注销账号
+      </button>
     </template>
     <text v-if="deletion.submitting">正在提交，请等待受理结果…</text>
     <view v-if="deletion.uncertain" class="card">
       <text>注销结果尚未确认，请勿重复发起。会话失效不等于已取得删除回执或清理完成。</text>
-      <button :disabled="busy || !user.isLoggedIn" @click="retry">手动重试原请求</button>
+      <button :disabled="busy || !user.isLoggedIn" @click="runPageAction(() => retry())">
+        手动重试原请求
+      </button>
     </view>
     <view v-if="deletion.receipt" class="card">
       <text>删除回执已取得。回执是查询凭证，仅在本次应用运行期间保留，请自行保存。</text>
       <text selectable>{{ deletion.receipt }}</text>
-      <button :disabled="busy" @click="copyReceipt">复制回执</button>
-      <button :disabled="busy || config.useMock" @click="deletion.read()">查询当前进度</button>
+      <button :disabled="busy" @click="runPageAction(() => copyReceipt())">复制回执</button>
+      <button :disabled="busy || config.useMock" @click="runPageAction(() => deletion.read())">
+        查询当前进度
+      </button>
     </view>
     <view v-if="deletion.status" class="card">
       <text v-if="deletion.status.status === 'processing'">处理中：后台清理尚未完成。</text>
@@ -174,46 +183,20 @@ onUnload(leave)
       <text>已有删除回执可直接查询，无需登录。回执无效或过期不代表清理已停止或完成。</text>
       <input
         v-model="inputReceipt"
+        placeholder-class="field-placeholder"
         :disabled="busy"
         :maxlength="2048"
         placeholder="输入自行保存的删除回执"
       />
-      <button :disabled="busy || config.useMock || !inputReceipt.trim()" @click="queryReceipt">
+      <button
+        :disabled="busy || config.useMock || !inputReceipt.trim()"
+        @click="runPageAction(() => queryReceipt())"
+      >
         使用回执查询
       </button>
     </view>
     <text v-if="deletion.reading">正在读取进度…</text>
     <text v-if="notice">{{ notice }}</text>
     <text v-if="deletion.error" class="error">{{ deletion.error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin: 16rpx 0;
-  overflow-wrap: anywhere;
-}
-button {
-  margin-top: 16rpx;
-}
-input {
-  border: 1px solid #ccc;
-  padding: 16rpx;
-}
-.error {
-  color: #b42318;
-}
-</style>

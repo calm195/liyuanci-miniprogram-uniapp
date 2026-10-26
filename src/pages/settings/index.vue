@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -281,15 +283,19 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
+    <ThemeSwitcher />
     <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">个人资料与隐私</text>
-    <button :disabled="busy || writing" @click="load()">刷新设置（清空未保存修改）</button>
+    <button :disabled="busy || writing" @click="runPageAction(() => load())">
+      刷新设置（清空未保存修改）
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentMe" class="card">
       <text>昵称</text>
       <input
         v-model="nickname"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         :disabled="busy || writing || !allowed('putMeProfile')"
         placeholder="填写昵称"
@@ -297,13 +303,23 @@ onUnload(leave)
       <text>身份标签显示</text>
       <text>隐藏后，公开内容与公开主页不展示身份标签；学生认证信息不在这里编辑。</text>
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
-      <button :disabled="busy || writing || !allowed('putMeProfile')" @click="hidden = true">
+      <button
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        @click="runPageAction(() => (hidden = true))"
+      >
         {{ hidden === true ? '已选择：隐藏身份标签' : '隐藏身份标签' }}
       </button>
-      <button :disabled="busy || writing || !allowed('putMeProfile')" @click="hidden = false">
+      <button
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        @click="runPageAction(() => (hidden = false))"
+      >
         {{ hidden === false ? '已选择：显示身份标签' : '显示身份标签' }}
       </button>
-      <button v-if="allowed('putMeProfile')" :disabled="busy || writing" @click="act('profile')">
+      <button
+        v-if="allowed('putMeProfile')"
+        :disabled="busy || writing"
+        @click="runPageAction(() => act('profile'))"
+      >
         保存资料与隐私设置
       </button>
       <text v-else>当前账号没有修改资料的权限。</text>
@@ -313,9 +329,11 @@ onUnload(leave)
       <text>可从他人公开主页进入拉黑。解除拉黑不会恢复旧申请、旧消息或旧匹配。</text>
       <view v-if="targetName && allowed('postMeBlocks')">
         <text>当前选择：{{ targetName }}</text>
-        <button :disabled="busy || writing" @click="act('block')">拉黑此用户</button>
+        <button :disabled="busy || writing" @click="runPageAction(() => act('block'))">
+          拉黑此用户
+        </button>
       </view>
-      <view v-for="(entry, index) in rows" :key="entry.target_user_id" class="row">
+      <view v-for="(entry, index) in rows" :key="entry.target_user_id" class="mt-3">
         <text>已拉黑用户 {{ index + 1 }}</text>
         <navigator
           :url="`/pages/public-profile/index?id=${encodeURIComponent(entry.target_user_id)}`"
@@ -324,55 +342,21 @@ onUnload(leave)
         <button
           v-if="allowed('deleteMeBlocksTarget_Id') || allowed('deleteMeBlocks')"
           :disabled="busy || writing"
-          @click="act('unblock', entry)"
+          @click="runPageAction(() => act('unblock', entry))"
         >
           解除拉黑
         </button>
       </view>
       <text v-if="blocksReady && !rows.length">暂无拉黑记录</text>
-      <button v-if="cursor && blocksReady" :disabled="busy || writing" @click="load(true)">
+      <button
+        v-if="cursor && blocksReady"
+        :disabled="busy || writing"
+        @click="runPageAction(() => load(true))"
+      >
         加载下一页
       </button>
     </view>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-  overflow-wrap: anywhere;
-}
-input {
-  padding: 16rpx;
-  border: 1px solid #d0d5dd;
-  margin-bottom: 24rpx;
-}
-button,
-.row {
-  margin-top: 20rpx;
-}
-.notice {
-  margin-top: 24rpx;
-  padding: 20rpx;
-  background: #fff1cc;
-}
-.error {
-  margin-top: 24rpx;
-  color: #b42318;
-}
-</style>

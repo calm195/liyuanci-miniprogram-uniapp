@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -199,64 +200,36 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">举报内容</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text>举报受理后由平台核查，请选择类型并说明情况。</text>
-    <button :disabled="busy || writing || uncertain" @click="load">重新核验</button>
+    <button :disabled="busy || writing || uncertain" @click="runPageAction(() => load())">
+      重新核验
+    </button>
     <view v-if="ready && scoped" class="card">
       <button
         v-for="item in types"
         :key="item.code"
         :disabled="writing || uncertain || finished"
-        @click="code = item.code"
+        @click="runPageAction(() => (code = item.code))"
       >
         {{ code === item.code ? '已选：' : '' }}{{ item.label }}
       </button>
       <text v-if="!types.length">暂无已发布的举报类型</text>
       <textarea
         v-model="description"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         :disabled="writing || uncertain || finished"
         placeholder="补充说明（可不填）"
       />
-      <button :disabled="busy || writing || !maySubmit" @click="submit">
+      <button :disabled="busy || writing || !maySubmit" @click="runPageAction(() => submit())">
         {{ uncertain ? '重试同一次举报' : '提交举报' }}
       </button>
     </view>
     <text v-if="uncertain">离开页面将清除本次未确认内容，请避免另行重复提交。</text>
     <text v-if="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin: 20rpx 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-button {
-  margin-top: 16rpx;
-}
-textarea {
-  width: 100%;
-  padding: 20rpx 0;
-}
-.error {
-  color: #b42318;
-}
-</style>

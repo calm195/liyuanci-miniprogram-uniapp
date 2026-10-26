@@ -170,3 +170,32 @@ test('REQ-002：认证页可只刷新本人资格，由页面独立读取审核�
   await store.refresh()
   assert.equal(store.verification.version, 1)
 })
+
+test('REQ-018：并发资格刷新乱序返回时，旧权限不能覆盖新结果', async () => {
+  const store = setup()
+  await store.login()
+  const old = deferred<UserInfo>()
+  loadMe = () => old.promise
+  const first = store.refresh(false)
+  loadMe = async () => ({ ...me, version: 3, allowed_actions: [] })
+  await store.refresh(false)
+  old.resolve({ ...me, version: 2, allowed_actions: ['postWishes'] })
+  await first
+  assert.equal(store.user.version, 3)
+  assert.deepEqual(store.user.allowed_actions, [])
+})
+
+test('REQ-018：最新资格刷新失败后，旧成功响应不能重新开放权限', async () => {
+  const store = setup()
+  await store.login()
+  const old = deferred<UserInfo>()
+  loadMe = () => old.promise
+  const first = store.refresh(false)
+  loadMe = async () => {
+    throw new Error('合成新请求失败')
+  }
+  await assert.rejects(store.refresh(false))
+  old.resolve({ ...me, allowed_actions: ['postWishes'] })
+  await first
+  assert.equal(store.validated, false)
+})

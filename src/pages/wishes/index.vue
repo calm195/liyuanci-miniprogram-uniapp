@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import AppPage from '@/components/AppPage.vue'
+import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
@@ -52,6 +53,11 @@ const form = ref(emptyWish())
 let generation = 0
 let visible = false
 const rows = computed(() => {
+  if (
+    !config.useMock &&
+    (listEpoch.value !== session.getEpoch() || (own.value && listOwner.value !== user.user?.id))
+  )
+    return []
   const list = config.useMock ? store.demoWishes : items.value
   return list.filter((wish) => {
     if (!own.value && !publicWishBody(wish)) return false
@@ -220,6 +226,15 @@ function selectIdentityCampus(event: { detail: { value: string | number } }) {
   if (Object.keys(tags).length) form.value.identity_tags = tags
   else delete form.value.identity_tags
 }
+function selectFormOption(
+  kind: 'category' | 'campus' | 'reward_method',
+  event: { detail: { value: string | number } },
+) {
+  const index = Number(event.detail.value)
+  if (kind === 'category' && categories[index]) form.value.category = categories[index].value
+  if (kind === 'campus' && campuses[index]) form.value.campus = campuses[index].value
+  if (kind === 'reward_method' && rewards[index]) form.value.reward_method = rewards[index].value
+}
 function cancelEdit() {
   editing.value = false
   editingWish.value = null
@@ -237,8 +252,7 @@ function selectFilter(
   if (kind === 'state') state.value = (Object.keys(wishStateLabels)[index] as WishState) || ''
   void load()
 }
-function leave() {
-  visible = false
+function clearProjection() {
   generation++
   writeGeneration++
   listEpoch.value = -1
@@ -252,6 +266,11 @@ function leave() {
   form.value = emptyWish()
   editing.value = false
 }
+function leave() {
+  visible = false
+  clearProjection()
+}
+watch(() => user.user?.id, clearProjection, { flush: 'sync' })
 onShow(() => {
   visible = true
   if (!config.useMock) void user.refresh().catch(() => {})
@@ -261,54 +280,62 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">文字心愿</text>
     <text v-if="config.useMock" class="notice"
       >合成演示 · 仅填写虚构内容，不发送 API，不代表真实审核或上架</text
     >
-    <view class="tabs"
-      ><button @click="tab(false)">心愿广场</button
-      ><button @click="tab(true)">我的心愿</button></view
+    <view class="flex flex-wrap gap-3"
+      ><button @click="runPageAction(() => tab(false))">心愿广场</button
+      ><button @click="runPageAction(() => tab(true))">我的心愿</button></view
     >
-    <button v-if="config.useMock" @click="edit()">写一条合成心愿</button>
+    <button v-if="config.useMock" @click="runPageAction(() => edit())">写一条合成心愿</button>
     <view v-else>
       <text>发布心愿须通过学生认证，具体操作以当前账号和心愿状态为准。</text>
-      <button :disabled="!config.wishWritesReady || !canCreate || writing" @click="edit()">
+      <button
+        :disabled="!config.wishWritesReady || !canCreate || writing"
+        @click="runPageAction(() => edit())"
+      >
         写一条心愿
       </button>
     </view>
     <view v-if="editing" class="card">
       <picker
         :range="categories.map((item) => item.label)"
-        @change="form.category = categories[Number($event.detail.value)]!.value"
+        @change="runPageAction(() => selectFormOption('category', $event))"
         ><view
           >分类：{{ categories.find((item) => item.value === form.category)?.label }}</view
         ></picker
       >
       <picker
         :range="campuses.map((item) => item.label)"
-        @change="form.campus = campuses[Number($event.detail.value)]!.value"
+        @change="runPageAction(() => selectFormOption('campus', $event))"
         ><view>校区：{{ campuses.find((item) => item.value === form.campus)?.label }}</view></picker
       >
       <textarea
         v-model="form.body"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="写下你的文字心愿（最多 500 个字）"
       />
       <text>{{ Array.from(form.body).length }}/500</text>
       <picker
         :range="rewards.map((item) => item.label)"
-        @change="form.reward_method = rewards[Number($event.detail.value)]!.value"
+        @change="runPageAction(() => selectFormOption('reward_method', $event))"
         ><view
           >报答：{{ rewards.find((item) => item.value === form.reward_method)?.label }}</view
         ></picker
       >
       <text>有效期（1 至 30 天，默认 7 天）</text
-      ><input v-model.number="form.duration_days" type="number" />
+      ><input
+        v-model.number="form.duration_days"
+        placeholder-class="field-placeholder"
+        type="number"
+      />
       <picker
         v-if="!editingId"
         :range="['未填写', ...genders.map((item) => item.label)]"
-        @change="selectGender"
+        @change="runPageAction(() => selectGender($event))"
       >
         <view
           >性别标签（可选）：{{
@@ -319,7 +346,7 @@ onUnload(leave)
       <picker
         v-if="!editingId"
         :range="['未填写', ...campuses.map((item) => item.label)]"
-        @change="selectIdentityCampus"
+        @change="runPageAction(() => selectIdentityCampus($event))"
       >
         <view
           >身份校区标签（可选）：{{
@@ -328,21 +355,24 @@ onUnload(leave)
         >
       </picker>
       <text>身份标签可不填写。</text>
-      <button :disabled="writing || (!config.useMock && !config.wishWritesReady)" @click="save">
+      <button
+        :disabled="writing || (!config.useMock && !config.wishWritesReady)"
+        @click="runPageAction(() => save())"
+      >
         {{ config.useMock ? '保存合成草稿' : '保存草稿' }}</button
-      ><button :disabled="writing" @click="cancelEdit">取消</button>
+      ><button :disabled="writing" @click="runPageAction(() => cancelEdit())">取消</button>
     </view>
-    <view v-else class="filters">
+    <view v-else class="pt-3">
       <picker
         :range="['全部分类', ...categories.map((item) => item.label)]"
-        @change="selectFilter('category', $event)"
+        @change="runPageAction(() => selectFilter('category', $event))"
         ><view
           >分类：{{ categories.find((item) => item.value === category)?.label || '全部' }}</view
         ></picker
       >
       <picker
         :range="['全部校区', ...campuses.map((item) => item.label)]"
-        @change="selectFilter('campus', $event)"
+        @change="runPageAction(() => selectFilter('campus', $event))"
         ><view
           >校区：{{ campuses.find((item) => item.value === campus)?.label || '全部' }}</view
         ></picker
@@ -350,10 +380,10 @@ onUnload(leave)
       <picker
         v-if="own"
         :range="['全部状态', ...Object.values(wishStateLabels)]"
-        @change="selectFilter('state', $event)"
+        @change="runPageAction(() => selectFilter('state', $event))"
         ><view>状态：{{ state ? wishStateLabels[state] : '全部' }}</view></picker
       >
-      <button :disabled="busy || writing" @click="load()">刷新</button>
+      <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
       <text v-if="busy">加载中…</text><text v-if="!busy && !rows.length">暂无符合条件的心愿</text>
       <view v-for="wish in rows" :key="wish.id" class="card">
         <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}`">
@@ -377,13 +407,13 @@ onUnload(leave)
         <view v-if="!config.useMock && own">
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'putWishesIdContent')"
-            @click="edit(wish)"
+            @click="runPageAction(() => edit(wish))"
           >
             编辑
           </button>
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'deleteWishesIdDraft')"
-            @click="act(wish, 'delete')"
+            @click="runPageAction(() => act(wish, 'delete'))"
           >
             删除草稿
           </button>
@@ -391,85 +421,64 @@ onUnload(leave)
             :disabled="
               !config.wishWritesReady || writing || !allowed(wish, 'postWishesIdSubmitReview')
             "
-            @click="act(wish, 'submit')"
+            @click="runPageAction(() => act(wish, 'submit'))"
           >
             提交审核
           </button>
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'postWishesIdPublish')"
-            @click="act(wish, 'publish')"
+            @click="runPageAction(() => act(wish, 'publish'))"
           >
             上架
           </button>
         </view>
         <view v-if="config.useMock && own">
-          <button v-if="['draft', 'rejected'].includes(wish.current_state)" @click="edit(wish)">
+          <button
+            v-if="['draft', 'rejected'].includes(wish.current_state)"
+            @click="runPageAction(() => edit(wish))"
+          >
             编辑
           </button>
           <button
             v-if="['draft', 'rejected'].includes(wish.current_state)"
-            @click="act(wish, 'submit')"
+            @click="runPageAction(() => act(wish, 'submit'))"
           >
             提交合成审核
           </button>
-          <button v-if="wish.current_state === 'draft'" @click="act(wish, 'delete')">
+          <button
+            v-if="wish.current_state === 'draft'"
+            @click="runPageAction(() => act(wish, 'delete'))"
+          >
             删除草稿
           </button>
-          <button v-if="wish.current_state === 'pending_review'" @click="act(wish, 'approve')">
+          <button
+            v-if="wish.current_state === 'pending_review'"
+            @click="runPageAction(() => act(wish, 'approve'))"
+          >
             演示：审核通过
           </button>
-          <button v-if="wish.current_state === 'pending_review'" @click="act(wish, 'reject')">
+          <button
+            v-if="wish.current_state === 'pending_review'"
+            @click="runPageAction(() => act(wish, 'reject'))"
+          >
             演示：审核驳回
           </button>
-          <button v-if="wish.current_state === 'ready'" @click="act(wish, 'publish')">
+          <button
+            v-if="wish.current_state === 'ready'"
+            @click="runPageAction(() => act(wish, 'publish'))"
+          >
             合成上架
           </button>
         </view>
       </view>
-      <button v-if="!config.useMock && cursor" :disabled="busy || writing" @click="load(true)">
+      <button
+        v-if="!config.useMock && cursor"
+        :disabled="busy || writing"
+        @click="runPageAction(() => load(true))"
+      >
         加载下一页
       </button>
     </view>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.notice {
-  background: #fff1cc;
-  padding: 20rpx;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-button,
-picker {
-  margin-top: 16rpx;
-}
-textarea {
-  width: 100%;
-  padding: 24rpx 0;
-}
-input {
-  padding: 20rpx 0;
-}
-.error {
-  color: #b42318;
-}
-.filters {
-  padding-top: 20rpx;
-}
-</style>

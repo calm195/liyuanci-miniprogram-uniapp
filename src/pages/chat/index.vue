@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -247,22 +248,26 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">匿名聊天</text>
     <navigator url="/pages/inbox/index">聊天与通知</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text v-if="currentConversation">{{ canSend ? '当前可发送消息' : '当前会话只读' }}</text>
-    <button :disabled="reading || sending" @click="refresh()">刷新聊天</button>
+    <button :disabled="reading || sending" @click="runPageAction(() => refresh())">刷新聊天</button>
     <view v-for="message in timeline" :key="message.message_id" class="card">
-      <text class="body">{{ message.body }}</text>
+      <text class="whitespace-pre-wrap break-words">{{ message.body }}</text>
       <navigator
         :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
         >举报此消息</navigator
       >
-      <text class="secondary">送达时间：{{ message.delivered_at }}</text>
+      <text class="text-muted text-sm">送达时间：{{ message.delivered_at }}</text>
     </view>
     <text v-if="currentConversation && !timeline.length && !reading">暂无已送达消息</text>
-    <button v-if="hasMore && currentConversation" :disabled="reading || sending" @click="refresh()">
+    <button
+      v-if="hasMore && currentConversation"
+      :disabled="reading || sending"
+      @click="runPageAction(() => refresh())"
+    >
       继续读取消息
     </button>
     <view v-if="outgoing.length" class="card">
@@ -280,62 +285,29 @@ onUnload(leave)
     <view v-if="currentConversation" class="card">
       <textarea
         v-model="draft"
+        placeholder-class="field-placeholder"
         :maxlength="-1"
         :disabled="!canSend || sending || !!attempt"
         placeholder="发送文字消息"
       />
-      <button v-if="!attempt" :disabled="!canSend || reading || sending" @click="send()">
+      <button
+        v-if="!attempt"
+        :disabled="!canSend || reading || sending"
+        @click="runPageAction(() => send())"
+      >
         发送
       </button>
       <template v-else>
         <text>发送结果未确认，请重试或先核对聊天记录。</text>
-        <button :disabled="!canSend || reading || sending" @click="send(true)">
+        <button :disabled="!canSend || reading || sending" @click="runPageAction(() => send(true))">
           重试同一条消息
         </button>
-        <button :disabled="sending" @click="abandonAttempt">放弃本次重试</button>
+        <button :disabled="sending" @click="runPageAction(() => abandonAttempt())">
+          放弃本次重试
+        </button>
       </template>
     </view>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  padding: 24rpx;
-  margin-top: 24rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-text {
-  display: block;
-  margin: 16rpx 0;
-}
-.body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.secondary {
-  color: #667085;
-  font-size: 24rpx;
-}
-textarea {
-  width: 100%;
-}
-button {
-  margin-top: 16rpx;
-}
-.notice {
-  background: #fff1cc;
-  padding: 20rpx;
-}
-.error {
-  color: #b42318;
-}
-</style>

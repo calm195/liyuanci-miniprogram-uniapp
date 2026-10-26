@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -263,18 +264,18 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">{{ wishId ? (ownerMode ? '心愿申请列表' : '申请应愿') : '我的应愿' }}</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <navigator v-if="wishId" url="/pages/applications/index">查看我的应愿</navigator>
     <picker
       v-if="!wishId"
       :range="['全部状态', ...Object.values(applicationStatusLabels)]"
-      @change="selectStatus"
+      @change="runPageAction(() => selectStatus($event))"
     >
       <view>状态：{{ status ? applicationStatusLabels[status] : '全部' }}</view>
     </picker>
-    <button :disabled="busy || writing" @click="load()">刷新</button>
+    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(currentWish.id)}`"
@@ -286,12 +287,15 @@ onUnload(leave)
         <text>申请留言（可不填，最多100个字）</text>
         <textarea
           v-model="message"
+          placeholder-class="field-placeholder"
           :disabled="writing"
           :maxlength="-1"
           placeholder="说说你希望如何帮助对方"
         />
         <text>{{ Array.from(message).length }}/100</text>
-        <button :disabled="busy || writing" @click="submit">提交应愿申请</button>
+        <button :disabled="busy || writing" @click="runPageAction(() => submit())">
+          提交应愿申请
+        </button>
       </template>
       <text v-else-if="!ownerMode">当前无法申请，请以心愿状态和当前账号权限为准。</text>
       <text v-if="ownerMode">仅显示审核通过且当前可处理的申请。</text>
@@ -316,7 +320,10 @@ onUnload(leave)
         >
           {{ application.applicant.nickname || '查看申请者公开主页' }}
         </navigator>
-        <button :disabled="busy || writing || !mayAccept(application)" @click="accept(application)">
+        <button
+          :disabled="busy || writing || !mayAccept(application)"
+          @click="runPageAction(() => accept(application))"
+        >
           确定这位应愿人
         </button>
       </template>
@@ -331,54 +338,21 @@ onUnload(leave)
         <button
           v-if="mayWithdraw(application)"
           :disabled="busy || writing"
-          @click="withdraw(application)"
+          @click="runPageAction(() => withdraw(application))"
         >
           撤销申请
         </button>
       </template>
     </view>
-    <button v-if="scoped && cursor" :disabled="busy || writing" @click="load(true)">
+    <button
+      v-if="scoped && cursor"
+      :disabled="busy || writing"
+      @click="runPageAction(() => load(true))"
+    >
       加载下一页
     </button>
     <navigator url="/pages/inbox/index">前往聊天与通知</navigator>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text {
-  display: block;
-  margin: 20rpx 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-button,
-picker,
-navigator {
-  margin-top: 16rpx;
-}
-textarea {
-  width: 100%;
-  padding: 20rpx 0;
-}
-.notice {
-  background: #fff1cc;
-  padding: 20rpx;
-}
-.error {
-  color: #b42318;
-}
-</style>

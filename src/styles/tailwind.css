@@ -1,3 +1,74 @@
 @import 'tailwindcss';
 @source '../pages/**/*.vue';
 @source '../components/**/*.vue';
+
+@theme inline {
+  --color-canvas: var(--theme-canvas);
+  --color-surface: var(--theme-surface);
+  --color-ink: var(--theme-ink);
+  --color-muted: var(--theme-muted);
+  --color-line: var(--theme-line);
+  --color-brand: var(--theme-brand);
+  --color-warning: var(--theme-warning);
+  --color-warning-ink: var(--theme-warning-ink);
+  --color-danger: var(--theme-danger);
+}
+
+/* 公共外观由 Tailwind 生成，页面只组合布局工具类与语义组件。 */
+@layer components {
+  .page {
+    @apply min-h-screen bg-canvas p-4 text-ink;
+    padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+    overflow-wrap: anywhere;
+  }
+  .page text {
+    @apply mb-3 block whitespace-pre-wrap;
+  }
+  .card {
+    @apply my-3 block rounded-xl bg-surface p-4;
+  }
+  .title {
+    @apply mb-4 block text-2xl leading-snug font-bold;
+  }
+  .subtitle {
+    @apply text-muted leading-relaxed;
+  }
+  .page button {
+    @apply mt-3 rounded-lg border border-line bg-surface px-4 py-1 text-ink;
+    font-size: 28rpx;
+  }
+  .page button[disabled] {
+    @apply text-muted opacity-60;
+  }
+  .page .primary-button,
+  .page .theme-selected {
+    @apply border-brand bg-brand;
+    color: var(--theme-surface);
+  }
+  .page input,
+  .page textarea,
+  .field {
+    @apply my-3 rounded-lg border border-line bg-canvas p-3 text-ink;
+  }
+  .page textarea {
+    @apply w-full;
+  }
+  .page input {
+    height: 88rpx;
+  }
+  .field-placeholder {
+    @apply text-muted;
+  }
+  .page navigator {
+    @apply my-3 block text-brand leading-relaxed;
+  }
+  .page picker {
+    @apply my-3 rounded-lg border border-line bg-canvas p-3;
+  }
+  .notice {
+    @apply my-3 rounded-lg bg-warning p-3 text-warning-ink leading-relaxed;
+  }
+  .error {
+    @apply my-3 block text-danger;
+  }
+}

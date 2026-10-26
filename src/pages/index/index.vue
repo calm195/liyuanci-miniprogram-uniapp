@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
+import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import type { VerificationState } from '@/types/api'
@@ -23,7 +25,8 @@ async function logout() {
 }
 </script>
 <template>
-  <view class="page">
+  <AppPage>
+    <ThemeSwitcher />
     <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">鲤源池</text>
     <view v-if="config.useMock" class="notice">合成 Mock · 无真实微信身份，不发送 API</view>
@@ -40,11 +43,17 @@ async function logout() {
         >修改建议：{{ store.verification.revision_suggestion }}</text
       >
       <text>微信登录用于建立会话；学生认证通过后才具备发布、申请和聊天的资格。</text>
-      <button v-if="!store.isLoggedIn" @click="login">前往登录</button>
-      <button v-if="store.isLoggedIn && !config.useMock" :disabled="store.busy" @click="refresh">
+      <button v-if="!store.isLoggedIn" @click="runPageAction(() => login())">前往登录</button>
+      <button
+        v-if="store.isLoggedIn && !config.useMock"
+        :disabled="store.busy"
+        @click="runPageAction(() => refresh())"
+      >
         刷新认证状态
       </button>
-      <button v-if="store.isLoggedIn" :disabled="store.busy" @click="logout">退出登录</button>
+      <button v-if="store.isLoggedIn" :disabled="store.busy" @click="runPageAction(() => logout())">
+        退出登录
+      </button>
     </view>
     <view class="card">
       <text>首发文字心愿互助</text>
@@ -62,35 +71,13 @@ async function logout() {
     </view>
     <view v-if="config.useMock" class="card">
       <text>仅用于检查状态展示</text>
-      <button v-for="state in states" :key="state" @click="store.simulate(state)">
+      <button
+        v-for="state in states"
+        :key="state"
+        @click="runPageAction(() => store.simulate(state))"
+      >
         {{ state }}
       </button>
     </view>
-  </view>
+  </AppPage>
 </template>
-<style scoped lang="scss">
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 48rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 28rpx;
-  background: white;
-  border-radius: 20rpx;
-}
-.card text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-.notice {
-  padding: 24rpx;
-  background: #fff1cc;
-}
-button {
-  margin-top: 16rpx;
-}
-</style>

@@ -43,7 +43,7 @@ async function moduleFrom(source: string) {
 }
 function stripImports(source: string) {
   return source.replace(/^import\s[\s\S]*?from\s+'([^']+)'\n/gm, (_all, name) =>
-    name === 'vue' ? `import { computed, ref } from '${import.meta.resolve('vue')}'\n` : '',
+    name === 'vue' ? `import { computed, ref, watch } from '${import.meta.resolve('vue')}'\n` : '',
   )
 }
 async function setup() {
@@ -118,7 +118,7 @@ async function setup() {
   const names =
     'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onShow, onHide, onUnload'
   const page = await moduleFrom(
-    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectGender, selectIdentityCampus, error, editing, writing };`,
+    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectGender, selectIdentityCampus, error, editing, writing, rows };`,
   )
   hooks.show!()
   await settle()
@@ -264,4 +264,16 @@ test('REQ-003：编辑服务端省略可选默认字段的草稿时补全默认�
   assert.equal(page.form.value.duration_days, 7)
   assert.equal(page.form.value.body, wish.own_content!.body)
   assert.equal(validateWish(page.form.value), '')
+})
+
+test('REQ-018：账号变化立即清除我的心愿和未保存正文', async () => {
+  const s = await setup()
+  assert.equal(s.page.rows.value.length, 1)
+  s.page.edit(s.page.items.value[0])
+  s.page.form.value.body = '合成未保存正文'
+  s.user.user.id = 'synthetic-student-b'
+  assert.equal(s.page.rows.value.length, 0)
+  assert.equal(s.page.editing.value, false)
+  assert.equal(s.page.form.value.body, '')
+  assert.equal(s.page.items.value.length, 0)
 })

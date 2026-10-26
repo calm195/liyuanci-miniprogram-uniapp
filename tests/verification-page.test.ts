@@ -284,3 +284,17 @@ test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可�
     Reflect.deleteProperty(globalThis, 'uni')
   }
 })
+
+test('REQ-018：账号变化清空认证姓名、学号、审核记录与学生卡资产', async () => {
+  const s = await setup()
+  s.hooks.show!()
+  await settle()
+  s.page.name.value = '合成姓名'
+  s.page.studentNumber.value = '合成学号'
+  s.page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
+  s.store.user.id = 'synthetic-other'
+  assert.equal(s.page.name.value, '')
+  assert.equal(s.page.studentNumber.value, '')
+  assert.equal(s.page.asset.value, null)
+  assert.equal(s.page.currentReview.value, null)
+})

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive } from 'vue'
+import { session as realSession } from '../src/utils/session.ts'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
 const actor = {
   id: 'synthetic-owner',
@@ -24,7 +25,8 @@ class RequestError extends Error {
     this.statusCode = status
   }
 }
-async function setup(query: Record<string, string> = {}) {
+async function setup(query: Record<string, string> = {}, useRealSession = false) {
+  if (useRealSession) realSession.setToken('synthetic-settings-token')
   let epoch = 1
   let token = 'synthetic-token'
   const user = reactive({
@@ -66,7 +68,7 @@ async function setup(query: Record<string, string> = {}) {
       '\nexport { me,currentMe,nickname,hidden,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,allowed }',
     {
       config,
-      session: { getEpoch: () => epoch, getToken: () => token },
+      session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
       ...api,
       RequestError,
@@ -409,4 +411,13 @@ test('REQ-014/018：公开心愿和故事可独立确认拉黑对象，隐私屏
     await r.act('block')
     assert.equal(s.calls.filter((input) => input.method).length, 1)
   }
+})
+
+test('REQ-018：同账号令牌更换后已缓存的本人投影立即失效', async () => {
+  const s = await setup({}, true)
+  assert.equal(s.runtime.currentMe.value.id, actor.id)
+  realSession.setToken('synthetic-replaced-token')
+  assert.equal(s.runtime.currentMe.value, null)
+  assert.deepEqual(s.runtime.rows.value, [])
+  realSession.clear()
 })

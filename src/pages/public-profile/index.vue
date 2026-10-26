@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -89,9 +90,9 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">公开主页</text>
-    <button :disabled="busy" @click="load()">刷新</button>
+    <button :disabled="busy" @click="runPageAction(() => load())">刷新</button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentProfile" class="card">
       <text>{{ currentProfile.nickname }}</text>
@@ -134,32 +135,13 @@ onUnload(leave)
       >
     </view>
     <text v-if="currentProfile && !busy && !rows.length">暂无可展示的公开内容</text>
-    <button v-if="currentProfile && cursor" :disabled="busy" @click="load(true)">加载下一页</button>
+    <button
+      v-if="currentProfile && cursor"
+      :disabled="busy"
+      @click="runPageAction(() => load(true))"
+    >
+      加载下一页
+    </button>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.error {
-  margin-top: 24rpx;
-  color: #b42318;
-}
-</style>

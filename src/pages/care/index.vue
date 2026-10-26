@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -123,7 +124,7 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">关怀与援助</text>
     <text>你可以在这里查看为你提供的援助资料。</text>
     <view class="notice">
@@ -137,14 +138,14 @@ onUnload(leave)
     </view>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <navigator v-if="id" url="/pages/care/index">查看本人关怀通知</navigator>
-    <button :disabled="busy" @click="load()">重新读取</button>
+    <button :disabled="busy" @click="runPageAction(() => load())">重新读取</button>
     <text v-if="busy">读取中…</text>
     <view v-if="currentCard" class="card">
-      <text class="heading">援助资料</text>
+      <text class="font-bold">援助资料</text>
       <text>{{ currentCard.resources.notice }}</text>
-      <text class="heading">24 小时援助渠道</text>
+      <text class="font-bold">24 小时援助渠道</text>
       <text selectable>{{ currentCard.resources.hotline_24_hours }}</text>
-      <text class="heading">校心理中心预约方式</text>
+      <text class="font-bold">校心理中心预约方式</text>
       <text selectable>{{ currentCard.resources.appointment }}</text>
       <text selectable>资料来源：{{ currentCard.resources.source }}</text>
       <text>资料版本：{{ currentCard.resources.version }}</text>
@@ -155,43 +156,12 @@ onUnload(leave)
       <text v-if="scoped && loaded && !rows.length">当前已读取的通知中暂无关怀卡片。</text>
       <view v-for="(item, index) in rows" :key="item.id" class="card">
         <text>关怀资料 {{ index + 1 }}</text>
-        <button :disabled="busy" @click="open(item)">查看当前关怀卡</button>
+        <button :disabled="busy" @click="runPageAction(() => open(item))">查看当前关怀卡</button>
       </view>
-      <button v-if="scoped && cursor" :disabled="busy" @click="load(true)">继续读取通知</button>
+      <button v-if="scoped && cursor" :disabled="busy" @click="runPageAction(() => load(true))">
+        继续读取通知
+      </button>
     </template>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.heading {
-  font-weight: bold;
-}
-.card,
-.notice {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-.notice {
-  background: #fff1cc;
-}
-text {
-  display: block;
-  margin: 16rpx 0;
-  overflow-wrap: anywhere;
-}
-button {
-  margin-top: 16rpx;
-}
-.error {
-  color: #b42318;
-}
-</style>

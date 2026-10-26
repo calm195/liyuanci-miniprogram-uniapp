@@ -5,7 +5,7 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story' }>()
 </script>
 <template>
   <view class="content">
-    <text class="body">{{ content.body }}</text>
+    <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
     <text v-if="content.school_related">未经证实</text>
     <text v-if="content.notice_text">{{ content.notice_text }}</text>
     <navigator
@@ -38,13 +38,3 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story' }>()
     </template>
   </view>
 </template>
-<style scoped>
-text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-.body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-</style>

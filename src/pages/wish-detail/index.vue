@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -216,16 +217,16 @@ onUnload(leave)
 </script>
 
 <template>
-  <view class="page">
+  <AppPage>
     <text class="title">心愿详情</text>
     <text v-if="config.useMock" class="notice">合成演示 · 详情只读，不发送 API</text>
-    <button :disabled="busy || writing" @click="load">刷新详情</button>
+    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新详情</button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <text>当前状态：{{ wishStateLabels[currentWish.current_state] || '未知状态' }}</text>
       <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
       <template v-else-if="content">
-        <text class="body">{{ content.body }}</text>
+        <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
         <text v-if="content.category"
           >分类：{{ categories.find((item) => item.value === content?.category)?.label }}</text
         >
@@ -274,30 +275,41 @@ onUnload(leave)
         >查看应愿申请</navigator
       >
       <text>可用操作以当前账号、心愿状态和服务端授权为准。</text>
-      <button v-if="allowed('withdraw')" :disabled="writing || busy" @click="act('withdraw')">
+      <button
+        v-if="allowed('withdraw')"
+        :disabled="writing || busy"
+        @click="runPageAction(() => act('withdraw'))"
+      >
         撤下心愿
       </button>
-      <button v-if="allowed('complete')" :disabled="writing || busy" @click="act('complete')">
+      <button
+        v-if="allowed('complete')"
+        :disabled="writing || busy"
+        @click="runPageAction(() => act('complete'))"
+      >
         确认实现
       </button>
       <template v-if="allowed('rollback')">
         <button
           v-if="currentWish.current_state === 'realized'"
           :disabled="writing || busy"
-          @click="act('rollback', 'matching')"
+          @click="runPageAction(() => act('rollback', 'matching'))"
         >
           回退为应愿中（保留原应愿人）
         </button>
         <template v-if="currentWish.current_state === 'matching'">
-          <view class="option">
+          <view class="mt-3">
             <text>回退时刷新有效期（需重新审核）</text>
             <switch
               :checked="refreshExpiry"
               :disabled="writing || busy"
-              @change="selectRefreshExpiry"
+              @change="runPageAction(() => selectRefreshExpiry($event))"
             />
           </view>
-          <button :disabled="writing || busy" @click="act('rollback', 'published')">
+          <button
+            :disabled="writing || busy"
+            @click="runPageAction(() => act('rollback', 'published'))"
+          >
             回退并解除当前匹配
           </button>
         </template>
@@ -305,7 +317,7 @@ onUnload(leave)
       <button
         v-if="allowed('exception-exit')"
         :disabled="writing || busy"
-        @click="act('exception-exit')"
+        @click="runPageAction(() => act('exception-exit'))"
       >
         异常退出
       </button>
@@ -338,44 +350,5 @@ onUnload(leave)
     >
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
-  </view>
+  </AppPage>
 </template>
-
-<style scoped>
-.page {
-  padding: 32rpx;
-}
-.title {
-  font-size: 40rpx;
-  font-weight: bold;
-}
-.card {
-  margin-top: 24rpx;
-  padding: 24rpx;
-  border-radius: 20rpx;
-  background: white;
-}
-text {
-  display: block;
-  margin-bottom: 20rpx;
-}
-button {
-  margin-top: 16rpx;
-}
-.body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.option {
-  margin-top: 24rpx;
-}
-.notice {
-  margin-top: 24rpx;
-  padding: 20rpx;
-  background: #fff1cc;
-}
-.error {
-  margin-top: 24rpx;
-  color: #b42318;
-}
-</style>
