@@ -149,6 +149,12 @@
       "style": {
         "navigationBarTitleText": "暖评"
       }
+    },
+    {
+      "path": "pages/whispers/notifications",
+      "style": {
+        "navigationBarTitleText": "悄悄鲤通知"
+      }
     }
   ],
   "globalStyle": {

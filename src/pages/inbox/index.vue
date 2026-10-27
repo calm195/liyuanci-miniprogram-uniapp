@@ -194,6 +194,7 @@ onUnload(leave)
 </script>
 <template>
   <AppPage>
+    <navigator url="/pages/whispers/notifications">悄悄鲤通知</navigator>
     <text class="title">聊天与通知</text>
     <navigator url="/pages/safety/index">警告与申诉</navigator>
     <navigator url="/pages/care/index">关怀与援助</navigator>
