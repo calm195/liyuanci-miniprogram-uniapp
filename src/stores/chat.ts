@@ -48,6 +48,6 @@ export const useChatStore = defineStore('chat', () => {
     syncSession()
     delete receipts.value[conversationId]
   }
-  watch(() => user.user?.id, clear, { flush: 'sync' })
+  watch([() => user.user?.id, () => session.getEpoch()], clear, { flush: 'sync' })
   return { receipts, syncSession, track, update, remove, forget }
 })

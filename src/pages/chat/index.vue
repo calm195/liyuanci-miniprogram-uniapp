@@ -220,18 +220,19 @@ function leave() {
 }
 const poller = createVisiblePoller(() => refresh())
 watch(
-  () => user.user?.id,
+  [() => user.user?.id, () => session.getEpoch()],
   () => {
-    if (readOwner.value && readOwner.value !== user.user?.id) {
-      generation++
-      poller.stop()
-      clearProjection()
-      draft.value = ''
-      attempt.value = null
-      sending.value = false
-      reading.value = false
-      error.value = '会话已变化，请重新进入聊天。'
-    }
+    // 同账号新令牌也属于新会话，消息游标、输入和重试依据不能沿用。
+    generation++
+    poller.stop()
+    clearProjection()
+    draft.value = ''
+    attempt.value = null
+    sending.value = false
+    reading.value = false
+    notice.value = ''
+    error.value = '会话已变化，正在重新读取。'
+    if (visible) poller.start()
   },
   { flush: 'sync' },
 )

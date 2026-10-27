@@ -13,6 +13,7 @@ const id = ref('')
 const profile = ref<PublicProfile | null>(null)
 const items = ref<ProfileContents['items']>([])
 const cursor = ref<string | null>(null)
+const usedCursors = new Set<string>()
 const busy = ref(false)
 const error = ref('')
 const readEpoch = ref(-1)
@@ -22,10 +23,18 @@ const currentProfile = computed(() =>
   readEpoch.value === session.getEpoch() ? profile.value : null,
 )
 const rows = computed(() => (currentProfile.value ? items.value : []))
+function checkCursor(next: unknown) {
+  // 游标仅在当前读取链内使用；重复或畸形值停止翻页，刷新后重新建立读取链。
+  if (next === null) return
+  if (typeof next !== 'string' || !next || usedCursors.has(next))
+    throw new Error('分页游标异常，请刷新后重试')
+  usedCursors.add(next)
+}
 function clear() {
   profile.value = null
   items.value = []
   cursor.value = null
+  usedCursors.clear()
   readEpoch.value = -1
 }
 async function load(more = false) {
@@ -44,6 +53,7 @@ async function load(more = false) {
     const result = await getPublicProfile(id.value, nextCursor)
     if (!visible || current !== generation || epoch !== session.getEpoch()) return
     if (result.profile.id !== id.value) throw new Error('公开主页目标不匹配')
+    checkCursor(result.next_cursor)
     profile.value = result.profile
     items.value = [
       ...(more ? items.value : []),

@@ -302,14 +302,14 @@ test('REQ-008/018：公开主页按本人目标分页，404与离开清除正文
         return {
           profile: { id: 'synthetic-author', nickname: '公开昵称' },
           items: [{ kind: 'wish', content: publicWish.public }],
-          next_cursor: 'profile.cursor',
+          next_cursor: input.url.includes('cursor=') ? 'profile.next' : 'profile.cursor',
         }
       },
     },
   )
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/public-profile/index.vue', import.meta.url)) +
-      '\nexport { load, profile, rows, currentProfile };',
+      '\nexport { load, profile, rows, currentProfile, error };',
     {
       ...api,
       config: { useMock: false },
@@ -339,10 +339,40 @@ test('REQ-008/018：公开主页按本人目标分页，404与离开清除正文
   await page.load(true)
   assert.equal(calls[1]!.url, '/users/synthetic-author/public-profile?cursor=profile.cursor')
   assert.equal(page.rows.value.length, 1)
+  await page.load(true)
+  assert.equal(page.currentProfile.value, null)
+  assert.match(page.error.value, /不可查看/)
+  const count = calls.length
+  await page.load(true)
+  assert.equal(calls.length, count)
+  await page.load()
+  assert.equal(page.rows.value.length, 1)
   fail = true
   await page.load()
   assert.equal(page.currentProfile.value, null)
   assert.equal(page.rows.value.length, 0)
   hooks.hide!()
   assert.equal(page.profile.value, null)
+})
+
+test('REQ-006/018：应愿分页拒绝跨页游标循环与畸形游标，刷新重置读取链', async () => {
+  for (const invalid of ['synthetic.cursor', '', 123]) {
+    const s = await setup('mine')
+    s.setGet(async () => ({ items: [sample], next_cursor: invalid }))
+    await s.page.load(true)
+    assert.equal(s.page.rows.value.length, 0)
+    assert.match(s.page.error.value, /申请读取失败/)
+    const count = s.calls.length
+    await s.page.load(true)
+    assert.equal(s.calls.length, count)
+    s.setGet(async () => ({ items: [sample], next_cursor: 'synthetic.cursor' }))
+    await s.page.load()
+    assert.equal(s.page.rows.value.length, 1)
+  }
+  const s = await setup('mine')
+  s.setGet(async () => ({ items: [sample], next_cursor: 'synthetic.next' }))
+  await s.page.load(true)
+  s.setGet(async () => ({ items: [sample], next_cursor: 'synthetic.cursor' }))
+  await s.page.load(true)
+  assert.equal(s.page.rows.value.length, 0)
 })

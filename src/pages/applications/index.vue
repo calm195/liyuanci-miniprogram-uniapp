@@ -31,6 +31,7 @@ const wishId = ref('')
 const wish = ref<WishResult | null>(null)
 const items = ref<WishApplication[]>([])
 const cursor = ref<string | null>(null)
+const usedCursors = new Set<string>()
 const status = ref<ApplicationStatus | ''>('')
 const message = ref('')
 const busy = ref(false)
@@ -56,10 +57,18 @@ const mayApply = computed(
     config.wishWritesReady &&
     canApplyToWish(user.user, user.validated, currentWish.value),
 )
+function checkCursor(next: unknown) {
+  // 游标仅在当前读取链内使用；重复或畸形值停止翻页，刷新后重新建立读取链。
+  if (next === null) return
+  if (typeof next !== 'string' || !next || usedCursors.has(next))
+    throw new Error('分页游标异常，请刷新后重试')
+  usedCursors.add(next)
+}
 function clearProjection() {
   wish.value = null
   items.value = []
   cursor.value = null
+  usedCursors.clear()
   readEpoch.value = -1
   readOwner.value = ''
   message.value = ''
@@ -99,6 +108,7 @@ async function load(more = false) {
         ? await listWishApplications(wishId.value, nextCursor)
         : { items: [], next_cursor: null }
     if (!isCurrent()) return
+    checkCursor(page.next_cursor)
     // 许愿人只显示同一心愿的已审有效申请，拒绝将待审或其他目标混入列表。
     const incoming = owned
       ? page.items.filter((item) => item.wish_id === wishId.value && item.status === 'active')

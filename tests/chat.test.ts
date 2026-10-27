@@ -149,7 +149,7 @@ test('REQ-018：真实Pinia只保存回执与状态，换账号和同账号新�
   assert.deepEqual(store.receipts, {})
 })
 async function setup() {
-  let epoch = 1
+  const state = reactive({ epoch: 1 })
   let target: Conversation | null = { ...conversation }
   const user = reactive({
     user: { ...actor },
@@ -157,7 +157,7 @@ async function setup() {
     isLoggedIn: true,
     refresh: async () => {},
   })
-  const session = { getEpoch: () => epoch, getToken: () => 'synthetic-token' }
+  const session = { getEpoch: () => state.epoch, getToken: () => 'synthetic-token' }
   const store = await chatStore(user, session)
   const calls: Transport[] = []
   const pages: MessagesPage[] = []
@@ -269,7 +269,7 @@ async function setup() {
       reads = value
     },
     changeSession: () => {
-      epoch++
+      state.epoch++
     },
   }
 }
@@ -467,7 +467,12 @@ async function setupInbox() {
         calls.push(structuredClone(input))
         if (input.method) return command(input)
         return input.url.startsWith('/me/notifications')
-          ? { items: structuredClone(rows), next_cursor: 'notification.cursor' }
+          ? {
+              items: structuredClone(rows),
+              next_cursor: input.url.includes('cursor=')
+                ? 'notification.next'
+                : 'notification.cursor',
+            }
           : { items: [conversation], next_cursor: null }
       },
     },
@@ -551,4 +556,84 @@ test('REQ-006：通知分页只传本人游标，409重读不重发，离开或�
   assert.equal(s.page.notificationRows.value.length, 0)
   s.hooks.hide!()
   assert.equal(s.page.unreadCount.value, 0)
+})
+
+test('REQ-018：同账号更换令牌立即清输入与回执，从零重读消息且丢弃旧请求', async () => {
+  const s = await setup()
+  s.pages.push({ items: [delivered('synthetic-old', 7)], next_after_seq: 7 })
+  await s.poll()
+  s.store.track(conversation.id, {
+    message_id: 'synthetic-pending',
+    status: 'pending_scan',
+    delivery_seq: null,
+  })
+  s.page.draft.value = '旧会话草稿'
+  let finish: ((value: unknown) => void) | undefined
+  s.setCommand(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const sending = s.page.send()
+  s.changeSession()
+  assert.equal(s.page.draft.value, '')
+  assert.equal(s.page.afterSeq.value, 0)
+  assert.deepEqual(s.store.receipts, {})
+  await settle()
+  assert.equal(
+    s.calls[s.calls.length - 1]!.url,
+    `/conversations/${conversation.id}/messages?after_seq=0&limit=50`,
+  )
+  finish!({ message_id: 'synthetic-late', status: 'pending_scan', delivery_seq: null })
+  await sending
+  assert.deepEqual(s.store.receipts, {})
+  assert.equal(s.page.sending.value, false)
+})
+
+test('REQ-007/018：轮询重复启动和快速返回等待旧请求结束，已停止的回调不发请求', async () => {
+  const queued: (() => void)[] = []
+  const completions: (() => void)[] = []
+  let calls = 0
+  const poller = createVisiblePoller(
+    async () => {
+      calls++
+      await new Promise<void>((resolve) => completions.push(resolve))
+    },
+    {
+      set: (callback) => {
+        queued.push(callback)
+        return 1 as unknown as ReturnType<typeof setTimeout>
+      },
+      clear: () => {},
+    },
+  )
+  poller.start()
+  poller.start()
+  poller.stop()
+  poller.start()
+  assert.equal(calls, 1)
+  completions.shift()!()
+  await settle()
+  assert.equal(calls, 2)
+  completions.shift()!()
+  await settle()
+  assert.equal(queued.length, 1)
+  poller.stop()
+  queued[0]!()
+  assert.equal(calls, 2)
+})
+
+test('REQ-006/018：通知游标循环时清投影并停止翻页，刷新后可重新读取', async () => {
+  const s = await setupInbox()
+  await s.page.load(true)
+  assert.equal(s.page.notificationRows.value.length, 1)
+  await s.page.load(true)
+  assert.equal(s.page.notificationRows.value.length, 0)
+  assert.match(s.page.error.value, /读取失败/)
+  const count = s.calls.length
+  await s.page.load(true)
+  assert.equal(s.calls.length, count)
+  await s.page.load()
+  assert.equal(s.page.notificationRows.value.length, 1)
 })
