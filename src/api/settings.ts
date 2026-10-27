@@ -1,6 +1,8 @@
+import { callWhisper } from '@/api/whispers'
+import type { SourceRef } from '@/types/whispers'
 import { request } from '@/utils/request'
 import type { UserInfo } from '@/types/api'
-import type { ProfileUpdate, BlockEntry, BlockPage } from '@/types/settings'
+import type { ProfileUpdate, BlockEntry } from '@/types/settings'
 export const updateProfile = (input: ProfileUpdate, key: string) =>
   request<UserInfo>({
     url: '/me/profile',
@@ -8,22 +10,15 @@ export const updateProfile = (input: ProfileUpdate, key: string) =>
     data: input,
     header: { 'Idempotency-Key': key },
   })
-// 列表按已实现的后端投影接入；解除操作使用记录版本，不能使用本人版本。
+// 全来源黑名单使用不透明条目，禁止回退到公开账号映射接口。
 export const listBlocks = (cursor?: string) =>
-  request<BlockPage>({
-    url: `/me/blocks?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
-  })
-export const blockUser = (target: string, key: string) =>
-  request<{ target_user_id: string; blocked: true }>({
-    url: '/me/blocks',
-    method: 'POST',
-    data: { target_user_id: target },
-    header: { 'Idempotency-Key': key },
-  })
+  callWhisper('interactionBlocksList', { query: { limit: 20, ...(cursor ? { cursor } : {}) } })
+export const blockUser = (source: SourceRef, key: string) =>
+  callWhisper('interactionBlockCreate', { data: { source }, key })
 export const unblockUser = (entry: BlockEntry, key: string) =>
-  request<void>({
-    url: `/me/blocks/${encodeURIComponent(entry.target_user_id)}`,
-    method: 'DELETE',
+  callWhisper('interactionBlockDelete', {
+    path: { block_id: entry.block_id },
     data: { expected_version: entry.version },
-    header: { 'Idempotency-Key': key },
+    key,
   })
+export const getBlockWorkspace = () => callWhisper('whisperWorkspaceGet', {})

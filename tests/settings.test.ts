@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive } from 'vue'
+import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { session as realSession } from '../src/utils/session.ts'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
 const actor = {
@@ -10,20 +11,13 @@ const actor = {
   nickname: '合成昵称',
   verification: 'unverified' as const,
   hide_identity_tags: true,
-  allowed_actions: ['putMeProfile', 'postMeBlocks', 'deleteMeBlocks'],
+  allowed_actions: ['putMeProfile'],
 }
 type Input = {
   url: string
   method?: string
   data?: Record<string, unknown>
   header?: Record<string, string>
-}
-class RequestError extends Error {
-  statusCode: number
-  constructor(status: number) {
-    super('合成错误')
-    this.statusCode = status
-  }
 }
 async function setup(query: Record<string, string> = {}, useRealSession = false) {
   if (useRealSession) realSession.setToken('synthetic-settings-token')
@@ -36,22 +30,48 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
   })
   const hooks: Record<string, (query?: Record<string, string>) => unknown> = {}
   const calls: Input[] = []
+  const workspace = {
+    server_now: '2026-10-27T04:00:00Z',
+    verification: 'unverified',
+    write_restricted: false,
+    allowed_actions: ['interactionBlockCreate'],
+  }
   let transport: (input: Input) => Promise<unknown> = async (input) => {
-    if (input.url.startsWith('/me/blocks?'))
-      return { items: [{ target_user_id: 'synthetic-other', version: 3 }], next_cursor: null }
+    if (input.url === '/me/whispers') return structuredClone(workspace)
+    if (input.url.startsWith('/me/interaction-blocks?'))
+      return {
+        items: [
+          {
+            block_id: '6c500000-0000-4000-8000-000000000002',
+            version: 3,
+            label: '已屏蔽对象',
+            allowed_actions: ['interactionBlockDelete'],
+          },
+        ],
+        next_cursor: null,
+      }
     if (input.url.startsWith('/users/'))
       return {
-        profile: { id: 'synthetic-other', nickname: '合成对方' },
+        profile: { id: '6c500000-0000-4000-8000-000000000002', nickname: '合成对方' },
         items: [],
         next_cursor: null,
       }
     if (input.url === '/me/profile') return { ...actor, ...input.data, version: 20 }
-    if (input.url === '/me/blocks') return { target_user_id: 'synthetic-other', blocked: true }
+    if (input.url === '/me/interaction-blocks') return { accepted: true }
     return undefined
   }
+  const session = useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token }
+  const helpers = await whispersRuntime(async (options) => {
+    const input = options as Input
+    calls.push(input)
+    // Workspace 由正式投影独立提供，旧Me动作不再控制黑名单。
+    if (input.url === '/me/whispers') return structuredClone(workspace)
+    return transport(input)
+  }, session)
   const api = await loadRuntime(
     readFileSync(new URL('../src/api/settings.ts', import.meta.url), 'utf8'),
     {
+      callWhisper: helpers.callWhisper,
       request: async (input: Input) => {
         calls.push(input)
         return transport(input)
@@ -65,12 +85,13 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
   const config = { useMock: false }
   const runtime = await loadRuntime(
     pageScript(new URL('../src/pages/settings/index.vue', import.meta.url)) +
-      '\nexport { me,currentMe,nickname,hidden,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,allowed }',
+      '\nexport { me,currentMe,nickname,hidden,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,allowed,retryWrite,retryReady,workspace }',
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
       ...api,
+      ...helpers,
       RequestError,
       getWish: (id: string) => {
         const input = { url: `/wishes/${encodeURIComponent(id)}` }
@@ -121,6 +142,7 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
     calls,
     prompts,
     config,
+    workspace,
     transport: (fn: typeof transport) => {
       transport = fn
     },
@@ -170,14 +192,14 @@ test('REQ-014/018：隐藏字段缺省不擅自填充，空白昵称拒绝，无
   assert.equal(r.hidden.value, null)
   await r.act('profile')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   r.hidden.value = true
   r.nickname.value = ' \n '
   await r.act('profile')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   const source = readFileSync(new URL('../src/pages/settings/index.vue', import.meta.url), 'utf8')
@@ -189,26 +211,26 @@ test('REQ-014：解除使用本人黑名单条目版本，204 后重读，旧申
   const entry = r.rows.value[0]
   await r.act('unblock', entry)
   const input = s.calls.find((x) => x.method === 'DELETE')!
-  assert.equal(input.url, '/me/blocks/synthetic-other')
+  assert.equal(input.url, '/me/interaction-blocks/6c500000-0000-4000-8000-000000000002')
   assert.deepEqual(input.data, { expected_version: 3 })
   assert.match(s.prompts[0]!, /不会恢复旧申请、旧消息/)
-  assert.equal(s.calls.filter((x) => x.url.startsWith('/me/blocks?')).length, 2)
-  assert.equal(s.calls.filter((x) => x.method).length, 1)
+  assert.equal(s.calls.filter((x) => x.url.startsWith('/me/interaction-blocks?')).length, 2)
+  assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
 test('REQ-014：拉黑只取已重验公开主页的目标，不接受路由昵称，禁止拉黑自己', async () => {
-  const s = await setup({ targetId: 'synthetic-other', nickname: '伪造昵称' })
+  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002', nickname: '伪造昵称' })
   const r = s.runtime
   assert.equal(r.targetName.value, '合成对方')
   await r.act('block')
   assert.deepEqual(s.calls.find((x) => x.method === 'POST')?.data, {
-    target_user_id: 'synthetic-other',
+    source: { kind: 'public_profile', id: '6c500000-0000-4000-8000-000000000002' },
   })
   assert.match(s.prompts[0]!, /合成对方/)
   assert.match(s.prompts[0]!, /现有匹配需另行退出/)
   const own = await setup({ targetId: actor.id })
   await own.runtime.act('block')
   assert.equal(
-    own.calls.some((x) => x.method),
+    own.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
 })
@@ -218,17 +240,17 @@ test('REQ-014：公开主页失效或错目标时拒绝拉黑', async () => {
   assert.equal(r.targetName.value, '')
   await r.act('block')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   s.transport(async () => {
-    throw new RequestError(404)
+    throw new RequestError('合成缺失', 404, 'NOT_FOUND', '', 404)
   })
   await r.load()
   assert.equal(r.targetName.value, '')
   await r.act('block')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
 })
@@ -238,11 +260,31 @@ test('REQ-014：分页游标编码、按目标去重更新版本、循环或读�
   let page = 0
   s.transport(async () =>
     ++page === 1
-      ? { items: [{ target_user_id: 'synthetic-other', version: 4 }], next_cursor: 'a/b+?' }
+      ? {
+          items: [
+            {
+              block_id: '6c500000-0000-4000-8000-000000000002',
+              version: 4,
+              label: '已屏蔽对象',
+              allowed_actions: ['interactionBlockDelete'],
+            },
+          ],
+          next_cursor: 'a/b+?',
+        }
       : {
           items: [
-            { target_user_id: 'synthetic-other', version: 5 },
-            { target_user_id: 'synthetic-third', version: 2 },
+            {
+              block_id: '6c500000-0000-4000-8000-000000000002',
+              version: 5,
+              label: '已屏蔽对象',
+              allowed_actions: ['interactionBlockDelete'],
+            },
+            {
+              block_id: '6c500000-0000-4000-8000-000000000003',
+              version: 2,
+              label: '已屏蔽对象',
+              allowed_actions: ['interactionBlockDelete'],
+            },
           ],
           next_cursor: null,
         },
@@ -259,34 +301,35 @@ test('REQ-014：分页游标编码、按目标去重更新版本、循环或读�
   assert.deepEqual(r.rows.value, [])
   assert.equal(r.currentMe.value.id, actor.id) // 列表失败不阻止独立的资料设置。
 })
-test('REQ-014/018：没有动作或未校验时拒绝写入，正式与后端解除动作名均受当前授权约束', async () => {
+test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作，不使用旧Me动作', async () => {
   const s = await setup()
   const r = s.runtime
   s.user.validated = false
   await r.act('profile')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   s.user.validated = true
   s.user.user!.allowed_actions = []
+  r.rows.value[0].allowed_actions = []
   await r.act('profile')
   await r.act('unblock', r.rows.value[0])
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
-  s.user.user!.allowed_actions = ['deleteMeBlocksTarget_Id']
+  s.user.user!.allowed_actions = []
   await r.load()
   await r.act('unblock', r.rows.value[0])
-  assert.equal(s.calls.filter((x) => x.method).length, 1)
+  assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
 test('REQ-014：取消、离页后的确认、重复点击均不产生额外写入', async () => {
   const cancelled = await setup()
   cancelled.cancel()
   await cancelled.runtime.act('profile')
   assert.equal(
-    cancelled.calls.some((x) => x.method),
+    cancelled.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   const s = await setup()
@@ -297,7 +340,7 @@ test('REQ-014：取消、离页后的确认、重复点击均不产生额外写�
   s.confirm()
   await pending
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   assert.equal(s.runtime.nickname.value, '')
@@ -307,24 +350,25 @@ test('REQ-014/018：409 和不确定结果只重读不重发，后续人工操�
   const s = await setup()
   const r = s.runtime
   s.transport(async (input) => {
-    if (input.method) throw new RequestError(409)
+    if (input.method && input.method !== 'GET')
+      throw new RequestError('合成冲突', 409, 'VERSION_CONFLICT', '', 409)
     return { items: [], next_cursor: null }
   })
   await r.act('profile')
   assert.match(r.notice.value, /版本或状态已变化/)
-  assert.equal(s.calls.filter((x) => x.method).length, 1)
+  assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
   s.transport(async (input) => {
-    if (input.method) throw new Error('合成网络超时')
+    if (input.method && input.method !== 'GET') throw new Error('合成网络超时')
     return { items: [], next_cursor: null }
   })
   await r.act('profile')
   assert.match(r.notice.value, /结果尚未确认/)
-  const writes = s.calls.filter((x) => x.method)
+  const writes = s.calls.filter((x) => x.method && x.method !== 'GET')
   assert.equal(writes.length, 2)
   assert.notEqual(writes[0].header!['Idempotency-Key'], writes[1].header!['Idempotency-Key'])
 })
 test('REQ-018：账号变化及晚到响应清理旧昵称、目标、黑名单与写权限', async () => {
-  const s = await setup({ targetId: 'synthetic-other' })
+  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002' })
   const r = s.runtime
   let resolve: (value: unknown) => void = () => {}
   s.transport(
@@ -345,7 +389,7 @@ test('REQ-018：账号变化及晚到响应清理旧昵称、目标、黑名单�
   assert.equal(r.allowed('putMeProfile'), false)
   s.epoch()
   await r.act('profile')
-  assert.equal(s.calls.filter((x) => x.method).length, 1)
+  assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
 test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送写入', async () => {
   const s = await setup()
@@ -357,12 +401,12 @@ test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送
   await r.load()
   await r.act('profile')
   assert.equal(
-    s.calls.some((x) => x.method),
+    s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   const failed = await setup()
   failed.user.refresh = async () => {
-    throw new RequestError(403)
+    throw new RequestError('合成拒绝', 403, 'FORBIDDEN', '', 403)
   }
   await failed.runtime.load()
   assert.equal(failed.runtime.currentMe.value, null)
@@ -371,17 +415,17 @@ test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送
 test('REQ-014/018：公开心愿和故事可独立确认拉黑对象，隐私屏障或作者变化禁止沿用旧目标', async () => {
   for (const kind of ['wish', 'story']) {
     const s = await setup({
-      targetId: 'synthetic-other',
+      targetId: '6c500000-0000-4000-8000-000000000002',
       sourceId: 'synthetic-content',
       sourceKind: kind,
     })
     const r = s.runtime
     s.transport(async (input) => {
-      if (input.url.startsWith('/me/blocks?')) return { items: [], next_cursor: null }
-      if (input.method) return { target_user_id: 'synthetic-other', blocked: true }
+      if (input.url.startsWith('/me/interaction-blocks?')) return { items: [], next_cursor: null }
+      if (input.method && input.method !== 'GET') return { accepted: true }
       const content = {
         id: 'synthetic-content',
-        author: { id: 'synthetic-other', nickname: '合成公开作者' },
+        author: { id: '6c500000-0000-4000-8000-000000000002', nickname: '合成公开作者' },
       }
       return kind === 'wish'
         ? { id: content.id, current_state: 'published', public: content }
@@ -390,26 +434,28 @@ test('REQ-014/018：公开心愿和故事可独立确认拉黑对象，隐私屏
     await r.load()
     assert.equal(r.targetName.value, '合成公开作者')
     await r.act('block')
-    assert.equal(s.calls.filter((input) => input.method).length, 1)
+    assert.equal(s.calls.filter((input) => input.method && input.method !== 'GET').length, 1)
     assert.equal(
       s.calls.some((input) => input.url.startsWith('/users/')),
       false,
     )
     s.transport(async (input) =>
-      input.url.startsWith('/me/blocks?')
+      input.url.startsWith('/me/interaction-blocks?')
         ? { items: [], next_cursor: null }
         : {
             id: 'synthetic-content',
             current_state: 'published',
             privacy_review_required: true,
-            public: { author: { id: 'synthetic-other', nickname: '已隐藏作者' } },
+            public: {
+              author: { id: '6c500000-0000-4000-8000-000000000002', nickname: '已隐藏作者' },
+            },
             author: { id: 'synthetic-new-author', nickname: '新作者' },
           },
     )
     await r.load()
     assert.equal(r.targetName.value, '')
     await r.act('block')
-    assert.equal(s.calls.filter((input) => input.method).length, 1)
+    assert.equal(s.calls.filter((input) => input.method && input.method !== 'GET').length, 1)
   }
 })
 
@@ -420,4 +466,69 @@ test('REQ-018：同账号令牌更换后已缓存的本人投影立即失效', a
   assert.equal(s.runtime.currentMe.value, null)
   assert.deepEqual(s.runtime.rows.value, [])
   realSession.clear()
+})
+
+test('REQ-014：旧动作不启用新拉黑，条目不再提供账号主页或来源映射', async () => {
+  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002' })
+  s.workspace.allowed_actions = []
+  s.user.user!.allowed_actions = ['putMeProfile', 'postMeBlocks', 'deleteMeBlocks']
+  await s.runtime.load()
+  await s.runtime.act('block')
+  assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
+  assert.equal(s.runtime.targetName.value, '')
+  const source = readFileSync(new URL('../src/pages/settings/index.vue', import.meta.url), 'utf8')
+  assert.doesNotMatch(
+    source,
+    /entry\.target_user_id|entry\.block_id.*public-profile|postMeBlocks|deleteMeBlocks/,
+  )
+  assert.ok(s.calls.every((x) => !x.url.startsWith('/me/blocks')))
+})
+test('REQ-014/018：升级响应与账号字段泄漏均清掉黑名单，不回退旧接口', async () => {
+  const s = await setup()
+  s.transport(async () => {
+    throw new RequestError('需升级', 409, 'CLIENT_UPGRADE_REQUIRED', '', 409)
+  })
+  await s.runtime.load()
+  assert.match(s.runtime.error.value, /更新/)
+  assert.deepEqual(s.runtime.rows.value, [])
+  assert.equal(s.runtime.workspace.value, null)
+  s.transport(async () => ({
+    items: [
+      {
+        block_id: '6c500000-0000-4000-8000-000000000002',
+        version: 1,
+        label: '已屏蔽对象',
+        allowed_actions: ['interactionBlockDelete'],
+        target_user_id: 'synthetic-leak',
+      },
+    ],
+    next_cursor: null,
+  }))
+  await s.runtime.load()
+  assert.deepEqual(s.runtime.rows.value, [])
+  assert.equal(s.runtime.blocksReady.value, false)
+  assert.ok(s.calls.every((x) => !x.url.startsWith('/me/blocks')))
+})
+test('REQ-014/018：解除超时禁止新写，原键原体重试，离页清掉待确认操作', async () => {
+  const s = await setup()
+  let unknown = true
+  s.transport(async (input) => {
+    if (input.method === 'DELETE') {
+      if (unknown) throw new RequestError('合成超时', -1)
+      return undefined
+    }
+    return { items: [], next_cursor: null }
+  })
+  await s.runtime.act('unblock', s.runtime.rows.value[0])
+  assert.equal(s.runtime.retryReady.value, true)
+  await s.runtime.act('unblock', s.runtime.rows.value[0])
+  assert.equal(s.calls.filter((x) => x.method === 'DELETE').length, 1)
+  unknown = false
+  await s.runtime.retryWrite()
+  const writes = s.calls.filter((x) => x.method === 'DELETE')
+  assert.deepEqual(writes[0], writes[1])
+  assert.equal(s.runtime.retryReady.value, false)
+  s.hooks.hide()
+  await s.runtime.retryWrite()
+  assert.equal(s.calls.filter((x) => x.method === 'DELETE').length, 2)
 })

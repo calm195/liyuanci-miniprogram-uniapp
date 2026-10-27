@@ -97,3 +97,9 @@ npm run build:mp-weixin
 - 后续开发使用 `develop`，对应 docs 文档使用 `mini-deveop`；仅在用户授权范围内提交，不自动 push、发布、部署或创建远程仓库。
 - README 仅维护项目介绍、选项与目录、启动方式、开发规范与须知；本工程不保留阶段文档，过程产物写入 docs 工程。
 - 任何工程变动前核对本工程 `develop` 与 docs `mini-deveop` 的分支、完整 HEAD 和工作区；固定阶段产物不再修改，交付、勘误或补证据另建文件并引用完整源码提交。契约疑问写 docs 对应端新记录，由后端协调；需求、审批及固定设计只读。遵循 [文档管理规范](../docs/governance/README.md)。
+
+### 树洞契约消费
+
+模块 API 使用 `callWhisper(operationId, input)`，配置、本人动作与黑名单消费固定的 `whispers/1.0.0` 契约。更新派生类型和校验目录时，在本工程运行 `python3 scripts/sync_whispers_contract.py <docs工作树>/contracts/whispers-v1`；脚本校验输入指纹并调用本地 Prettier，不修改契约。契约变更先由 docs 发布新版本，再同步消费者。
+
+共享配置及本人动作由 `useWhispersStore` 管理；编辑页用 `createWhisperScope` 保存短期草稿和结果未知请求，离页调用 `close()`，同账号换会话也会清理。黑名单仅使用 `/me/interaction-blocks`，新接口不可用时显示失败，不回退旧账号字段；真实接入依赖后端完成 opaque 黑名单兼容迁移。
