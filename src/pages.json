@@ -101,6 +101,48 @@
       "style": {
         "navigationBarTitleText": "账号注销"
       }
+    },
+    {
+      "path": "pages/whispers/index",
+      "style": {
+        "navigationBarTitleText": "文字树洞"
+      }
+    },
+    {
+      "path": "pages/whispers/detail",
+      "style": {
+        "navigationBarTitleText": "树洞详情"
+      }
+    },
+    {
+      "path": "pages/whispers/editor",
+      "style": {
+        "navigationBarTitleText": "我的树洞"
+      }
+    },
+    {
+      "path": "pages/whispers/mine",
+      "style": {
+        "navigationBarTitleText": "我的树洞记录"
+      }
+    },
+    {
+      "path": "pages/whispers/nickname",
+      "style": {
+        "navigationBarTitleText": "树洞昵称"
+      }
+    },
+    {
+      "path": "pages/whispers/help",
+      "style": {
+        "navigationBarTitleText": "解忧与公共援助"
+      }
+    },
+    {
+      "path": "pages/whispers/report",
+      "style": {
+        "navigationBarTitleText": "举报树洞内容"
+      }
     }
   ],
   "globalStyle": {
