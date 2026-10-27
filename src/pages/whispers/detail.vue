@@ -78,14 +78,50 @@ async function load(more = false) {
     }
   }, more)
 }
-async function block() {
+async function hug(active: boolean) {
   const target = post.value
-  if (!target || !canWhisperAction('PublicPost', target, 'interactionBlockCreate')) return
+  if (
+    !target ||
+    target.viewer_is_author ||
+    !target.my_hug ||
+    !canWhisperAction('PublicPost', target, 'whisperHugSet')
+  )
+    return
+  await page.write(
+    'whisperHugSet',
+    {
+      path: { post_id: target.id },
+      data: {
+        active,
+        expected_post_version: target.version,
+        expected_hug_version: target.my_hug.version,
+      },
+      key: whisperKey(),
+    },
+    (result) => {
+      if (result.post_id !== target.id || post.value?.id !== target.id)
+        throw new Error('抱抱回执目标不匹配，请刷新。')
+      // 总数和本人状态均采用权威回执，不用本地加减推算。
+      post.value = { ...post.value, hug_count: result.hug_count, my_hug: result.my_hug }
+      notice.value = result.my_hug.active ? '已送出抱抱。' : '已取消抱抱。'
+    },
+    () => load(),
+  )
+}
+async function block(comment?: PublicComment) {
+  if (comment && !comments.value.includes(comment)) return
+  const target = comment ?? post.value
+  const projection = comment ? 'PublicComment' : 'PublicPost'
+  if (!target || !canWhisperAction(projection, target, 'interactionBlockCreate')) return
   await page.write(
     'interactionBlockCreate',
     {
       data: {
-        source: { kind: 'whisper_post', id: target.id, content_version: target.content_version },
+        source: {
+          kind: comment ? 'whisper_comment' : 'whisper_post',
+          id: target.id,
+          content_version: target.content_version,
+        },
       },
       key: whisperKey(),
     },
@@ -114,6 +150,22 @@ onShow(() => {
         >暖评 {{ post.comment_count }} · 抱抱 {{ post.hug_count }}</text
       >
       <navigator
+        v-if="post.comments_open && canWhisperAction('PublicPost', post, 'whisperCommentCreate')"
+        :url="`/pages/whispers/comment-editor?postId=${encodeURIComponent(post.id)}`"
+        >写暖评</navigator
+      >
+      <button
+        v-if="
+          !post.viewer_is_author &&
+          post.my_hug &&
+          canWhisperAction('PublicPost', post, 'whisperHugSet')
+        "
+        :disabled="busy || writing || retryReady"
+        @click="runPageAction(() => hug(!post!.my_hug!.active))"
+      >
+        {{ post.my_hug.active ? '取消抱抱' : '抱抱' }}
+      </button>
+      <navigator
         v-if="post.viewer_is_author"
         :url="`/pages/whispers/editor?id=${encodeURIComponent(post.id)}`"
         >管理我的帖子</navigator
@@ -126,7 +178,7 @@ onShow(() => {
       <button
         v-if="canWhisperAction('PublicPost', post, 'interactionBlockCreate')"
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(block)"
+        @click="runPageAction(() => block())"
       >
         屏蔽此内容的发布者
       </button>
@@ -137,7 +189,13 @@ onShow(() => {
         v-if="canWhisperAction('PublicComment', comment, 'whisperReportCreate')"
         :url="`/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`"
         >举报此暖评</navigator
-      ></view
+      ><button
+        v-if="canWhisperAction('PublicComment', comment, 'interactionBlockCreate')"
+        :disabled="busy || writing || retryReady"
+        @click="runPageAction(() => block(comment))"
+      >
+        屏蔽此暖评的发布者
+      </button></view
     >
     <text v-if="post && !comments.length && !busy && !commentsError">当前页暂无公开暖评。</text>
     <button

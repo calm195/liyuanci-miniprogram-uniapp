@@ -119,6 +119,11 @@ onShow(() => {
         >建议：{{ comment.review_result.revision_suggestion }}</text
       >
       <navigator
+        v-if="comment.post_id && canWhisperAction('OwnerComment', comment, 'whisperCommentUpdate')"
+        :url="`/pages/whispers/comment-editor?id=${encodeURIComponent(comment.id)}`"
+        >读取当前上下文并修改暖评</navigator
+      >
+      <navigator
         v-if="comment.post_id"
         :url="`/pages/whispers/detail?id=${encodeURIComponent(comment.post_id)}`"
         >重新读取原帖</navigator
@@ -127,6 +132,9 @@ onShow(() => {
         ><text>已完成受控脱敏的安全候选：</text
         ><text class="whitespace-pre-wrap">{{ comment.recovery_body }}</text
         ><text>如需再次表达，请另选当前公开帖子重新填写并提交新评论，不会自动迁移。</text></view
+      >
+      <navigator v-if="comment.recovery_body" url="/pages/whispers/index"
+        >另选帖子，重新填写新暖评</navigator
       >
       <button
         v-if="canWhisperAction('OwnerComment', comment, 'whisperCommentWithdraw')"

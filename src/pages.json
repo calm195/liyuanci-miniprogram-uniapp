@@ -143,6 +143,12 @@
       "style": {
         "navigationBarTitleText": "举报树洞内容"
       }
+    },
+    {
+      "path": "pages/whispers/comment-editor",
+      "style": {
+        "navigationBarTitleText": "暖评"
+      }
     }
   ],
   "globalStyle": {
