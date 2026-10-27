@@ -16,7 +16,7 @@ export const useWhispersStore = defineStore('whispers', () => {
     config.value = null
     workspace.value = null
   }
-  async function refresh() {
+  async function refresh(includeWorkspace = true) {
     const current = ++generation
     const epoch = session.getEpoch()
     config.value = null
@@ -25,7 +25,7 @@ export const useWhispersStore = defineStore('whispers', () => {
     const result = await callWhisper('whisperConfigGet', {})
     if (!active()) return
     config.value = result
-    if (!session.getToken() || !result.enabled) return
+    if (!includeWorkspace || !session.getToken() || !result.enabled) return
     const own = await callWhisper('whisperWorkspaceGet', {})
     if (active()) workspace.value = own
   }
