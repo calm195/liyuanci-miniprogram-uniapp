@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import WhisperContent from '@/components/WhisperContent.vue'
+import { useWhisperFeed } from '@/composables/use-whisper-feed'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import type { VerificationState } from '@/types/api'
 const store = useUserStore()
+const {
+  items: latestWhispers,
+  ready: whispersReady,
+  busy: whispersBusy,
+  error: whispersError,
+  load: refreshWhispers,
+} = useWhisperFeed(3)
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 function login() {
   uni.navigateTo({ url: '/pages/login/index' })
@@ -68,6 +77,21 @@ async function logout() {
       <navigator url="/pages/settings/index">个人资料与隐私</navigator>
       <navigator url="/pages/safety/index">警告与申诉</navigator>
       <navigator url="/pages/care/index">关怀与援助</navigator>
+    </view>
+    <view class="card">
+      <text>最新文字树洞</text>
+      <button :disabled="whispersBusy" @click="runPageAction(() => refreshWhispers())">
+        刷新树洞
+      </button>
+      <navigator v-if="whispersReady" url="/pages/whispers/index">进入悄悄鲤广场</navigator>
+      <view v-for="item in latestWhispers" :key="item.id" class="mt-3"
+        ><WhisperContent :content="item" /><navigator
+          :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
+          >阅读全文</navigator
+        ></view
+      >
+      <text v-if="whispersReady && !latestWhispers.length && !whispersBusy">暂无公开树洞。</text>
+      <text v-if="whispersError" class="error">{{ whispersError }}</text>
     </view>
     <view v-if="config.useMock" class="card">
       <text>仅用于检查状态展示</text>
