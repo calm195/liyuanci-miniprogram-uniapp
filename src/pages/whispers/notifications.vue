@@ -167,6 +167,9 @@ onShow(() => {
       加载下一页
     </button>
     <view v-if="capsule" class="card">
+      <navigator :url="`/pages/capsules/detail?id=${encodeURIComponent(capsule.id)}`"
+        >读取胶囊详情与管理</navigator
+      >
       <text>本人胶囊当前状态：{{ capsuleStates[capsule.status] }}</text>
       <text>预约时间（UTC）：{{ capsule.unlock_at }}</text>
       <text>服务端时间（UTC）：{{ capsule.server_now }}</text>

@@ -155,6 +155,24 @@
       "style": {
         "navigationBarTitleText": "悄悄鲤通知"
       }
+    },
+    {
+      "path": "pages/capsules/index",
+      "style": {
+        "navigationBarTitleText": "我的时光胶囊"
+      }
+    },
+    {
+      "path": "pages/capsules/create",
+      "style": {
+        "navigationBarTitleText": "写给未来的自己"
+      }
+    },
+    {
+      "path": "pages/capsules/detail",
+      "style": {
+        "navigationBarTitleText": "本人胶囊详情"
+      }
     }
   ],
   "globalStyle": {

@@ -6,6 +6,7 @@ const { items, cursor, ready, busy, error, load } = useWhisperFeed()
 </script>
 <template>
   <AppPage>
+    <navigator url="/pages/capsules/index">我的时光胶囊</navigator>
     <navigator url="/pages/whispers/notifications">悄悄鲤通知</navigator>
     <text class="title">悄悄鲤 · 文字树洞</text>
     <text>在这里表达，也给彼此留一点温柔。</text>

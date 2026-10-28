@@ -83,6 +83,7 @@ onShow(() => {
 </script>
 <template>
   <AppPage>
+    <navigator url="/pages/capsules/index">我的时光胶囊</navigator>
     <text class="title">我的树洞记录</text>
     <navigator url="/pages/whispers/editor">写一篇树洞</navigator
     ><navigator url="/pages/whispers/nickname">树洞昵称</navigator>

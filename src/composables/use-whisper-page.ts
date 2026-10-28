@@ -17,6 +17,7 @@ export function whisperFailure(failure: unknown): string {
   if (failure.error_code === 'CLIENT_UPGRADE_REQUIRED') return '请更新客户端后再操作。'
   if (['DICTIONARY_CHANGED', 'NICKNAME_NOT_READY', 'MODE_UNAVAILABLE'].includes(failure.error_code))
     return '匿名资料已变化，请刷新并重新选择展示方式。'
+  if (failure.error_code === 'CAPSULE_LIMIT') return '当前20个活动胶囊额度已满，请先管理已有胶囊。'
   if (failure.statusCode === 409) return '内容版本或状态已变化，请刷新后核对。'
   if (failure.statusCode === 429) return '操作较频繁，请稍后重试。'
   if (failure.statusCode === 503) return '服务或所需资料尚不可用，请稍后刷新。'
@@ -81,6 +82,7 @@ export function useWhisperPage(clear: () => void) {
   ) {
     const active = ticket()
     let refresh = false
+    let refreshReason = ''
     writing.value = true
     error.value = ''
     notice.value = ''
@@ -100,7 +102,13 @@ export function useWhisperPage(clear: () => void) {
           reloadRetry = undefined
         }
         refresh = failure instanceof RequestError && [403, 404, 409].includes(failure.statusCode)
-        if (refresh) clear()
+        if (refresh) {
+          refreshReason =
+            failure instanceof RequestError && failure.error_code === 'CAPSULE_LIMIT'
+              ? whisperFailure(failure)
+              : ''
+          clear()
+        }
       }
     } finally {
       if (active()) {
@@ -110,7 +118,8 @@ export function useWhisperPage(clear: () => void) {
           const loading = reload()
           const refreshed = ticket()
           await loading
-          if (refreshed()) notice.value = '状态已变化，请核对最新读取结果后再操作。'
+          if (refreshed())
+            notice.value = refreshReason || '状态已变化，请核对最新读取结果后再操作。'
         }
       }
     }

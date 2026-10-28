@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { reactive } from 'vue'
 import { defineStore, createPinia, setActivePinia } from 'pinia'
 import { session } from '../../src/utils/session.ts'
+import * as capsules from '../../src/utils/capsules.ts'
 import * as content from '../../src/utils/whisper-content.ts'
 import { loadRuntime, pageScript, settle } from './page-runtime.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './whispers-runtime.ts'
@@ -30,6 +31,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
   const config = { useMock: false }
   const moduleConfig = {
     ...sample('ModuleConfig'),
+    server_now: String(sample('ModuleConfig').server_now),
     enabled: true,
     semi_available: true,
     grade_dictionary: { version: 4, items: [{ code: 'first', label: '合成年级' }] },
@@ -38,6 +40,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
   const workspace = {
     ...sample('Workspace'),
     verification: 'verified',
+    write_restricted: false,
     allowed_actions: ['whisperPostCreate', 'interactionBlockCreate'],
   }
   let owner = {
@@ -263,6 +266,9 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     },
   )
   const exports: Record<string, string> = {
+    'capsules/index': 'items,cursor,ready,load,page',
+    'capsules/create': 'body,date,time,second,accepted,receipt,canCreate,load,submit,page',
+    'capsules/detail': 'id,record,allowed,load,command,page',
     editor:
       'id,record,body,mode,tags,nickname,identityNotice,canSave,changed,load,save,submit,withdraw,commentsSetting,page',
     nickname: 'state,label,canSave,load,save,page',
@@ -275,13 +281,18 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     index: 'items,cursor,ready,busy,error,load',
   }
   const source =
-    pageScript(new URL(`../../src/pages/whispers/${name}.vue`, import.meta.url)) +
-    `\nexport { ${exports[name]} }`
+    pageScript(
+      new URL(
+        `../../src/pages/${name.startsWith('capsules/') ? name : 'whispers/' + name}.vue`,
+        import.meta.url,
+      ),
+    ) + `\nexport { ${exports[name]} }`
   const runtime = await loadRuntime(source, {
     ...platform,
     uni: { navigateTo: ({ url }: { url: string }) => routes.push(url) },
     ...api,
     ...content,
+    ...(name.startsWith('capsules/') ? capsules : {}),
 
     session,
     RequestError,
