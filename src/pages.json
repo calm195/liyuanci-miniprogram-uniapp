@@ -173,6 +173,18 @@
       "style": {
         "navigationBarTitleText": "本人胶囊详情"
       }
+    },
+    {
+      "path": "pages/resources/index",
+      "style": {
+        "navigationBarTitleText": "资料广场"
+      }
+    },
+    {
+      "path": "pages/resources/detail",
+      "style": {
+        "navigationBarTitleText": "资料详情"
+      }
     }
   ],
   "globalStyle": {

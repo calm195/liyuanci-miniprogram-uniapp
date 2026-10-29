@@ -1,0 +1,3446 @@
+{
+  "contract_id": "resource-plaza/1.0.0",
+  "synthetic_only": true,
+  "note": "所有token/链接/游标为隔离测试占位，不可用于服务认证；静态正反例不证明运行鉴权或并发。",
+  "exchanges": [
+    {
+      "operation_id": "resourceCategoriesList",
+      "path_params": {},
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer synthetic-session-not-valid"
+      },
+      "request_body": null,
+      "http_status": 200,
+      "body": {
+        "code": 0,
+        "message": "成功",
+        "data": {
+          "items": [
+            {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            }
+          ],
+          "next_cursor": null
+        },
+        "request_id": "synthetic-request"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "path_params": {},
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer synthetic-session-not-valid"
+      },
+      "request_body": null,
+      "http_status": 200,
+      "body": {
+        "code": 0,
+        "message": "成功",
+        "data": {
+          "items": [
+            {
+              "id": "ac230000-0000-4000-8000-000000000001",
+              "title": "合成高等数学期末资料",
+              "category": {
+                "id": "ac230000-0000-4000-8000-000000000002",
+                "name": "合成学习资料"
+              },
+              "description_excerpt": "仅用于契约测试，不是正式资料。",
+              "version": 3,
+              "created_at": "2026-10-29T04:00:00Z",
+              "updated_at": "2026-10-29T04:00:00Z",
+              "published_at": "2026-10-29T04:00:00Z"
+            }
+          ],
+          "next_cursor": null
+        },
+        "request_id": "synthetic-request"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "path_params": {
+        "id": "ac230000-0000-4000-8000-000000000001"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer synthetic-session-not-valid"
+      },
+      "request_body": null,
+      "http_status": 200,
+      "body": {
+        "code": 0,
+        "message": "成功",
+        "data": {
+          "id": "ac230000-0000-4000-8000-000000000001",
+          "title": "合成高等数学期末资料",
+          "category": {
+            "id": "ac230000-0000-4000-8000-000000000002",
+            "name": "合成学习资料"
+          },
+          "version": 3,
+          "created_at": "2026-10-29T04:00:00Z",
+          "updated_at": "2026-10-29T04:00:00Z",
+          "published_at": "2026-10-29T04:00:00Z",
+          "content_version": 2,
+          "description": "仅用于契约测试，不是正式资料。",
+          "download_url": "https://files.example.invalid/share?id=sample#part",
+          "extraction_code": "Ab12",
+          "my_feedback": {
+            "resource_id": "ac230000-0000-4000-8000-000000000001",
+            "content_version": 2,
+            "kind": "valid",
+            "version": 1,
+            "updated_at": "2026-10-29T04:00:00Z"
+          },
+          "allowed_actions": ["copy_download", "submit_feedback"]
+        },
+        "request_id": "synthetic-request"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "path_params": {
+        "id": "ac230000-0000-4000-8000-000000000001"
+      },
+      "query": {
+        "expected_version": "3"
+      },
+      "headers": {
+        "Authorization": "Bearer synthetic-session-not-valid"
+      },
+      "request_body": null,
+      "http_status": 200,
+      "body": {
+        "code": 0,
+        "message": "成功",
+        "data": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "version": 3,
+          "download_url": "https://files.example.invalid/share?id=sample#part",
+          "extraction_code": "Ab12",
+          "copy_text": "https://files.example.invalid/share?id=sample#part\n提取码：Ab12"
+        },
+        "request_id": "synthetic-request"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "path_params": {
+        "id": "ac230000-0000-4000-8000-000000000001"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer synthetic-session-not-valid",
+        "Idempotency-Key": "synthetic-command-resourceFeedbackPut",
+        "Content-Type": "application/json"
+      },
+      "request_body": {
+        "kind": "valid",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "http_status": 200,
+      "body": {
+        "code": 0,
+        "message": "成功",
+        "data": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "request_id": "synthetic-request"
+      }
+    }
+  ],
+  "exchange_fixtures": [
+    {
+      "name": "resourceDetail-wrong-response-target",
+      "exchange": {
+        "operation_id": "resourceDetail",
+        "path_params": {
+          "id": "ac230000-0000-4000-8000-000000000003"
+        },
+        "query": {},
+        "headers": {
+          "Authorization": "Bearer synthetic-session-not-valid"
+        },
+        "request_body": null,
+        "http_status": 200,
+        "body": {
+          "code": 0,
+          "message": "成功",
+          "data": {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z",
+            "content_version": 2,
+            "description": "仅用于契约测试，不是正式资料。",
+            "download_url": "https://files.example.invalid/share?id=sample#part",
+            "extraction_code": "Ab12",
+            "my_feedback": {
+              "resource_id": "ac230000-0000-4000-8000-000000000001",
+              "content_version": 2,
+              "kind": "valid",
+              "version": 1,
+              "updated_at": "2026-10-29T04:00:00Z"
+            },
+            "allowed_actions": ["copy_download", "submit_feedback"]
+          },
+          "request_id": "synthetic-request"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "resourceDownloadInfo-wrong-response-target",
+      "exchange": {
+        "operation_id": "resourceDownloadInfo",
+        "path_params": {
+          "id": "ac230000-0000-4000-8000-000000000003"
+        },
+        "query": {
+          "expected_version": "3"
+        },
+        "headers": {
+          "Authorization": "Bearer synthetic-session-not-valid"
+        },
+        "request_body": null,
+        "http_status": 200,
+        "body": {
+          "code": 0,
+          "message": "成功",
+          "data": {
+            "resource_id": "ac230000-0000-4000-8000-000000000001",
+            "version": 3,
+            "download_url": "https://files.example.invalid/share?id=sample#part",
+            "extraction_code": "Ab12",
+            "copy_text": "https://files.example.invalid/share?id=sample#part\n提取码：Ab12"
+          },
+          "request_id": "synthetic-request"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "resourceFeedbackPut-wrong-response-target",
+      "exchange": {
+        "operation_id": "resourceFeedbackPut",
+        "path_params": {
+          "id": "ac230000-0000-4000-8000-000000000003"
+        },
+        "query": {},
+        "headers": {
+          "Authorization": "Bearer synthetic-session-not-valid",
+          "Idempotency-Key": "synthetic-command-resourceFeedbackPut",
+          "Content-Type": "application/json"
+        },
+        "request_body": {
+          "kind": "valid",
+          "expected_content_version": 2,
+          "expected_feedback_version": 0
+        },
+        "http_status": 200,
+        "body": {
+          "code": 0,
+          "message": "成功",
+          "data": {
+            "resource_id": "ac230000-0000-4000-8000-000000000001",
+            "content_version": 2,
+            "kind": "valid",
+            "version": 1,
+            "updated_at": "2026-10-29T04:00:00Z"
+          },
+          "request_id": "synthetic-request"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "download-wrong-response-version",
+      "exchange": {
+        "operation_id": "resourceDownloadInfo",
+        "path_params": {
+          "id": "ac230000-0000-4000-8000-000000000001"
+        },
+        "query": {
+          "expected_version": "2"
+        },
+        "headers": {
+          "Authorization": "Bearer synthetic-session-not-valid"
+        },
+        "request_body": null,
+        "http_status": 200,
+        "body": {
+          "code": 0,
+          "message": "成功",
+          "data": {
+            "resource_id": "ac230000-0000-4000-8000-000000000001",
+            "version": 3,
+            "download_url": "https://files.example.invalid/share?id=sample#part",
+            "extraction_code": "Ab12",
+            "copy_text": "https://files.example.invalid/share?id=sample#part\n提取码：Ab12"
+          },
+          "request_id": "synthetic-request"
+        }
+      },
+      "valid": false
+    },
+    {
+      "name": "feedback-wrong-response-content-version",
+      "exchange": {
+        "operation_id": "resourceFeedbackPut",
+        "path_params": {
+          "id": "ac230000-0000-4000-8000-000000000001"
+        },
+        "query": {},
+        "headers": {
+          "Authorization": "Bearer synthetic-session-not-valid",
+          "Idempotency-Key": "synthetic-command-resourceFeedbackPut",
+          "Content-Type": "application/json"
+        },
+        "request_body": {
+          "kind": "valid",
+          "expected_content_version": 1,
+          "expected_feedback_version": 0
+        },
+        "http_status": 200,
+        "body": {
+          "code": 0,
+          "message": "成功",
+          "data": {
+            "resource_id": "ac230000-0000-4000-8000-000000000001",
+            "content_version": 2,
+            "kind": "valid",
+            "version": 1,
+            "updated_at": "2026-10-29T04:00:00Z"
+          },
+          "request_id": "synthetic-request"
+        }
+      },
+      "valid": false
+    }
+  ],
+  "error_examples": [
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 400,
+      "body": {
+        "code": 400,
+        "message": "请求未完成",
+        "error_code": "VALIDATION_FAILED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 401,
+      "body": {
+        "code": 401,
+        "message": "请求未完成",
+        "error_code": "UNAUTHENTICATED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "FORBIDDEN",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "VERIFICATION_REQUIRED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 429,
+      "body": {
+        "code": 429,
+        "message": "请求未完成",
+        "error_code": "RATE_LIMITED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 500,
+      "body": {
+        "code": 500,
+        "message": "请求未完成",
+        "error_code": "INTERNAL_ERROR",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceCategoriesList",
+      "http_status": 503,
+      "body": {
+        "code": 503,
+        "message": "请求未完成",
+        "error_code": "DEPENDENCY_UNAVAILABLE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 400,
+      "body": {
+        "code": 400,
+        "message": "请求未完成",
+        "error_code": "VALIDATION_FAILED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 401,
+      "body": {
+        "code": 401,
+        "message": "请求未完成",
+        "error_code": "UNAUTHENTICATED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "FORBIDDEN",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "VERIFICATION_REQUIRED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 429,
+      "body": {
+        "code": 429,
+        "message": "请求未完成",
+        "error_code": "RATE_LIMITED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 500,
+      "body": {
+        "code": 500,
+        "message": "请求未完成",
+        "error_code": "INTERNAL_ERROR",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourcesList",
+      "http_status": 503,
+      "body": {
+        "code": 503,
+        "message": "请求未完成",
+        "error_code": "DEPENDENCY_UNAVAILABLE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 400,
+      "body": {
+        "code": 400,
+        "message": "请求未完成",
+        "error_code": "VALIDATION_FAILED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 401,
+      "body": {
+        "code": 401,
+        "message": "请求未完成",
+        "error_code": "UNAUTHENTICATED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "FORBIDDEN",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "VERIFICATION_REQUIRED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 429,
+      "body": {
+        "code": 429,
+        "message": "请求未完成",
+        "error_code": "RATE_LIMITED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 500,
+      "body": {
+        "code": 500,
+        "message": "请求未完成",
+        "error_code": "INTERNAL_ERROR",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 503,
+      "body": {
+        "code": 503,
+        "message": "请求未完成",
+        "error_code": "DEPENDENCY_UNAVAILABLE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDetail",
+      "http_status": 404,
+      "body": {
+        "code": 404,
+        "message": "请求未完成",
+        "error_code": "NOT_FOUND",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 400,
+      "body": {
+        "code": 400,
+        "message": "请求未完成",
+        "error_code": "VALIDATION_FAILED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 401,
+      "body": {
+        "code": 401,
+        "message": "请求未完成",
+        "error_code": "UNAUTHENTICATED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "FORBIDDEN",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "VERIFICATION_REQUIRED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 429,
+      "body": {
+        "code": 429,
+        "message": "请求未完成",
+        "error_code": "RATE_LIMITED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 500,
+      "body": {
+        "code": 500,
+        "message": "请求未完成",
+        "error_code": "INTERNAL_ERROR",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 503,
+      "body": {
+        "code": 503,
+        "message": "请求未完成",
+        "error_code": "DEPENDENCY_UNAVAILABLE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 404,
+      "body": {
+        "code": 404,
+        "message": "请求未完成",
+        "error_code": "NOT_FOUND",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceDownloadInfo",
+      "http_status": 409,
+      "body": {
+        "code": 409,
+        "message": "请求未完成",
+        "error_code": "VERSION_CONFLICT",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 400,
+      "body": {
+        "code": 400,
+        "message": "请求未完成",
+        "error_code": "VALIDATION_FAILED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 401,
+      "body": {
+        "code": 401,
+        "message": "请求未完成",
+        "error_code": "UNAUTHENTICATED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "FORBIDDEN",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 403,
+      "body": {
+        "code": 403,
+        "message": "请求未完成",
+        "error_code": "VERIFICATION_REQUIRED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 429,
+      "body": {
+        "code": 429,
+        "message": "请求未完成",
+        "error_code": "RATE_LIMITED",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 500,
+      "body": {
+        "code": 500,
+        "message": "请求未完成",
+        "error_code": "INTERNAL_ERROR",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 503,
+      "body": {
+        "code": 503,
+        "message": "请求未完成",
+        "error_code": "DEPENDENCY_UNAVAILABLE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 404,
+      "body": {
+        "code": 404,
+        "message": "请求未完成",
+        "error_code": "NOT_FOUND",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 409,
+      "body": {
+        "code": 409,
+        "message": "请求未完成",
+        "error_code": "IDEMPOTENCY_CONFLICT",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 409,
+      "body": {
+        "code": 409,
+        "message": "请求未完成",
+        "error_code": "VERSION_CONFLICT",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 413,
+      "body": {
+        "code": 413,
+        "message": "请求未完成",
+        "error_code": "PAYLOAD_TOO_LARGE",
+        "request_id": "synthetic-error"
+      }
+    },
+    {
+      "operation_id": "resourceFeedbackPut",
+      "http_status": 415,
+      "body": {
+        "code": 415,
+        "message": "请求未完成",
+        "error_code": "UNSUPPORTED_MEDIA_TYPE",
+        "request_id": "synthetic-error"
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "PutFeedback-valid",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "valid",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "valid": true
+    },
+    {
+      "name": "PutFeedback-unknown-field",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "valid",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0,
+        "admin_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "PutFeedback-missing-kind",
+      "schema": "PutFeedback",
+      "value": {
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "valid": false
+    },
+    {
+      "name": "PutFeedback-missing-expected_content_version",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "valid",
+        "expected_feedback_version": 0
+      },
+      "valid": false
+    },
+    {
+      "name": "PutFeedback-missing-expected_feedback_version",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "valid",
+        "expected_content_version": 2
+      },
+      "valid": false
+    },
+    {
+      "name": "PublicCategoryPage-valid",
+      "schema": "PublicCategoryPage",
+      "value": {
+        "items": [
+          {
+            "id": "ac230000-0000-4000-8000-000000000002",
+            "name": "合成学习资料"
+          }
+        ],
+        "next_cursor": null
+      },
+      "valid": true
+    },
+    {
+      "name": "PublicCategoryPage-identity-leak",
+      "schema": "PublicCategoryPage",
+      "value": {
+        "items": [
+          {
+            "id": "ac230000-0000-4000-8000-000000000002",
+            "name": "合成学习资料"
+          }
+        ],
+        "next_cursor": null,
+        "account_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "ResourcePage-valid",
+      "schema": "ResourcePage",
+      "value": {
+        "items": [
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          }
+        ],
+        "next_cursor": null
+      },
+      "valid": true
+    },
+    {
+      "name": "ResourcePage-identity-leak",
+      "schema": "ResourcePage",
+      "value": {
+        "items": [
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          }
+        ],
+        "next_cursor": null,
+        "account_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "ResourceDetail-valid",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": true
+    },
+    {
+      "name": "ResourceDetail-identity-leak",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"],
+        "account_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "DownloadInfo-valid",
+      "schema": "DownloadInfo",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "version": 3,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "copy_text": "https://files.example.invalid/share?id=sample#part\n提取码：Ab12"
+      },
+      "valid": true
+    },
+    {
+      "name": "DownloadInfo-identity-leak",
+      "schema": "DownloadInfo",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "version": 3,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "copy_text": "https://files.example.invalid/share?id=sample#part\n提取码：Ab12",
+        "account_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "Feedback-valid",
+      "schema": "Feedback",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "content_version": 2,
+        "kind": "valid",
+        "version": 1,
+        "updated_at": "2026-10-29T04:00:00Z"
+      },
+      "valid": true
+    },
+    {
+      "name": "Feedback-identity-leak",
+      "schema": "Feedback",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "content_version": 2,
+        "kind": "valid",
+        "version": 1,
+        "updated_at": "2026-10-29T04:00:00Z",
+        "account_id": "ac230000-0000-4000-8000-000000000003"
+      },
+      "valid": false
+    },
+    {
+      "name": "muted-read-actions",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download"]
+      },
+      "valid": true
+    },
+    {
+      "name": "no-feedback",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": null,
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": true
+    },
+    {
+      "name": "no-code",
+      "schema": "DownloadInfo",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "version": 3,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": null,
+        "copy_text": "https://files.example.invalid/share?id=sample#part"
+      },
+      "valid": true
+    },
+    {
+      "name": "feedback-first-zero",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "valid",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "valid": true
+    },
+    {
+      "name": "feedback-empty-kind",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "valid": false
+    },
+    {
+      "name": "feedback-invalid-kind",
+      "schema": "PutFeedback",
+      "value": {
+        "kind": "report",
+        "expected_content_version": 2,
+        "expected_feedback_version": 0
+      },
+      "valid": false
+    },
+    {
+      "name": "feedback-wrong-target",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000003",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": false
+    },
+    {
+      "name": "feedback-old-content",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 1,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": false
+    },
+    {
+      "name": "student-report-action",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "report"]
+      },
+      "valid": false
+    },
+    {
+      "name": "wrong-copy-code",
+      "schema": "DownloadInfo",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "version": 3,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "copy_text": "https://files.example.invalid/share?id=sample#part"
+      },
+      "valid": false
+    },
+    {
+      "name": "null-copy-text",
+      "schema": "DownloadInfo",
+      "value": {
+        "resource_id": "ac230000-0000-4000-8000-000000000001",
+        "version": 3,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "copy_text": null
+      },
+      "valid": false
+    },
+    {
+      "name": "summary-url-leak",
+      "schema": "ResourceSummary",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "description_excerpt": "仅用于契约测试，不是正式资料。",
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "download_url": "https://files.example.invalid/share?id=sample#part"
+      },
+      "valid": false
+    },
+    {
+      "name": "response-not-normalized",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": " 资料 ",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": false
+    },
+    {
+      "name": "response-null-description",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "2026-10-29T04:00:00Z",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": null,
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": false
+    },
+    {
+      "name": "too-many-items",
+      "schema": "ResourcePage",
+      "value": {
+        "items": [
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          },
+          {
+            "id": "ac230000-0000-4000-8000-000000000001",
+            "title": "合成高等数学期末资料",
+            "category": {
+              "id": "ac230000-0000-4000-8000-000000000002",
+              "name": "合成学习资料"
+            },
+            "description_excerpt": "仅用于契约测试，不是正式资料。",
+            "version": 3,
+            "created_at": "2026-10-29T04:00:00Z",
+            "updated_at": "2026-10-29T04:00:00Z",
+            "published_at": "2026-10-29T04:00:00Z"
+          }
+        ],
+        "next_cursor": null
+      },
+      "valid": false
+    },
+    {
+      "name": "bad-date",
+      "schema": "ResourceDetail",
+      "value": {
+        "id": "ac230000-0000-4000-8000-000000000001",
+        "title": "合成高等数学期末资料",
+        "category": {
+          "id": "ac230000-0000-4000-8000-000000000002",
+          "name": "合成学习资料"
+        },
+        "version": 3,
+        "created_at": "2026-10-29T04:00:00Z",
+        "updated_at": "yesterday",
+        "published_at": "2026-10-29T04:00:00Z",
+        "content_version": 2,
+        "description": "仅用于契约测试，不是正式资料。",
+        "download_url": "https://files.example.invalid/share?id=sample#part",
+        "extraction_code": "Ab12",
+        "my_feedback": {
+          "resource_id": "ac230000-0000-4000-8000-000000000001",
+          "content_version": 2,
+          "kind": "valid",
+          "version": 1,
+          "updated_at": "2026-10-29T04:00:00Z"
+        },
+        "allowed_actions": ["copy_download", "submit_feedback"]
+      },
+      "valid": false
+    }
+  ],
+  "text_vectors": [
+    {
+      "name": "title-limit",
+      "kind": "title",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "title-over",
+      "kind": "title",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "description-limit",
+      "kind": "description",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "description-over",
+      "kind": "description",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "extraction_code-limit",
+      "kind": "extraction_code",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "extraction_code-over",
+      "kind": "extraction_code",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "name-limit",
+      "kind": "name",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "name-over",
+      "kind": "name",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "q-limit",
+      "kind": "q",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "q-over",
+      "kind": "q",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "reason-limit",
+      "kind": "reason",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "valid": true
+    },
+    {
+      "name": "reason-over",
+      "kind": "reason",
+      "value": "鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤鲤",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-2048-bytes",
+      "kind": "download_url",
+      "value": "https://files.example.invalid/学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学aa",
+      "normalized": "https://files.example.invalid/学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学aa",
+      "valid": true
+    },
+    {
+      "name": "url-2049-bytes",
+      "kind": "download_url",
+      "value": "https://files.example.invalid/学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学学aaa",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-query-preserved",
+      "kind": "download_url",
+      "value": " https://files.example.invalid/share?id=sample#part ",
+      "normalized": "https://files.example.invalid/share?id=sample#part",
+      "valid": true
+    },
+    {
+      "name": "url-userinfo",
+      "kind": "download_url",
+      "value": "https://user:pass@example.invalid/a",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-scheme",
+      "kind": "download_url",
+      "value": "file:///tmp/a",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-space",
+      "kind": "download_url",
+      "value": "https://example.invalid/a b",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-host",
+      "kind": "download_url",
+      "value": "https:///a",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-port",
+      "kind": "download_url",
+      "value": "https://example.invalid:99999/a",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-percent",
+      "kind": "download_url",
+      "value": "https://example.invalid/%x",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "url-backslash",
+      "kind": "download_url",
+      "value": "https://example.invalid\\a",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "description-crlf",
+      "kind": "description",
+      "value": "  第一行\r\n第二行\r ",
+      "normalized": "第一行\n第二行",
+      "valid": true
+    },
+    {
+      "name": "description-null",
+      "kind": "description",
+      "value": null,
+      "normalized": "",
+      "valid": true
+    },
+    {
+      "name": "code-empty",
+      "kind": "extraction_code",
+      "value": " \t\n",
+      "normalized": null,
+      "valid": true
+    },
+    {
+      "name": "code-case",
+      "kind": "extraction_code",
+      "value": " Ab12 ",
+      "normalized": "Ab12",
+      "valid": true
+    },
+    {
+      "name": "emoji-codepoint",
+      "kind": "title",
+      "value": "🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟",
+      "normalized": "🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟🐟",
+      "valid": true
+    },
+    {
+      "name": "title-html-literal",
+      "kind": "title",
+      "value": "<b>资料</b>",
+      "normalized": "<b>资料</b>",
+      "valid": true
+    },
+    {
+      "name": "query-blank",
+      "kind": "q",
+      "value": "\t\n\u000b\f\r                  　",
+      "normalized": "",
+      "valid": true
+    },
+    {
+      "name": "title-internal-newline",
+      "kind": "title",
+      "value": "资\n料",
+      "normalized": null,
+      "valid": false
+    },
+    {
+      "name": "title-control",
+      "kind": "title",
+      "value": "资\u0000料",
+      "normalized": null,
+      "valid": false
+    }
+  ],
+  "schemas": {
+    "PublicCategory": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "name",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 30
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "AdminCategory": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "name",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 30
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": ["id", "name", "sort_order", "enabled", "version", "created_at", "updated_at"],
+      "additionalProperties": false
+    },
+    "ResourceSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 100
+        },
+        "category": {
+          "$ref": "#/components/schemas/PublicCategory"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "description_excerpt": {
+          "type": "string",
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "version",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "description_excerpt"
+      ],
+      "additionalProperties": false
+    },
+    "Feedback": {
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["valid", "link_invalid", "outdated", "incomplete"]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": ["resource_id", "content_version", "kind", "version", "updated_at"],
+      "additionalProperties": false
+    },
+    "FeedbackSummary": {
+      "type": "object",
+      "properties": {
+        "content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "valid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "link_invalid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "outdated": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "incomplete": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["content_version", "valid", "link_invalid", "outdated", "incomplete", "total"],
+      "additionalProperties": false,
+      "x-invariant": "feedback_summary"
+    },
+    "ResourceDetail": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 100
+        },
+        "category": {
+          "$ref": "#/components/schemas/PublicCategory"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "description": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "description",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 2000
+        },
+        "download_url": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "download_url",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "extraction_code": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "extraction_code",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 64
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "my_feedback": {
+          "oneOf": [
+            {
+              "$ref": "#/components/schemas/Feedback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowed_actions": {
+          "oneOf": [
+            {
+              "const": ["copy_download"]
+            },
+            {
+              "const": ["copy_download", "submit_feedback"]
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "version",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "description",
+        "download_url",
+        "extraction_code",
+        "content_version",
+        "my_feedback",
+        "allowed_actions"
+      ],
+      "additionalProperties": false,
+      "x-invariant": "student_detail"
+    },
+    "AdminResourceSummary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 100
+        },
+        "category": {
+          "$ref": "#/components/schemas/PublicCategory"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "published_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "description_excerpt": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "published", "offline"]
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "visibility_blocked": {
+          "type": "boolean"
+        },
+        "feedback_summary": {
+          "$ref": "#/components/schemas/FeedbackSummary"
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["update", "publish", "offline"]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "version",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "description_excerpt",
+        "status",
+        "content_version",
+        "visibility_blocked",
+        "feedback_summary",
+        "allowed_actions"
+      ],
+      "additionalProperties": false,
+      "x-invariant": "admin_summary"
+    },
+    "AdminResourceDetail": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 100
+        },
+        "category": {
+          "$ref": "#/components/schemas/PublicCategory"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "published_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "description": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "description",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 2000
+        },
+        "download_url": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "download_url",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "extraction_code": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "extraction_code",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 64
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "published", "offline"]
+        },
+        "visibility_blocked": {
+          "type": "boolean"
+        },
+        "feedback_summary": {
+          "$ref": "#/components/schemas/FeedbackSummary"
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["update", "publish", "offline"]
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "category",
+        "version",
+        "created_at",
+        "updated_at",
+        "published_at",
+        "description",
+        "download_url",
+        "extraction_code",
+        "content_version",
+        "status",
+        "visibility_blocked",
+        "feedback_summary",
+        "allowed_actions"
+      ],
+      "additionalProperties": false,
+      "x-invariant": "admin_detail"
+    },
+    "DownloadInfo": {
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "download_url": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "download_url",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "extraction_code": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "extraction_code",
+            "canonical": true
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。",
+          "maxLength": 64
+        },
+        "copy_text": {
+          "type": "string",
+          "maxLength": 2120
+        }
+      },
+      "required": ["resource_id", "version", "download_url", "extraction_code", "copy_text"],
+      "additionalProperties": false,
+      "x-invariant": "download"
+    },
+    "CreateResource": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "category_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "description": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "description",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "download_url": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "download_url",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "extraction_code": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "extraction_code",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        }
+      },
+      "required": ["title", "category_id", "download_url"],
+      "additionalProperties": false
+    },
+    "UpdateResource": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "title",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "category_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "description": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "description",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "download_url": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "download_url",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "extraction_code": {
+          "type": ["string", "null"],
+          "x-contract-text": {
+            "kind": "extraction_code",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "title",
+        "category_id",
+        "description",
+        "download_url",
+        "extraction_code",
+        "expected_version"
+      ],
+      "additionalProperties": false
+    },
+    "PublishResource": {
+      "type": "object",
+      "properties": {
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["expected_version"],
+      "additionalProperties": false
+    },
+    "OfflineResource": {
+      "type": "object",
+      "properties": {
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "reason",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        }
+      },
+      "required": ["expected_version", "reason"],
+      "additionalProperties": false
+    },
+    "CreateCategory": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "name",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "UpdateCategory": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "x-contract-text": {
+            "kind": "name",
+            "canonical": false
+          },
+          "description": "必须按semantics.md及rules.py规范化/校验；x-contract-text为本包强制约束，通用schema工具不能替代。"
+        },
+        "sort_order": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "expected_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["name", "sort_order", "enabled", "expected_version"],
+      "additionalProperties": false
+    },
+    "PutFeedback": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["valid", "link_invalid", "outdated", "incomplete"]
+        },
+        "expected_content_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expected_feedback_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": ["kind", "expected_content_version", "expected_feedback_version"],
+      "additionalProperties": false
+    },
+    "PublicCategoryPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/PublicCategory"
+          },
+          "maxItems": 100
+        },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items", "next_cursor"],
+      "additionalProperties": false
+    },
+    "AdminCategoryPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/AdminCategory"
+          },
+          "maxItems": 100
+        },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items", "next_cursor"],
+      "additionalProperties": false
+    },
+    "ResourcePage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ResourceSummary"
+          },
+          "maxItems": 50
+        },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items", "next_cursor"],
+      "additionalProperties": false
+    },
+    "AdminResourcePage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/AdminResourceSummary"
+          },
+          "maxItems": 50
+        },
+        "next_cursor": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": ["items", "next_cursor"],
+      "additionalProperties": false
+    },
+    "Error400": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 400
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["VALIDATION_FAILED"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error401": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 401
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["UNAUTHENTICATED"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error403": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 403
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["FORBIDDEN", "VERIFICATION_REQUIRED"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error404": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 404
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["NOT_FOUND"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error409": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 409
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": [
+            "VERSION_CONFLICT",
+            "STATE_CONFLICT",
+            "IDEMPOTENCY_CONFLICT",
+            "CATEGORY_IN_USE",
+            "CATEGORY_NAME_CONFLICT"
+          ]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error413": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 413
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["PAYLOAD_TOO_LARGE"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error415": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 415
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["UNSUPPORTED_MEDIA_TYPE"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error429": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 429
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["RATE_LIMITED"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error500": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 500
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["INTERNAL_ERROR"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "Error503": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 503
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error_code": {
+          "type": "string",
+          "enum": ["DEPENDENCY_UNAVAILABLE"]
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "error_code", "request_id"],
+      "additionalProperties": false
+    },
+    "PublicCategoryPageEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/PublicCategoryPage"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "AdminCategoryPageEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/AdminCategoryPage"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "ResourcePageEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/ResourcePage"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "AdminResourcePageEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/AdminResourcePage"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "ResourceDetailEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/ResourceDetail"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "AdminResourceDetailEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/AdminResourceDetail"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "AdminCategoryEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/AdminCategory"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "DownloadInfoEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/DownloadInfo"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    },
+    "FeedbackEnvelope": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "const": 0
+        },
+        "message": {
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/components/schemas/Feedback"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["code", "message", "data", "request_id"],
+      "additionalProperties": false
+    }
+  }
+}

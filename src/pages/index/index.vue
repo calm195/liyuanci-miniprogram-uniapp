@@ -70,6 +70,7 @@ async function logout() {
       <text
         >学生认证通过后，可按当前权限创建、编辑和提交心愿审核；可申请应愿并确定匹配；可通过会话入口聊天并查看通知。</text
       >
+      <navigator url="/pages/resources/index">资料广场 · 学生认证后查看</navigator>
       <navigator url="/pages/wishes/index">心愿广场 / 我的心愿</navigator>
       <navigator url="/pages/applications/index">我的应愿</navigator>
       <navigator url="/pages/inbox/index">聊天与通知</navigator>
