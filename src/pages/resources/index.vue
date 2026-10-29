@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import ResourceContribution from '@/components/ResourceContribution.vue'
 import { listResourceCategories, listResources } from '@/api/resources'
 import { useResourcePage, resourceFailure } from '@/composables/use-resource-page'
@@ -112,9 +113,13 @@ onShow(() => {
 })
 </script>
 <template>
-  <AppPage>
-    <text class="title">资料广场</text>
-    <view v-if="gate" class="card">
+  <AppPage tab="resources" title="资料广场">
+    <view class="module-hero"
+      ><text class="module-title">好资料，一起分享</text
+      ><text class="module-subtitle">少一点独自摸索，多一份同行的力量。</text></view
+    >
+    <view v-if="gate" class="empty-state"
+      ><AppIcon name="book" :size="64" />
       <text>{{ gate }}</text>
       <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
       <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
@@ -124,10 +129,16 @@ onShow(() => {
       <button :disabled="busy" @click="runPageAction(() => load())">刷新重试</button>
       <navigator url="/pages/safety/index">警告与申诉</navigator>
     </view>
-    <text v-if="busy">正在加载资料…</text>
+    <text v-if="busy" class="page-footnote">正在加载资料…</text
+    ><text v-if="notice" class="notice">{{ notice }}</text>
     <template v-if="visible">
       <view class="card">
-        <button @click="runPageAction(() => openContribution())">资料投稿</button>
+        <view class="section-heading"
+          ><text class="section-title">发现资料</text
+          ><button class="small-link" @click="runPageAction(() => openContribution())">
+            资料投稿 ＋
+          </button></view
+        >
         <picker :range="categoryNames" :value="selectedIndex" @change="changeCategory"
           ><view>分类：{{ categoryNames[selectedIndex] }}</view></picker
         >
@@ -138,19 +149,30 @@ onShow(() => {
           confirm-type="search"
           @confirm="runPageAction(() => search())"
         />
-        <button @click="runPageAction(() => search())">搜索</button>
-        <button @click="runPageAction(() => resetSearch())">清空筛选</button>
+        <view class="flex gap-3"
+          ><button class="primary-button flex-1" @click="runPageAction(() => search())">
+            搜索资料</button
+          ><button class="flex-1" @click="runPageAction(() => resetSearch())">
+            清空筛选
+          </button></view
+        >
       </view>
-      <text v-if="!busy && !error && !items.length">暂无符合条件的资料</text>
+      <view v-if="!busy && !error && !items.length" class="empty-state"
+        ><AppIcon name="search" :size="52" /><text>暂无符合条件的资料</text
+        ><text>换个关键词，或看看其他分类。</text></view
+      >
       <navigator
         v-for="item in items"
         :key="item.id"
         :url="'/pages/resources/detail?id=' + item.id"
-        class="card"
+        class="resource-card"
       >
-        <text>{{ item.title }}</text
-        ><text>{{ item.category.name }}</text>
-        <text class="resource-text">{{ item.description_excerpt || '暂无简介' }}</text>
+        <text class="category-pill mint">{{ item.category.name }}</text>
+        <text class="resource-title">{{ item.title }}</text>
+        <text class="resource-text">{{ item.description_excerpt || '暂无简介' }}</text
+        ><view class="card-footer"
+          ><text class="ui-text">查看介绍与下载信息</text><AppIcon name="arrow" :size="30"
+        /></view>
       </navigator>
       <button v-if="cursor" :disabled="busy" @click="runPageAction(() => search(true))">
         加载更多

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
+import WishPreview from '@/components/WishPreview.vue'
 import { computed, ref, watch } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
@@ -19,7 +20,7 @@ import {
 } from '@/api/wishes'
 import { categories, campuses, rewards, genders } from '@/types/wish'
 import type { WishInput, WishResult, WishState } from '@/types/wish'
-import { emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody } from '@/utils/wish'
+import { emptyWish, validateWish, wishStateLabels, publicWishBody } from '@/utils/wish'
 const user = useUserStore()
 const store = useWishStore()
 const own = ref(false)
@@ -52,6 +53,8 @@ function allowed(wish: WishResult, action: WishAction) {
 const form = ref(emptyWish())
 let generation = 0
 let visible = false
+let composeRequested = false
+let entryGeneration = 0
 const rows = computed(() => {
   if (
     !config.useMock &&
@@ -267,38 +270,72 @@ function clearProjection() {
   editing.value = false
 }
 function leave() {
+  entryGeneration++
   visible = false
   clearProjection()
 }
 watch(() => user.user?.id, clearProjection, { flush: 'sync' })
-onShow(() => {
+onLoad((query) => {
+  // 导航参数仅选择视图，发布资格仍由最新账号动作判定。
+  own.value = query?.own === '1'
+  const selected = categories.find((item) => item.value === query?.category)
+  category.value = selected?.value || ''
+  const selectedState = query?.state
+  state.value =
+    own.value &&
+    typeof selectedState === 'string' &&
+    Object.prototype.hasOwnProperty.call(wishStateLabels, selectedState)
+      ? (selectedState as WishState)
+      : ''
+  composeRequested = query?.compose === '1'
+})
+onShow(async () => {
   visible = true
-  if (!config.useMock) void user.refresh().catch(() => {})
-  void load()
+  const entry = ++entryGeneration
+  const compose = composeRequested
+  composeRequested = false
+  if (!config.useMock) await user.refresh().catch(() => {})
+  if (!visible || entry !== entryGeneration) return
+  await load()
+  if (!visible || entry !== entryGeneration || !compose) return
+  if (config.useMock || (config.wishWritesReady && canCreate.value)) edit()
+  else error.value = '登录并通过学生认证后，才可以许愿。若已认证，请刷新资格后重试。'
 })
 onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <AppPage>
-    <text class="title">文字心愿</text>
-    <text v-if="config.useMock" class="notice"
-      >合成演示 · 仅填写虚构内容，不发送 API，不代表真实审核或上架</text
-    >
-    <view class="flex flex-wrap gap-3"
-      ><button @click="runPageAction(() => tab(false))">心愿广场</button
-      ><button @click="runPageAction(() => tab(true))">我的心愿</button></view
-    >
-    <button v-if="config.useMock" @click="runPageAction(() => edit())">写一条合成心愿</button>
-    <view v-else>
-      <text>发布心愿须通过学生认证，具体操作以当前账号和心愿状态为准。</text>
+  <AppPage tab="pond" title="心愿池">
+    <view class="module-hero">
+      <image src="/static/illustrations/pavilion.png" class="module-art" mode="aspectFit" />
+      <text class="module-title">捞一捞，心愿有回响</text>
+      <text class="module-subtitle">投一枚心愿，也做一次别人的锦鲤。</text>
+    </view>
+    <text v-if="config.useMock" class="notice">合成演示 · 仅填写虚构内容，不发送 API</text>
+    <view v-if="!editing" class="segment-tabs">
       <button
-        :disabled="!config.wishWritesReady || !canCreate || writing"
-        @click="runPageAction(() => edit())"
+        :class="{ selected: !own }"
+        :disabled="writing"
+        @click="runPageAction(() => tab(false))"
       >
-        写一条心愿
+        心愿广场
+      </button>
+      <navigator url="/pages/stories/index">还愿墙</navigator>
+      <button
+        :class="{ selected: own }"
+        :disabled="writing"
+        @click="runPageAction(() => tab(true))"
+      >
+        我的心愿
       </button>
     </view>
+    <view v-if="error" class="notice"
+      ><text>{{ error }}</text
+      ><navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator
+      ><navigator v-else-if="!canCreate" url="/pages/verification/index"
+        >查看学生认证</navigator
+      ></view
+    >
     <view v-if="editing" class="card">
       <picker
         :range="categories.map((item) => item.label)"
@@ -362,42 +399,53 @@ onUnload(leave)
         {{ config.useMock ? '保存合成草稿' : '保存草稿' }}</button
       ><button :disabled="writing" @click="runPageAction(() => cancelEdit())">取消</button>
     </view>
-    <view v-else class="pt-3">
-      <picker
-        :range="['全部分类', ...categories.map((item) => item.label)]"
-        @change="runPageAction(() => selectFilter('category', $event))"
-        ><view
-          >分类：{{ categories.find((item) => item.value === category)?.label || '全部' }}</view
-        ></picker
-      >
-      <picker
-        :range="['全部校区', ...campuses.map((item) => item.label)]"
-        @change="runPageAction(() => selectFilter('campus', $event))"
-        ><view
-          >校区：{{ campuses.find((item) => item.value === campus)?.label || '全部' }}</view
-        ></picker
-      >
-      <picker
-        v-if="own"
-        :range="['全部状态', ...Object.values(wishStateLabels)]"
-        @change="runPageAction(() => selectFilter('state', $event))"
-        ><view>状态：{{ state ? wishStateLabels[state] : '全部' }}</view></picker
-      >
-      <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
-      <text v-if="busy">加载中…</text><text v-if="!busy && !rows.length">暂无符合条件的心愿</text>
-      <view v-for="wish in rows" :key="wish.id" class="card">
-        <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}`">
-          查看心愿详情
-        </navigator>
-        <text>{{ wishStateLabels[wish.current_state] }}</text>
-        <text v-if="wish.privacy_review_required">内容暂不可查看</text>
-        <text v-else>{{ own ? ownWishBody(wish) : publicWishBody(wish) }}</text>
-        <navigator
-          v-if="!config.useMock && !wish.privacy_review_required && wish.public"
-          :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(wish.id)}`"
-          >举报此心愿</navigator
+
+    <view v-else>
+      <scroll-view class="chip-scroll" scroll-x :show-scrollbar="false">
+        <button
+          class="filter-chip"
+          :class="{ selected: !category }"
+          :disabled="writing"
+          @click="runPageAction(() => selectFilter('category', { detail: { value: 0 } }))"
         >
-        <text v-if="wish.public?.school_related">未经证实</text>
+          全部
+        </button>
+        <button
+          v-for="(item, index) in categories"
+          :key="item.value"
+          class="filter-chip"
+          :class="{ selected: category === item.value }"
+          :disabled="writing"
+          @click="runPageAction(() => selectFilter('category', { detail: { value: index + 1 } }))"
+        >
+          {{ item.label }}
+        </button>
+      </scroll-view>
+      <view class="filter-row">
+        <picker
+          :range="['全部校区', ...campuses.map((item) => item.label)]"
+          :disabled="writing"
+          @change="runPageAction(() => selectFilter('campus', $event))"
+          ><view
+            >{{ campuses.find((item) => item.value === campus)?.label || '全部校区' }} ▾</view
+          ></picker
+        >
+        <picker
+          v-if="own"
+          :range="['全部状态', ...Object.values(wishStateLabels)]"
+          :disabled="writing"
+          @change="runPageAction(() => selectFilter('state', $event))"
+          ><view>{{ state ? wishStateLabels[state] : '全部状态' }} ▾</view></picker
+        >
+        <button class="small-link" :disabled="busy || writing" @click="runPageAction(() => load())">
+          {{ busy ? '加载中…' : '刷新心愿' }}
+        </button>
+      </view>
+      <view v-if="!busy && !error && !rows.length" class="empty-state"
+        ><text>暂时没有符合条件的心愿</text><text>换个分类看看，或写下自己的期待。</text></view
+      >
+      <view v-for="wish in rows" :key="wish.id" :class="{ card: own }">
+        <WishPreview :wish="wish" :own="own" />
         <text v-if="own && wish.review_result?.reason"
           >驳回原因：{{ wish.review_result.reason }}</text
         >
@@ -471,14 +519,28 @@ onUnload(leave)
           </button>
         </view>
       </view>
+
       <button
         v-if="!config.useMock && cursor"
         :disabled="busy || writing"
         @click="runPageAction(() => load(true))"
       >
-        加载下一页
+        加载更多
       </button>
+      <button
+        v-if="config.useMock || (config.wishWritesReady && canCreate)"
+        class="floating-compose"
+        :disabled="writing"
+        @click="runPageAction(() => edit())"
+      >
+        ＋ 许个心愿
+      </button>
+      <navigator
+        v-else
+        :url="user.isLoggedIn ? '/pages/verification/index' : '/pages/login/index'"
+        class="floating-compose"
+        >{{ user.isLoggedIn ? '认证后许愿' : '登录后许愿' }}</navigator
+      >
     </view>
-    <text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>

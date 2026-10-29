@@ -349,14 +349,14 @@ test('REQ-008/018：创建分享只有kind/id；微信卡固定标题和引用�
   assert.deepEqual(create.data, { target_kind: 'story', id: wish.id })
   assert.equal(s.runtime.currentTarget.value.target.body, publicStory.body)
   assert.deepEqual(s.hooks.share(), {
-    title: '鲤源池 · 心愿与还愿故事',
+    title: '鲤愿池 · 心愿与还愿故事',
     imageUrl: '/static/share-cover.png',
     path: '/pages/share/index?ref=synthetic-ref',
   })
   s.hooks.hide()
   assert.equal(s.runtime.currentTarget.value, null)
   assert.deepEqual(s.hooks.share(), {
-    title: '鲤源池 · 心愿与还愿故事',
+    title: '鲤愿池 · 心愿与还愿故事',
     imageUrl: '/static/share-cover.png',
     path: '/pages/index/index',
   })

@@ -78,3 +78,33 @@ test('REQ-018：子组件归属于最近页面，H5共享应用根也能正确�
     undefined,
   )
 })
+
+test('H5 的 script setup 父级只暴露公开接口时仍找到页面，隐藏后拒绝动作', () => {
+  const s = setup()
+  const page = s.page()
+  const exposedParent = { $: { proxy: page }, $parent: null }
+  const child = { $parent: exposedParent } as unknown as ComponentPublicInstance
+  s.stack([page])
+  s.mixin.onShow.call(page)
+  assert.equal(s.mixin.computed.isPageVisible.call(child), true)
+  assert.equal(
+    s.run(child, () => '允许当前页面'),
+    '允许当前页面',
+  )
+  s.mixin.onHide.call(page)
+  assert.equal(s.mixin.computed.isPageVisible.call(child), false)
+  assert.equal(
+    s.run(child, () => '不应执行'),
+    undefined,
+  )
+})
+
+test('应用启动尚无页面时不调用原生导航 API，页面显示后才同步', () => {
+  const s = setup()
+  const app = s.page()
+  Object.assign(app, { $mpType: 'app' })
+  s.mixin.onShow.call(app)
+  assert.equal(s.synced(), 0)
+  s.mixin.onShow.call(s.page(app))
+  assert.equal(s.synced(), 1)
+})
