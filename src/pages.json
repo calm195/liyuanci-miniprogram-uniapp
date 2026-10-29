@@ -3,7 +3,8 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "鲤源池"
+        "navigationBarTitleText": "鲤愿池",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -27,7 +28,8 @@
     {
       "path": "pages/wishes/index",
       "style": {
-        "navigationBarTitleText": "文字心愿"
+        "navigationBarTitleText": "心愿池",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -105,7 +107,8 @@
     {
       "path": "pages/whispers/index",
       "style": {
-        "navigationBarTitleText": "文字树洞"
+        "navigationBarTitleText": "悄悄话",
+        "navigationStyle": "custom"
       }
     },
     {
@@ -173,11 +176,31 @@
       "style": {
         "navigationBarTitleText": "本人胶囊详情"
       }
+    },
+    {
+      "path": "pages/resources/index",
+      "style": {
+        "navigationBarTitleText": "资料广场",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/resources/detail",
+      "style": {
+        "navigationBarTitleText": "资料详情"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的"
+      }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarBackgroundColor": "#f3f6fb",
-    "backgroundColor": "#f3f6fb"
+    "navigationBarBackgroundColor": "#fcfaf7",
+    "backgroundColor": "#fcfaf7"
   }
 }

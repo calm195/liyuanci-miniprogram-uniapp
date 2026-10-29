@@ -201,14 +201,14 @@ test('REQ-017：无关通知和空页允许继续翻页，通知内容不作为�
   )
   assert.throws(() => mergeCareNotifications([], { items: [], next_cursor: '' }))
 })
-test('REQ-017：页面注册、首页及通知入口齐全，资源仅用文本组件展示', () => {
+test('REQ-017：页面注册、个人中心及通知入口齐全，资源仅用文本组件展示', () => {
   const page = readFileSync(new URL('../src/pages/care/index.vue', import.meta.url), 'utf8')
   assert.ok(
     readFileSync(new URL('../src/pages.json', import.meta.url), 'utf8').includes(
       'pages/care/index',
     ),
   )
-  for (const file of ['index', 'inbox'])
+  for (const file of ['profile', 'inbox'])
     assert.ok(
       readFileSync(new URL(`../src/pages/${file}/index.vue`, import.meta.url), 'utf8').includes(
         '/pages/care/index',

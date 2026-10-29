@@ -25,7 +25,7 @@
     @apply mb-3 block whitespace-pre-wrap;
   }
   .card {
-    @apply my-3 block rounded-xl bg-surface p-4;
+    @apply my-3 block rounded-2xl bg-surface p-4;
   }
   .title {
     @apply mb-4 block text-2xl leading-snug font-bold;
@@ -34,7 +34,7 @@
     @apply text-muted leading-relaxed;
   }
   .page button {
-    @apply mt-3 rounded-lg border border-line bg-surface px-4 py-1 text-ink;
+    @apply mt-3 rounded-full border border-line bg-surface px-4 py-1 text-ink;
     font-size: 28rpx;
   }
   .page button[disabled] {
@@ -43,7 +43,7 @@
   .page .primary-button,
   .page .theme-selected {
     @apply border-brand bg-brand;
-    color: var(--theme-surface);
+    color: #ffffff;
   }
   .page input,
   .page textarea,

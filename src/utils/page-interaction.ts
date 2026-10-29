@@ -3,8 +3,10 @@ import type { ComponentPublicInstance } from 'vue'
 function pageOwner(vm: ComponentPublicInstance | null): ComponentPublicInstance | null {
   // 小程序页面是独立根，H5页面与组件共用应用根，应沿父链找最近的页面实例。
   while (vm) {
-    if ((vm as { $mpType?: string }).$mpType === 'page') return vm
-    vm = vm.$parent
+    // script setup 的父级公开实例可能只暴露 defineExpose；从组件实例取得完整代理。
+    const current: ComponentPublicInstance = vm.$?.proxy ?? vm
+    if ('$mpType' in current && (current as { $mpType?: string }).$mpType === 'page') return current
+    vm = vm.$?.parent?.proxy ?? vm.$parent
   }
   return null
 }
@@ -22,7 +24,8 @@ export function createPageInteractionMixin(syncNative: () => void) {
     },
     onShow(this: ComponentPublicInstance) {
       this.pageIsVisible = true
-      syncNative()
+      // 应用启动时还没有页面导航栏，只在页面归属明确后同步原生外观。
+      if (pageOwner(this)) syncNative()
     },
     onHide(this: ComponentPublicInstance) {
       this.pageIsVisible = false

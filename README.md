@@ -41,6 +41,8 @@ Tailwind CSS 4 由现有 `weapp-tailwindcss` Vite 插件适配小程序，入口
 └── package.json        # 依赖与开发命令
 ```
 
+资料广场使用 `src/config/resources.ts` 中的固定图片路径作为投稿联系入口。负责人提供正式 PNG/JPEG 后，将原图放入 `src/static`，将 `resourceContributionImage` 改为对应 `/static/...` 路径，再重新构建和发布。当前空路径显示“投稿二维码暂未配置”，不会创建替代联系人图；二维码完整显示和可识别性须在微信真机核验。
+
 ## 3. 项目启动方式
 
 安装依赖并创建本地环境配置：

@@ -13,11 +13,18 @@ export class RequestError extends Error {
     this.name = 'RequestError'
   }
 }
+export interface RequestResponse {
+  statusCode: number
+  data: unknown
+  header?: Record<string, unknown>
+}
 type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete' | 'url'> & {
   url: string
   auth?: boolean
   silent?: boolean
   filePath?: string
+  // 模块可按自己的正式契约验证封装、状态码与响应头。
+  validateResponse?: (response: RequestResponse) => boolean
 }
 // 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
 function isAllowedApiBaseUrl(value: string): boolean {
@@ -73,7 +80,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           ...options.header,
           ...(options.auth !== false && token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        success: (response: { statusCode: number; data: unknown }) => {
+        success: (response: RequestResponse) => {
           const body = response.data as ApiResponse<T>
           if (
             response.statusCode === 401 &&
@@ -85,6 +92,10 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           }
           if (epoch !== session.getEpoch() && response.statusCode !== 401) {
             reject(new RequestError('会话已变化，请重新操作', -1))
+            return
+          }
+          if (options.validateResponse && !options.validateResponse(response)) {
+            reject(new RequestError('接口返回格式不符合约定，请刷新后重试', -3))
             return
           }
           if (response.statusCode === 204) {

@@ -1,5 +1,5 @@
 export const config = {
-  title: '鲤源池',
+  title: '鲤愿池',
   // 真实写入入口已开放，具体操作仍检查当前会话、服务端动作与对象版本。
   verificationWritesReady: true,
   wishWritesReady: true,

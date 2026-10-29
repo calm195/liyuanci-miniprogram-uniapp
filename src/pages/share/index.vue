@@ -83,7 +83,7 @@ async function load(create = false) {
 }
 // 微信分享回调同步返回已准备的引用。回流页每次显示都重新请求公开投影。
 onShareAppMessage(() => ({
-  title: '鲤源池 · 心愿与还愿故事',
+  title: '鲤愿池 · 心愿与还愿故事',
   // 显式使用通用封面，避免微信默认截取当前页面正文作为卡片图片。
   imageUrl: '/static/share-cover.png',
   path:

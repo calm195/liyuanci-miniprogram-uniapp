@@ -100,10 +100,17 @@ onHide(leave)
 onUnload(leave)
 </script>
 <template>
-  <AppPage>
-    <text class="title">{{ id ? '还愿故事' : '还愿墙' }}</text>
+  <AppPage :tab="id ? undefined : 'pond'">
+    <view class="module-hero"
+      ><text class="module-title">{{ id ? '一个心愿的回响' : '善意在这里，有了回响' }}</text
+      ><text class="module-subtitle">把被温暖的瞬间，分享给更多人。</text></view
+    ><view v-if="!id" class="segment-tabs"
+      ><navigator url="/pages/wishes/index" open-type="redirect">心愿广场</navigator
+      ><button class="selected">还愿墙</button
+      ><navigator url="/pages/wishes/index?own=1" open-type="redirect">我的心愿</navigator></view
+    >
     <button :disabled="busy" @click="runPageAction(() => load())">刷新</button>
-    <navigator url="/pages/wishes/index">从我的心愿管理还愿故事</navigator>
+    <navigator url="/pages/wishes/index?own=1">从我的心愿管理还愿故事</navigator>
     <text v-if="busy">加载中…</text>
     <view v-for="content in rows" :key="content.id" class="card">
       <PublicContent :content="content" kind="story" />

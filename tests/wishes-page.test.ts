@@ -101,6 +101,9 @@ async function setup() {
       wishStateLabels,
       publicWishBody,
       ownWishBody,
+      onLoad: (fn: (query: Record<string, string>) => void) => {
+        hooks.load = fn as () => void
+      },
       onShow: (fn: () => void) => {
         hooks.show = fn
       },
@@ -116,9 +119,9 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const names =
-    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onShow, onHide, onUnload'
+    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onLoad, onShow, onHide, onUnload'
   const page = await moduleFrom(
-    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectGender, selectIdentityCampus, error, editing, writing, rows };`,
+    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectGender, selectIdentityCampus, error, editing, writing, rows, category, state };`,
   )
   hooks.show!()
   await settle()
@@ -276,4 +279,28 @@ test('REQ-018：账号变化立即清除我的心愿和未保存正文', async (
   assert.equal(s.page.editing.value, false)
   assert.equal(s.page.form.value.body, '')
   assert.equal(s.page.items.value.length, 0)
+})
+
+test('原型快捷入口选择组队和本人状态，非法状态回退且不改变写入资格', async () => {
+  const s = await setup()
+  const enter = s.hooks.load as (query: Record<string, string>) => void
+  enter({ category: 'team' })
+  assert.equal(s.page.category.value, 'team')
+  assert.equal(s.page.own.value, false)
+  enter({ own: '1', state: 'realized' })
+  assert.equal(s.page.own.value, true)
+  assert.equal(s.page.state.value, 'realized')
+  enter({ own: '1', state: '__proto__', category: 'invalid' })
+  assert.equal(s.page.state.value, '')
+  assert.equal(s.page.category.value, '')
+  enter({ compose: '1' })
+  s.hooks.show!()
+  await settle()
+  assert.equal(s.page.editing.value, false)
+  s.config.wishWritesReady = true
+  enter({ compose: '1' })
+  s.hooks.show!()
+  await settle()
+  assert.equal(s.page.editing.value, true)
+  assert.equal(writes(s.calls).length, 0)
 })

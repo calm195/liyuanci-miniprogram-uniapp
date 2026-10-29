@@ -1,107 +1,121 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import WishPreview from '@/components/WishPreview.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
+import { useHomeWishes } from '@/composables/use-home-wishes'
 import { useWhisperFeed } from '@/composables/use-whisper-feed'
-import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
-import type { VerificationState } from '@/types/api'
-const store = useUserStore()
+import { config } from '@/config'
+const user = useUserStore()
+const { rows, busy, error, load } = useHomeWishes()
 const {
   items: latestWhispers,
   ready: whispersReady,
   busy: whispersBusy,
   error: whispersError,
   load: refreshWhispers,
-} = useWhisperFeed(3)
-const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
-function login() {
-  uni.navigateTo({ url: '/pages/login/index' })
-}
-async function refresh() {
-  try {
-    await store.refresh()
-  } catch {
-    /* 请求层统一提示。 */
-  }
-}
-async function logout() {
-  try {
-    await store.logout()
-  } catch {
-    /* 本地会话已清除；服务端撤销失败由请求层提示。 */
-  }
-}
+} = useWhisperFeed(1)
+const shortcuts = [
+  {
+    label: '许个心愿',
+    caption: '让善意发生',
+    art: 'entry-wish',
+    url: '/pages/wishes/index?compose=1',
+  },
+  { label: '说说心事', caption: '有人在听', art: 'entry-whisper', url: '/pages/whispers/index' },
+  {
+    label: '找个搭子',
+    caption: '遇见同路人',
+    art: 'entry-buddy',
+    url: '/pages/wishes/index?category=team',
+  },
+  { label: '资料广场', caption: '认证后查看', art: '', url: '/pages/resources/index' },
+]
 </script>
 <template>
-  <AppPage>
-    <ThemeSwitcher />
-    <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
-    <text class="title">鲤源池</text>
-    <view v-if="config.useMock" class="notice">合成 Mock · 无真实微信身份，不发送 API</view>
-    <view class="card">
-      <text>账号状态：{{ store.label }}</text>
-      <text v-if="store.expired">登录已过期，请重新登录。</text>
-      <text v-if="store.user && !store.validated">当前资格尚未校验，受保护操作暂不可用。</text>
-      <text v-if="store.user?.penalty_notice">{{ store.user.penalty_notice }}</text>
-      <text v-if="store.user?.verification === 'pending'">学生认证审核中，请留意状态更新。</text>
-      <text v-if="store.verification?.status === 'rejected'"
-        >驳回原因：{{ store.verification.reason }}</text
+  <AppPage tab="home" title="鲤愿池" brand>
+    <view v-if="config.useMock" class="notice">合成演示 · 不发送 API</view>
+    <view class="greeting-row">
+      <view class="greeting-copy"
+        ><AppIcon name="sun" :size="34" /><text class="ui-text">嗨，今天也有好运气</text></view
       >
-      <text v-if="store.verification?.revision_suggestion"
-        >修改建议：{{ store.verification.revision_suggestion }}</text
+      <navigator
+        :url="user.isLoggedIn ? '/pages/profile/index' : '/pages/login/index'"
+        class="small-link"
+        >{{ user.isLoggedIn ? '我的主页 ›' : '登录 ›' }}</navigator
       >
-      <text>微信登录用于建立会话；学生认证通过后才具备发布、申请和聊天的资格。</text>
-      <button v-if="!store.isLoggedIn" @click="runPageAction(() => login())">前往登录</button>
-      <button
-        v-if="store.isLoggedIn && !config.useMock"
-        :disabled="store.busy"
-        @click="runPageAction(() => refresh())"
-      >
-        刷新认证状态
-      </button>
-      <button v-if="store.isLoggedIn" :disabled="store.busy" @click="runPageAction(() => logout())">
-        退出登录
-      </button>
     </view>
-    <view class="card">
-      <text>首发文字心愿互助</text>
-      <navigator url="/pages/verification/index">学生认证</navigator>
-      <text
-        >学生认证通过后，可按当前权限创建、编辑和提交心愿审核；可申请应愿并确定匹配；可通过会话入口聊天并查看通知。</text
-      >
-      <navigator url="/pages/wishes/index">心愿广场 / 我的心愿</navigator>
-      <navigator url="/pages/applications/index">我的应愿</navigator>
-      <navigator url="/pages/inbox/index">聊天与通知</navigator>
-      <navigator url="/pages/stories/index">还愿墙</navigator>
-      <navigator url="/pages/settings/index">个人资料与隐私</navigator>
-      <navigator url="/pages/safety/index">警告与申诉</navigator>
-      <navigator url="/pages/care/index">关怀与援助</navigator>
+    <view class="home-hero">
+      <image class="hero-art" src="/static/illustrations/pond.jpg" mode="aspectFill" />
+      <view class="hero-copy">
+        <text class="hero-title">{{ '把小小心愿\n交给大大的善意' }}</text>
+        <text class="hero-subtitle">总有一条锦鲤，为你而来。</text>
+        <navigator url="/pages/wishes/index?compose=1" class="hero-button"
+          >许个心愿 <text class="ui-text">→</text></navigator
+        >
+      </view>
     </view>
-    <view class="card">
-      <text>最新文字树洞</text>
-      <button :disabled="whispersBusy" @click="runPageAction(() => refreshWhispers())">
-        刷新树洞
-      </button>
-      <navigator v-if="whispersReady" url="/pages/whispers/index">进入悄悄鲤广场</navigator>
-      <view v-for="item in latestWhispers" :key="item.id" class="mt-3"
-        ><WhisperContent :content="item" /><navigator
-          :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
-          >阅读全文</navigator
+    <view class="quick-grid">
+      <navigator v-for="entry in shortcuts" :key="entry.label" :url="entry.url" class="quick-entry">
+        <image
+          v-if="entry.art"
+          :src="`/static/illustrations/${entry.art}.png`"
+          class="entry-art"
+          mode="aspectFit"
+        />
+        <view v-else class="quick-symbol"><AppIcon name="book" :size="52" /></view>
+        <text class="ui-text">{{ entry.label }}</text
+        ><text class="entry-caption">{{ entry.caption }}</text>
+      </navigator>
+    </view>
+    <navigator url="/pages/wishes/index" class="kindness-strip"
+      ><AppIcon name="notice" :size="32" /><text class="ui-text"
+        >今日锦鲤 · 你也可以成为别人的锦鲤</text
+      ></navigator
+    >
+    <view class="section-heading"
+      ><text class="section-title">新鲜心愿</text
+      ><navigator url="/pages/wishes/index" class="small-link">去捞一捞 ›</navigator></view
+    >
+    <WishPreview v-for="wish in rows" :key="wish.id" :wish="wish" compact />
+    <view v-if="!rows.length" class="empty-state">
+      <AppIcon name="fish" :size="52" />
+      <text>{{ busy ? '正在捞起新鲜心愿…' : error || '心愿池静静的，等你投下第一份期待。' }}</text>
+      <button v-if="error" class="small-link" @click="runPageAction(() => load())">再捞一次</button>
+    </view>
+    <view class="section-heading"
+      ><text class="section-title">悄悄话</text
+      ><navigator url="/pages/whispers/index" class="small-link">去听一听 ›</navigator></view
+    >
+    <navigator
+      v-for="item in latestWhispers"
+      :key="item.id"
+      :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
+      class="whisper-preview"
+    >
+      <WhisperContent :content="item" />
+      <view class="card-meta"
+        ><AppIcon name="heart" :size="28" /><text class="ui-text"
+          >{{ item.hug_count }} 个抱抱 · {{ item.comment_count }} 条暖评</text
         ></view
       >
-      <text v-if="whispersReady && !latestWhispers.length && !whispersBusy">暂无公开树洞。</text>
-      <text v-if="whispersError" class="error">{{ whispersError }}</text>
-    </view>
-    <view v-if="config.useMock" class="card">
-      <text>仅用于检查状态展示</text>
+    </navigator>
+    <view v-if="!latestWhispers.length" class="whisper-preview">
+      <text>{{
+        whispersBusy
+          ? '正在听见你的心事…'
+          : whispersError ||
+            (whispersReady ? '有些话，轻轻说就好。这里有人愿意听。' : '心事也值得被温柔以待。')
+      }}</text>
       <button
-        v-for="state in states"
-        :key="state"
-        @click="runPageAction(() => store.simulate(state))"
+        v-if="whispersError"
+        class="small-link"
+        @click="runPageAction(() => refreshWhispers())"
       >
-        {{ state }}
+        重新加载
       </button>
     </view>
+    <text class="page-footnote">许愿有人应，心事有人听。</text>
   </AppPage>
 </template>

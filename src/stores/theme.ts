@@ -5,12 +5,16 @@ import { storage } from '@/utils/storage'
 export type ThemeMode = 'light' | 'dark'
 const palettes = {
   light: {
-    canvas: '#f3f6fb',
+    canvas: '#fcfaf7',
     surface: '#ffffff',
-    ink: '#172033',
-    muted: '#526176',
-    line: '#cbd5e1',
-    brand: '#2563eb',
+    ink: '#091d3d',
+    muted: '#617184',
+    line: '#e9e9e7',
+    brand: '#ff4c3e',
+    peach: '#fff0e9',
+    mint: '#e1f7f4',
+    teal: '#137e83',
+    navy: '#253b57',
     warning: '#fff1cc',
     'warning-ink': '#7a4600',
     danger: '#b42318',
@@ -21,7 +25,11 @@ const palettes = {
     ink: '#e2e8f0',
     muted: '#b6c2d2',
     line: '#526176',
-    brand: '#93c5fd',
+    brand: '#ff9288',
+    peach: '#3e2e30',
+    mint: '#193a3d',
+    teal: '#8fdbd6',
+    navy: '#253b57',
     warning: '#493713',
     'warning-ink': '#fde68a',
     danger: '#fda4af',
@@ -44,12 +52,12 @@ export const useThemeStore = defineStore('theme', () => {
       frontColor: dark ? '#ffffff' : '#000000',
       backgroundColor: palette.value.canvas,
     })
-    uni.setBackgroundColor({
+    uni.setBackgroundColor?.({
       backgroundColor: palette.value.canvas,
       backgroundColorTop: palette.value.canvas,
       backgroundColorBottom: palette.value.canvas,
     })
-    uni.setBackgroundTextStyle({ textStyle: dark ? 'light' : 'dark' })
+    uni.setBackgroundTextStyle?.({ textStyle: dark ? 'light' : 'dark' })
   }
   function setMode(value: ThemeMode) {
     if (value !== 'light' && value !== 'dark') return
