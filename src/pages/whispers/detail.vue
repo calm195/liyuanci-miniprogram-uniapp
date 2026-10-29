@@ -30,7 +30,7 @@ async function load(more = false) {
   const previous = more ? cursor.value! : undefined
   const context = post.value
   await page.read(async (active) => {
-    if (!more) await module.refresh(false)
+    if (!more) await module.refresh()
     if (!active()) return
     if (!module.config?.enabled) throw new Error('树洞尚未开放或当前不可用。')
     const result = await callWhisper('whisperPostGet', { path: { post_id: id.value } })
@@ -111,8 +111,12 @@ async function hug(active: boolean) {
 async function block(comment?: PublicComment) {
   if (comment && !comments.value.includes(comment)) return
   const target = comment ?? post.value
-  const projection = comment ? 'PublicComment' : 'PublicPost'
-  if (!target || !canWhisperAction(projection, target, 'interactionBlockCreate')) return
+  if (
+    !target ||
+    target.viewer_is_author ||
+    !canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+  )
+    return
   await page.write(
     'interactionBlockCreate',
     {
@@ -176,7 +180,10 @@ onShow(() => {
         >举报此内容</navigator
       >
       <button
-        v-if="canWhisperAction('PublicPost', post, 'interactionBlockCreate')"
+        v-if="
+          !post.viewer_is_author &&
+          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+        "
         :disabled="busy || writing || retryReady"
         @click="runPageAction(() => block())"
       >
@@ -190,7 +197,10 @@ onShow(() => {
         :url="`/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`"
         >举报此暖评</navigator
       ><button
-        v-if="canWhisperAction('PublicComment', comment, 'interactionBlockCreate')"
+        v-if="
+          !comment.viewer_is_author &&
+          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+        "
         :disabled="busy || writing || retryReady"
         @click="runPageAction(() => block(comment))"
       >

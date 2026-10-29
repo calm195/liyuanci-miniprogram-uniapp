@@ -206,7 +206,7 @@ async function setup() {
   })
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/chat/index.vue', import.meta.url)) +
-      '\nexport { refresh, send, draft, attempt, afterSeq, timeline, outgoing, canSend, error, notice, sending, reading };',
+      '\nexport { refresh, send, draft, attempt, afterSeq, timeline, outgoing, canSend, error, notice, sending, reading, nearBottom, scrollTarget, unreadArrival };',
     {
       ...api,
       config: { useMock: false },
@@ -636,4 +636,24 @@ test('REQ-006/018：通知游标循环时清投影并停止翻页，刷新后可
   assert.equal(s.calls.length, count)
   await s.page.load()
   assert.equal(s.page.notificationRows.value.length, 1)
+})
+
+test('REQ-007：静默空轮询复用列表，上翻时新消息不抢滚动位置或输入', async () => {
+  const s = await setup()
+  s.pages.push({
+    items: Array.from({ length: 50 }, (_, i) => delivered(`history-${i}`, i + 1)),
+    next_after_seq: 50,
+  })
+  await s.poll()
+  const previous = s.page.timeline.value
+  s.page.draft.value = '正在输入'
+  await s.poll()
+  assert.equal(s.page.timeline.value, previous)
+  s.page.nearBottom.value = false
+  s.page.scrollTarget.value = ''
+  s.pages.push({ items: [delivered('second', 51)], next_after_seq: 51 })
+  await s.poll()
+  assert.equal(s.page.scrollTarget.value, '')
+  assert.equal(s.page.unreadArrival.value, true)
+  assert.equal(s.page.draft.value, '正在输入')
 })

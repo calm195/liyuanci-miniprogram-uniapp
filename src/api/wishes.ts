@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { WishFilters, WishInput, WishPage, WishResult } from '@/types/wish'
+import type { WishFilters, WishInput, WishPage, WishPublicContent, WishResult } from '@/types/wish'
 export const getWish = (id: string) =>
   request<WishResult>({ url: `/wishes/${encodeURIComponent(id)}` })
 
@@ -25,7 +25,7 @@ function query(filters: WishFilters) {
     .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
     .join('&')
 }
-export function listWishes(own: boolean, filters: WishFilters) {
+export async function listWishes(own: boolean, filters: WishFilters) {
   const search = query(
     own
       ? { state: filters.state, cursor: filters.cursor, limit: filters.limit }
@@ -36,9 +36,21 @@ export function listWishes(own: boolean, filters: WishFilters) {
           limit: filters.limit,
         },
   )
-  return request<WishPage>({
-    url: `${own ? '/me/wishes' : '/wishes'}${search ? '?' + search : ''}`,
+  if (own) return request<WishPage>({ url: `/me/wishes${search ? '?' + search : ''}` })
+  const page = await request<{ items: WishPublicContent[]; next_cursor: string | null }>({
+    url: `/wishes${search ? '?' + search : ''}`,
   })
+  // 公开接口返回正文投影；转换仅供卡片展示，不赋予任何本人写入动作。
+  return {
+    ...page,
+    items: page.items.map((content): WishResult => ({
+      id: content.id,
+      version: 0,
+      current_state: 'published',
+      allowed_actions: [],
+      public: content,
+    })),
+  }
 }
 export function createWish(input: WishInput, key: string) {
   return request<WishResult>({

@@ -22,15 +22,15 @@ export const useUserStore = defineStore('user', () => {
     verification.value = null
     validated.value = false
   }
-  async function refresh(includeVerification = true) {
+  async function refresh(includeVerification = true, silent = false) {
     if (!session.getToken() || config.useMock) return
     const current = generation
     const request = ++refreshGeneration
     const epoch = session.getEpoch()
     const active = () =>
       current === generation && request === refreshGeneration && epoch === session.getEpoch()
-    validated.value = false
-    verification.value = null
+    if (!silent) validated.value = false
+    if (!silent || includeVerification) verification.value = null
     try {
       const me = await auth.getMe()
       // 页面显示和应用恢复可能并发刷新，只接受最新一轮资格与审核资料。
@@ -45,7 +45,10 @@ export const useUserStore = defineStore('user', () => {
         if (active()) verification.value = result
       }
     } catch (failure) {
-      if (active()) throw failure
+      if (active()) {
+        validated.value = false
+        throw failure
+      }
     }
   }
 

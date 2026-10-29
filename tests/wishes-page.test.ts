@@ -63,6 +63,7 @@ async function setup() {
   })
   const calls: Transport[] = []
   let rows = [structuredClone(sample)]
+  let nextCursor: string | null = null
   let command: (options: Transport) => Promise<unknown> = async () => ({
     ...sample,
     current_state: 'pending_review',
@@ -76,7 +77,16 @@ async function setup() {
   }
   const request = async (options: Transport) => {
     calls.push(JSON.parse(JSON.stringify(options)))
-    return options.method ? command(options) : { items: structuredClone(rows), next_cursor: null }
+    return options.method
+      ? command(options)
+      : {
+          items: structuredClone(
+            options.url.startsWith('/me/')
+              ? rows
+              : rows.flatMap((row) => (row.public ? [row.public] : [])),
+          ),
+          next_cursor: nextCursor,
+        }
   }
   Object.assign(globalThis, { __wishRequest: request })
   const api = await moduleFrom(
@@ -134,6 +144,9 @@ async function setup() {
     hooks,
     calls,
     RequestError,
+    setCursor: (value: string | null) => {
+      nextCursor = value
+    },
     setRows: (value: WishResult[]) => {
       rows = value
     },
@@ -303,4 +316,65 @@ test('原型快捷入口选择组队和本人状态，非法状态回退且不�
   await settle()
   assert.equal(s.page.editing.value, true)
   assert.equal(writes(s.calls).length, 0)
+})
+
+test('REQ-003：真实公共接口的平铺正文转换为只读卡片，不附加写入权限', async () => {
+  const { page, setRows } = await setup()
+  setRows([
+    {
+      ...sample,
+      current_state: 'published',
+      public: {
+        id: sample.id,
+        body: '公开心愿',
+        content_version: 1,
+        school_related: true,
+        notice_codes: [],
+        notice_text: '',
+      },
+    },
+  ])
+  page.own.value = false
+  await page.load()
+  assert.equal(page.items.value[0].public.body, '公开心愿')
+  assert.deepEqual(page.items.value[0].allowed_actions, [])
+})
+
+test('REQ-003：公共分类筛选与分页游标保留平铺正文，重复资源不追加', async () => {
+  const s = await setup()
+  const publicRow = (id: string, category: 'help' | 'team'): WishResult => ({
+    ...sample,
+    id,
+    current_state: 'published',
+    public: {
+      id,
+      body: id,
+      category,
+      content_version: 1,
+      school_related: true,
+      notice_codes: [],
+      notice_text: '',
+    },
+  })
+  s.page.own.value = false
+  s.page.category.value = 'team'
+  s.setRows([publicRow('team-a', 'team'), publicRow('help-a', 'help')])
+  s.setCursor('cursor/+')
+  await s.page.load()
+  assert.deepEqual(
+    s.page.rows.value.map((row: WishResult) => row.id),
+    ['team-a'],
+  )
+  s.setRows([publicRow('team-a', 'team'), publicRow('team-b', 'team')])
+  s.setCursor(null)
+  await s.page.load(true)
+  assert.deepEqual(
+    s.page.rows.value.map((row: WishResult) => row.id),
+    ['team-a', 'team-b'],
+  )
+  assert.ok(
+    s.calls.some(
+      (call) => call.url.includes('category=team') && call.url.includes('cursor=cursor%2F%2B'),
+    ),
+  )
 })

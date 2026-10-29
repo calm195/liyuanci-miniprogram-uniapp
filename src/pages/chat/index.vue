@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
@@ -22,6 +22,30 @@ const afterSeq = ref(0)
 const hasMore = ref(false)
 const draft = ref('')
 const reading = ref(false)
+const scrollTarget = ref('')
+const nearBottom = ref(true)
+const unreadArrival = ref(false)
+function trackScroll(event: { detail: { scrollTop: number; scrollHeight: number } }) {
+  uni
+    .createSelectorQuery()
+    .select('.chat-timeline')
+    .boundingClientRect((rect) => {
+      if (rect && !Array.isArray(rect))
+        nearBottom.value =
+          event.detail.scrollHeight - event.detail.scrollTop - (rect.height || 0) < 100
+    })
+    .exec()
+}
+async function scrollLatest() {
+  const visit = generation
+  const epoch = session.getEpoch()
+  scrollTarget.value = ''
+  await nextTick()
+  if (!visible || visit !== generation || epoch !== session.getEpoch()) return
+  scrollTarget.value = 'chat-end'
+  unreadArrival.value = false
+  nearBottom.value = true
+}
 const sending = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -57,6 +81,9 @@ function clearProjection() {
   hasMore.value = false
   readEpoch.value = -1
   readOwner.value = ''
+  scrollTarget.value = ''
+  nearBottom.value = true
+  unreadArrival.value = false
 }
 async function refresh(force = false) {
   if (reading.value || (sending.value && !force) || !visible) return
@@ -73,7 +100,7 @@ async function refresh(force = false) {
   }
   reading.value = true
   try {
-    await user.refresh(false)
+    await user.refresh(false, !!currentConversation.value)
     if (!isCurrent()) return
     store.syncSession()
     const target = await findConversation(id.value, isCurrent)
@@ -89,7 +116,12 @@ async function refresh(force = false) {
     const page = await listMessages(id.value, afterSeq.value)
     if (!isCurrent()) return
     const merged = mergeMessages(messages.value, page, afterSeq.value)
+    const arrived = merged.items.length > messages.value.length
     messages.value = merged.items
+    if (arrived) {
+      if (nearBottom.value) void scrollLatest()
+      else unreadArrival.value = true
+    }
     afterSeq.value = merged.afterSeq
     hasMore.value = page.items.length === 50
     conversation.value = target
@@ -168,6 +200,7 @@ async function send(retry = false) {
     store.track(id.value, result)
     draft.value = ''
     attempt.value = null
+    void scrollLatest()
     notice.value = '消息已受理，审核通过并送达后才会进入聊天记录。'
     await refresh(true)
   } catch (failure) {
@@ -255,14 +288,35 @@ onUnload(leave)
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text v-if="currentConversation">{{ canSend ? '当前可发送消息' : '当前会话只读' }}</text>
     <button :disabled="reading || sending" @click="runPageAction(() => refresh())">刷新聊天</button>
-    <view v-for="message in timeline" :key="message.message_id" class="card">
-      <text class="whitespace-pre-wrap break-words">{{ message.body }}</text>
-      <navigator
-        :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
-        >举报此消息</navigator
+    <scroll-view
+      class="chat-timeline"
+      scroll-y
+      :scroll-into-view="scrollTarget"
+      @scroll="trackScroll"
+    >
+      <view
+        v-for="message in timeline"
+        :key="message.message_id"
+        class="chat-message"
+        :class="{ outgoing: message.viewer_is_sender }"
       >
-      <text class="text-muted text-sm">送达时间：{{ message.delivered_at }}</text>
-    </view>
+        <text class="chat-speaker">{{
+          message.viewer_is_sender === true
+            ? '我'
+            : message.viewer_is_sender === false
+              ? '对方'
+              : '消息'
+        }}</text>
+        <text class="whitespace-pre-wrap break-words">{{ message.body }}</text>
+        <navigator
+          :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
+          >举报此消息</navigator
+        >
+        <text class="text-muted text-sm">送达时间：{{ message.delivered_at }}</text>
+      </view>
+      <view id="chat-end" />
+    </scroll-view>
+    <button v-if="unreadArrival" @click="runPageAction(scrollLatest)">有新消息，查看最新</button>
     <text v-if="currentConversation && !timeline.length && !reading">暂无已送达消息</text>
     <button
       v-if="hasMore && currentConversation"
@@ -312,3 +366,28 @@ onUnload(leave)
     <text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.chat-timeline {
+  height: 55vh;
+  overflow-anchor: none;
+}
+.chat-message {
+  margin: 20rpx 100rpx 20rpx 0;
+  padding: 24rpx;
+  border-radius: 24rpx 24rpx 24rpx 4rpx;
+  background: var(--color-surface, #f1f3f5);
+  overflow-wrap: anywhere;
+}
+.chat-message.outgoing {
+  margin: 20rpx 0 20rpx 100rpx;
+  border-radius: 24rpx 24rpx 4rpx 24rpx;
+  background: var(--color-primary-soft, #e1f1eb);
+}
+.chat-speaker {
+  display: block;
+  font-size: 24rpx;
+  opacity: 0.65;
+  margin-bottom: 8rpx;
+}
+</style>
