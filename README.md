@@ -96,9 +96,9 @@ npm run build:mp-weixin
 - 每轮文件修改后运行 `npm run check`；格式检查失败时运行 `npm run format`，再重跑完整检查。修改页面、样式、依赖或构建配置后还须运行 `npm run build:mp-weixin`。不得关闭规则、忽略源码或删除测试绕过检查。
 - 保持 `@dcloudio/*` 编译相关包版本一致，不单独升级 Vite/Vue 破坏官方依赖组合。
 - 禁止写入密钥、真实密码或真实用户数据；AppSecret 仅由服务端持有。新增环境变量同步 `.env.example` 与本说明。
-- 后续开发使用 `develop`，对应 docs 文档使用 `mini-deveop`；仅在用户授权范围内提交，不自动 push、发布、部署或创建远程仓库。
+- 源码与 docs 的本地和远程仅保留 `develop`、`main`，日常开发均使用 `develop`；仅在用户授权范围内提交，不自动 push、发布、部署或创建远程仓库。
 - README 仅维护项目介绍、选项与目录、启动方式、开发规范与须知；本工程不保留阶段文档，过程产物写入 docs 工程。
-- 任何工程变动前核对本工程 `develop` 与 docs `mini-deveop` 的分支、完整 HEAD 和工作区；固定阶段产物不再修改，交付、勘误或补证据另建文件并引用完整源码提交。契约疑问写 docs 对应端新记录，由后端协调；需求、审批及固定设计只读。遵循 [文档管理规范](../docs/governance/README.md)。
+- 任何工程变动前核对本工程与 docs 的 `develop` 分支、完整 HEAD 和工作区；并行任务协调写入范围，必要时使用 detached 工作树并在汇总后清理。固定阶段产物不再修改，交付、勘误或补证据另建文件并引用完整源码提交。契约疑问写 docs 对应端新记录，由后端协调；需求、审批及固定设计只读。遵循 [文档管理规范](../docs/governance/README.md)。
 
 ### 树洞契约消费
 
