@@ -9,6 +9,7 @@ export interface ConversationPage {
   next_cursor: string | null
 }
 export interface DeliveredMessage {
+  viewer_is_sender?: boolean
   message_id: string
   delivery_seq: number
   submitted_at: string

@@ -228,6 +228,8 @@ test('REQ-009/010：详情按父正文读取公开暖评，关闭保留只读；
 })
 test('REQ-014：匿名屏蔽只提交来源内容版本，成功清正文，不取得作者或block_id映射', async () => {
   const s = await setup('detail', { id: postId })
+  s.runtime.post.value.viewer_is_author = false
+  s.runtime.post.value.allowed_actions = ['whisperCommentCreate']
   await s.runtime.block()
   assert.ok(s.calls.find((x) => x.method === 'POST'))
   assert.deepEqual(s.calls.find((x) => x.method === 'POST')!.data, {
@@ -364,4 +366,19 @@ test('REQ-009/018：所有树洞页面注册并使用可见性边界，无正文
       /setStorage|localStorage|v-html|rich-text|public-profile|onShareAppMessage|RecorderManager/,
     )
   }
+})
+
+test('REQ-014：真实工作区缺屏蔽能力时不借公共投影放行，本人来源也不提交', async () => {
+  const s = await setup('detail', { id: postId })
+  s.runtime.post.value.viewer_is_author = false
+  s.workspace.allowed_actions = ['whisperPostCreate']
+  await s.runtime.load()
+  s.runtime.post.value.viewer_is_author = false
+  await s.runtime.block()
+  assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
+  s.workspace.allowed_actions = ['interactionBlockCreate']
+  await s.runtime.load()
+  s.runtime.post.value.viewer_is_author = true
+  await s.runtime.block()
+  assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
 })

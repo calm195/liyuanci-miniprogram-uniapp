@@ -199,3 +199,19 @@ test('REQ-018：最新资格刷新失败后，旧成功响应不能重新开放�
   await first
   assert.equal(store.validated, false)
 })
+
+test('REQ-007：静默资格刷新保留已验证展示直到返回，失败撤销发送资格', async () => {
+  const store = setup()
+  await store.login()
+  const next = deferred<UserInfo>()
+  loadMe = () => next.promise
+  const pending = store.refresh(false, true)
+  assert.equal(store.validated, true)
+  next.resolve(me)
+  await pending
+  loadMe = async () => {
+    throw new Error('网络失败')
+  }
+  await assert.rejects(store.refresh(false, true))
+  assert.equal(store.validated, false)
+})
