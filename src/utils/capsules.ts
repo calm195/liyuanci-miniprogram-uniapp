@@ -1,4 +1,7 @@
 import type { Capsule, CapsuleSummary } from '../types/whispers.ts'
+// 时间换算统一由公共模块提供，此处保留导出名以兼容既有调用方。
+import { beijingTime } from './time.ts'
+export { beijingTime }
 
 export const capsuleStates: Record<Capsule['status'], string> = {
   scanning: '安全扫描中',
@@ -10,12 +13,7 @@ export const capsuleStates: Record<Capsule['status'], string> = {
   cancelled: '已取消',
   deleted: '已删除',
 }
-// 固定使用北京时间，不随设备时区改变；输入和协议均精确到秒。
-export function beijingTime(utc: string): string {
-  const instant = Date.parse(utc)
-  if (!Number.isFinite(instant)) throw new Error('服务端时间不可用，请刷新。')
-  return new Date(instant + 8 * 3600000).toISOString().slice(0, 19).replace('T', ' ')
-}
+// 预约时间须为完整北京时间；输入和协议均精确到秒。
 export function capsuleUnlockAt(local: string, serverNow: number): string {
   if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(local))
     throw new Error('请选择完整的北京时间，秒数为00至59。')

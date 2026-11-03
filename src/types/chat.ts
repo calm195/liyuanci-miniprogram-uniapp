@@ -8,13 +8,29 @@ export interface ConversationPage {
   items: Conversation[]
   next_cursor: string | null
 }
-export interface DeliveredMessage {
+// 服务端返回的原始消息：时间字段是带时区标记的 UTC 字符串，只在接口层流转。
+export interface RawDeliveredMessage {
   viewer_is_sender?: boolean
   message_id: string
   delivery_seq: number
   submitted_at: string
   delivered_at: string
   body: string
+}
+export interface RawMessagesPage {
+  items: RawDeliveredMessage[]
+  next_after_seq: number
+}
+// 页面使用的消息：展示文本已在接口层换算为北京时间，原始值另存供比较与计算。
+export interface DeliveredMessage {
+  viewer_is_sender?: boolean
+  message_id: string
+  delivery_seq: number
+  body: string
+  submittedAtText: string
+  submittedAtRaw: string
+  deliveredAtText: string
+  deliveredAtRaw: string
 }
 export interface MessagesPage {
   items: DeliveredMessage[]

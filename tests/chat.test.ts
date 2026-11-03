@@ -12,11 +12,13 @@ import {
 } from '../src/utils/chat.ts'
 import { createVisiblePoller } from '../src/utils/visible-poller.ts'
 import { messageStatusLabels } from '../src/types/chat.ts'
+import { displayFriendly } from '../src/utils/time.ts'
 import type {
   Conversation,
   DeliveredMessage,
   MessageStatus,
-  MessagesPage,
+  RawDeliveredMessage,
+  RawMessagesPage,
 } from '../src/types/chat.ts'
 
 const actor = {
@@ -31,12 +33,23 @@ const conversation: Conversation = {
   can_write: true,
   write_epoch: 4,
 }
-const delivered = (id: string, seq: number): DeliveredMessage => ({
+// 服务端原始消息：模拟传输层返回，仍需经过接口层换算。
+const deliveredRaw = (id: string, seq: number): RawDeliveredMessage => ({
   message_id: id,
   delivery_seq: seq,
   submitted_at: '2026-10-23T01:00:00Z',
   delivered_at: '2026-10-23T01:01:00Z',
   body: '合成消息',
+})
+// 页面使用的消息：与接口层换算结果同形，供纯函数用例直接构造。
+const delivered = (id: string, seq: number): DeliveredMessage => ({
+  message_id: id,
+  delivery_seq: seq,
+  body: '合成消息',
+  submittedAtText: '10月23日 09:00',
+  submittedAtRaw: '2026-10-23T01:00:00Z',
+  deliveredAtText: '10月23日 09:01',
+  deliveredAtRaw: '2026-10-23T01:01:00Z',
 })
 type Transport = {
   url: string
@@ -160,7 +173,7 @@ async function setup() {
   const session = { getEpoch: () => state.epoch, getToken: () => 'synthetic-token' }
   const store = await chatStore(user, session)
   const calls: Transport[] = []
-  const pages: MessagesPage[] = []
+  const pages: RawMessagesPage[] = []
   const statuses: Record<string, MessageStatus> = {}
   const hooks: Record<string, (query?: { id: string }) => void> = {}
   let stops = 0
@@ -196,7 +209,7 @@ async function setup() {
   }
   const api = await loadRuntime(
     readFileSync(new URL('../src/api/chat.ts', import.meta.url), 'utf8'),
-    { request },
+    { request, displayFriendly },
   )
   Object.assign(globalThis, {
     uni: {
@@ -290,10 +303,10 @@ test('REQ-007：202仅进入待审回执，审核状态序号不推进聊天增�
     status: 'delivered',
     delivery_seq: 2,
   }
-  s.pages.push({ items: [delivered('synthetic-b', 1)], next_after_seq: 1 })
+  s.pages.push({ items: [deliveredRaw('synthetic-b', 1)], next_after_seq: 1 })
   await s.poll()
   assert.equal(s.page.afterSeq.value, 1)
-  s.pages.push({ items: [delivered('synthetic-outgoing', 2)], next_after_seq: 2 })
+  s.pages.push({ items: [deliveredRaw('synthetic-outgoing', 2)], next_after_seq: 2 })
   await s.poll()
   assert.equal(s.page.afterSeq.value, 2)
   assert.equal(s.page.timeline.value.length, 2)
@@ -371,7 +384,7 @@ test('REQ-018：离开停止轮询、清正文与输入；迟到发送不写回�
 })
 test('REQ-018：失去会话读取权或403时移除旧时间线和发送资格，账号变化清回执', async () => {
   const s = await setup()
-  s.pages.push({ items: [delivered('synthetic-readable', 1)], next_after_seq: 1 })
+  s.pages.push({ items: [deliveredRaw('synthetic-readable', 1)], next_after_seq: 1 })
   await s.poll()
   assert.equal(s.page.timeline.value.length, 1)
   s.setReads(async () => {
@@ -389,6 +402,7 @@ test('REQ-007：会话在分页后才能授权；游标循环拒绝，离开后�
   const api = await loadRuntime(
     readFileSync(new URL('../src/api/chat.ts', import.meta.url), 'utf8'),
     {
+      displayFriendly,
       request: async (input: Transport) => {
         calls.push(input)
         return input.url.includes('cursor=')
@@ -463,6 +477,7 @@ async function setupInbox() {
   const api = await loadRuntime(
     readFileSync(new URL('../src/api/chat.ts', import.meta.url), 'utf8'),
     {
+      displayFriendly,
       request: async (input: Transport) => {
         calls.push(structuredClone(input))
         if (input.method) return command(input)
@@ -560,7 +575,7 @@ test('REQ-006：通知分页只传本人游标，409重读不重发，离开或�
 
 test('REQ-018：同账号更换令牌立即清输入与回执，从零重读消息且丢弃旧请求', async () => {
   const s = await setup()
-  s.pages.push({ items: [delivered('synthetic-old', 7)], next_after_seq: 7 })
+  s.pages.push({ items: [deliveredRaw('synthetic-old', 7)], next_after_seq: 7 })
   await s.poll()
   s.store.track(conversation.id, {
     message_id: 'synthetic-pending',
@@ -641,7 +656,7 @@ test('REQ-006/018：通知游标循环时清投影并停止翻页，刷新后可
 test('REQ-007：静默空轮询复用列表，上翻时新消息不抢滚动位置或输入', async () => {
   const s = await setup()
   s.pages.push({
-    items: Array.from({ length: 50 }, (_, i) => delivered(`history-${i}`, i + 1)),
+    items: Array.from({ length: 50 }, (_, i) => deliveredRaw(`history-${i}`, i + 1)),
     next_after_seq: 50,
   })
   await s.poll()
@@ -651,7 +666,7 @@ test('REQ-007：静默空轮询复用列表，上翻时新消息不抢滚动位�
   assert.equal(s.page.timeline.value, previous)
   s.page.nearBottom.value = false
   s.page.scrollTarget.value = ''
-  s.pages.push({ items: [delivered('second', 51)], next_after_seq: 51 })
+  s.pages.push({ items: [deliveredRaw('second', 51)], next_after_seq: 51 })
   await s.poll()
   assert.equal(s.page.scrollTarget.value, '')
   assert.equal(s.page.unreadArrival.value, true)

@@ -312,7 +312,7 @@ onUnload(leave)
           :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
           >举报此消息</navigator
         >
-        <text class="text-muted text-sm">送达时间：{{ message.delivered_at }}</text>
+        <text class="text-muted text-sm">送达时间：{{ message.deliveredAtText }}</text>
       </view>
       <view id="chat-end" />
     </scroll-view>

@@ -1,13 +1,30 @@
 import { request } from '@/utils/request'
+import { displayFriendly } from '@/utils/time'
 import type {
   ConversationPage,
+  DeliveredMessage,
   MessageAccepted,
   MessageStatus,
   MessagesPage,
   NotificationPage,
   AppNotification,
+  RawDeliveredMessage,
+  RawMessagesPage,
 } from '@/types/chat'
 
+// 服务端时间只在接口层出现一次，页面拿到的消息自带展示文本，避免漏做时区换算。
+function adaptMessage(raw: RawDeliveredMessage): DeliveredMessage {
+  return {
+    viewer_is_sender: raw.viewer_is_sender,
+    message_id: raw.message_id,
+    delivery_seq: raw.delivery_seq,
+    body: raw.body,
+    submittedAtText: displayFriendly(raw.submitted_at),
+    submittedAtRaw: raw.submitted_at,
+    deliveredAtText: displayFriendly(raw.delivered_at),
+    deliveredAtRaw: raw.delivered_at,
+  }
+}
 const cursorQuery = (cursor?: string) => (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '')
 export const listConversations = (cursor?: string) =>
   request<ConversationPage>({ url: `/me/conversations${cursorQuery(cursor)}` })
@@ -28,10 +45,12 @@ export async function findConversation(id: string, isCurrent: () => boolean = ()
   } while (cursor)
   return null
 }
-export const listMessages = (id: string, afterSeq = 0) =>
-  request<MessagesPage>({
+export async function listMessages(id: string, afterSeq = 0): Promise<MessagesPage> {
+  const page = await request<RawMessagesPage>({
     url: `/conversations/${encodeURIComponent(id)}/messages?after_seq=${afterSeq}&limit=50`,
   })
+  return { items: page.items.map(adaptMessage), next_after_seq: page.next_after_seq }
+}
 export function sendMessage(
   id: string,
   input: { client_message_id: string; body: string; expected_write_epoch: number },
