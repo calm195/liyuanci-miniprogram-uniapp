@@ -220,7 +220,13 @@ onUnload(leave)
   <AppPage>
     <text class="title">心愿详情</text>
     <text v-if="config.useMock" class="notice">合成演示 · 详情只读，不发送 API</text>
-    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新详情</button>
+    <button
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-wish-detail-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-wish-detail-index-button-1')"
+    >
+      刷新详情
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <text>当前状态：{{ wishStateLabels[currentWish.current_state] || '未知状态' }}</text>
@@ -278,14 +284,16 @@ onUnload(leave)
       <button
         v-if="allowed('withdraw')"
         :disabled="writing || busy"
-        @click="runPageAction(() => act('withdraw'))"
+        :loading="isPageActionPending('pages-wish-detail-index-button-2')"
+        @click="runPageAction(() => act('withdraw'), 'pages-wish-detail-index-button-2')"
       >
         撤下心愿
       </button>
       <button
         v-if="allowed('complete')"
         :disabled="writing || busy"
-        @click="runPageAction(() => act('complete'))"
+        :loading="isPageActionPending('pages-wish-detail-index-button-3')"
+        @click="runPageAction(() => act('complete'), 'pages-wish-detail-index-button-3')"
       >
         确认实现
       </button>
@@ -293,7 +301,10 @@ onUnload(leave)
         <button
           v-if="currentWish.current_state === 'realized'"
           :disabled="writing || busy"
-          @click="runPageAction(() => act('rollback', 'matching'))"
+          :loading="isPageActionPending('pages-wish-detail-index-button-4')"
+          @click="
+            runPageAction(() => act('rollback', 'matching'), 'pages-wish-detail-index-button-4')
+          "
         >
           回退为应愿中（保留原应愿人）
         </button>
@@ -308,7 +319,10 @@ onUnload(leave)
           </view>
           <button
             :disabled="writing || busy"
-            @click="runPageAction(() => act('rollback', 'published'))"
+            :loading="isPageActionPending('pages-wish-detail-index-button-5')"
+            @click="
+              runPageAction(() => act('rollback', 'published'), 'pages-wish-detail-index-button-5')
+            "
           >
             回退并解除当前匹配
           </button>
@@ -317,7 +331,8 @@ onUnload(leave)
       <button
         v-if="allowed('exception-exit')"
         :disabled="writing || busy"
-        @click="runPageAction(() => act('exception-exit'))"
+        :loading="isPageActionPending('pages-wish-detail-index-button-6')"
+        @click="runPageAction(() => act('exception-exit'), 'pages-wish-detail-index-button-6')"
       >
         异常退出
       </button>

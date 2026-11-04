@@ -15,7 +15,10 @@ const store = useUserStore()
 const name = ref('')
 const studentNumber = ref('')
 const asset = ref<StudentCardAsset | null>(null)
-const busy = ref(false)
+const uploading = ref(false)
+const submitting = ref(false)
+// 各动作单独显示进度；共享互斥只用于禁止并行写入，不能让无关按钮同时转圈。
+const busy = computed(() => uploading.value || submitting.value)
 const currentReview = ref<Verification | null>(null)
 const reviewState = ref<'unknown' | 'absent' | 'present'>('unknown')
 const refreshing = ref(false)
@@ -65,7 +68,8 @@ function clearPrivateData() {
   reviewEpoch.value = -1
   reviewOwner.value = ''
   error.value = ''
-  busy.value = false
+  uploading.value = false
+  submitting.value = false
   currentReview.value = null
   reviewState.value = 'unknown'
   refreshing.value = false
@@ -120,7 +124,7 @@ async function chooseCard() {
   }
   const current = generation
   const epoch = session.getEpoch()
-  busy.value = true
+  uploading.value = true
   try {
     // 微信选图会临时隐藏页面，此时保留内存表单；选图结束后恢复正常离开清理。
     selectingCard = true
@@ -155,7 +159,7 @@ async function chooseCard() {
     if (visible && current === generation && epoch === session.getEpoch())
       error.value = failure instanceof Error ? failure.message : '未完成选图或上传，请重试。'
   } finally {
-    if (current === generation) busy.value = false
+    if (current === generation) uploading.value = false
   }
 }
 // 暂用用户触发的单次查询，不猜测自动查询周期或恢复接口。
@@ -199,7 +203,7 @@ async function submitReal() {
   const current = generation
   const epoch = session.getEpoch()
   const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
-  busy.value = true
+  submitting.value = true
   error.value = ''
   try {
     const input = verificationInput(name.value, studentNumber.value, asset.value, {
@@ -229,7 +233,7 @@ async function submitReal() {
       error.value = '申请未完成，请重新读取审核记录后操作。'
     }
   } finally {
-    if (current === generation) busy.value = false
+    if (current === generation) submitting.value = false
   }
 }
 function scanDemo(status: 'approved' | 'rejected') {
@@ -278,6 +282,15 @@ onUnload(() => {
     >
     <text v-else>学生卡仅用于学生资格审核。离开页面会清除已填写资料；待审不承诺完成时限。</text>
     <view class="card">
+      <text v-if="uploading || submitting || refreshing || querying" class="notice">{{
+        uploading
+          ? '正在选择或上传学生卡，其他操作暂不可用。'
+          : submitting
+            ? '正在提交认证申请，其他操作暂不可用。'
+            : refreshing
+              ? '正在读取审核记录，请稍候。'
+              : '正在查询图片扫描状态，请稍候。'
+      }}</text>
       <text>账号状态：{{ store.label }}</text>
       <text v-if="(config.useMock ? store.verification : currentReview)?.reason">
         驳回原因：{{ (config.useMock ? store.verification : currentReview)?.reason }}
@@ -297,8 +310,8 @@ onUnload(() => {
         }}</text>
         <button
           :disabled="refreshing || busy || querying"
-          :loading="refreshing"
-          @click="runPageAction(() => refreshReview())"
+          :loading="refreshing && !submitting"
+          @click="runPageAction(() => refreshReview(), 'pages-verification-index-button-1')"
         >
           重新读取审核记录
         </button>
@@ -335,8 +348,8 @@ onUnload(() => {
           (!config.useMock && !canUpload) ||
           (config.useMock && (demoStatus === 'pending' || demoStatus === 'approved'))
         "
-        :loading="busy"
-        @click="runPageAction(() => chooseCard())"
+        :loading="uploading"
+        @click="runPageAction(() => chooseCard(), 'pages-verification-index-button-2')"
       >
         {{ config.useMock ? '选择合成学生卡' : '选择并上传学生卡' }}
       </button>
@@ -359,25 +372,40 @@ onUnload(() => {
         v-if="!config.useMock && asset"
         :disabled="querying || busy"
         :loading="querying"
-        @click="runPageAction(() => queryAsset())"
+        @click="runPageAction(() => queryAsset(), 'pages-verification-index-button-3')"
       >
         查询图片扫描状态
       </button>
       <view v-if="config.useMock && asset?.scan_status === 'pending'">
-        <button @click="runPageAction(() => scanDemo('approved'))">演示：扫描通过</button>
-        <button @click="runPageAction(() => scanDemo('rejected'))">演示：扫描失败</button>
+        <button
+          @click="runPageAction(() => scanDemo('approved'), 'pages-verification-index-button-4')"
+        >
+          演示：扫描通过
+        </button>
+        <button
+          @click="runPageAction(() => scanDemo('rejected'), 'pages-verification-index-button-5')"
+        >
+          演示：扫描失败
+        </button>
       </view>
       <button
         :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
-        @click="runPageAction(() => submit())"
+        :loading="submitting"
+        @click="runPageAction(() => submit(), 'pages-verification-index-button-6')"
       >
         {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
       </button>
       <text v-if="error">{{ error }}</text>
       <text v-if="demoMessage">{{ demoMessage }}</text>
       <view v-if="config.useMock && demoStatus === 'pending'">
-        <button @click="runPageAction(() => reviewDemo(false))">演示：人工驳回</button>
-        <button @click="runPageAction(() => reviewDemo(true))">演示：人工通过</button>
+        <button
+          @click="runPageAction(() => reviewDemo(false), 'pages-verification-index-button-7')"
+        >
+          演示：人工驳回
+        </button>
+        <button @click="runPageAction(() => reviewDemo(true), 'pages-verification-index-button-8')">
+          演示：人工通过
+        </button>
       </view>
     </view>
   </AppPage>

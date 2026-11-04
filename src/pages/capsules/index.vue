@@ -45,7 +45,13 @@ onShow(() => {
     <navigator url="/pages/capsules/create">写给未来的自己</navigator>
     <navigator url="/pages/whispers/help">解忧与公共援助</navigator>
     <navigator url="/pages/whispers/notifications">悄悄鲤通知</navigator>
-    <button :disabled="locked" @click="runPageAction(() => load())">刷新列表</button>
+    <button
+      :disabled="locked"
+      :loading="isPageActionPending('pages-capsules-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-capsules-index-button-1')"
+    >
+      刷新列表
+    </button>
     <text v-if="ready && !items.length">当前页暂无胶囊。</text>
     <view v-for="item in items" :key="item.id" class="card">
       <text>{{ capsuleStatus(item) }}</text>
@@ -54,7 +60,12 @@ onShow(() => {
         >读取当前详情与管理</navigator
       >
     </view>
-    <button v-if="cursor" :disabled="locked" @click="runPageAction(() => load(true))">
+    <button
+      v-if="cursor"
+      :disabled="locked"
+      :loading="isPageActionPending('pages-capsules-index-button-2')"
+      @click="runPageAction(() => load(true), 'pages-capsules-index-button-2')"
+    >
       加载下一页
     </button>
     <text v-if="error" class="error">{{ error }}</text>

@@ -204,7 +204,11 @@ onUnload(leave)
     <text class="title">举报内容</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text>举报受理后由平台核查，请选择类型并说明情况。</text>
-    <button :disabled="busy || writing || uncertain" @click="runPageAction(() => load())">
+    <button
+      :disabled="busy || writing || uncertain"
+      :loading="isPageActionPending('pages-report-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-report-index-button-1')"
+    >
       重新核验
     </button>
     <view v-if="ready && scoped" class="card">
@@ -212,7 +216,10 @@ onUnload(leave)
         v-for="item in types"
         :key="item.code"
         :disabled="writing || uncertain || finished"
-        @click="runPageAction(() => (code = item.code))"
+        :loading="isPageActionPending('pages-report-index-button-2' + ':' + item.code)"
+        @click="
+          runPageAction(() => (code = item.code), 'pages-report-index-button-2' + ':' + item.code)
+        "
       >
         {{ code === item.code ? '已选：' : '' }}{{ item.label }}
       </button>
@@ -224,7 +231,11 @@ onUnload(leave)
         :disabled="writing || uncertain || finished"
         placeholder="补充说明（可不填）"
       />
-      <button :disabled="busy || writing || !maySubmit" @click="runPageAction(() => submit())">
+      <button
+        :disabled="busy || writing || !maySubmit"
+        :loading="isPageActionPending('pages-report-index-button-3')"
+        @click="runPageAction(() => submit(), 'pages-report-index-button-3')"
+      >
         {{ uncertain ? '重试同一次举报' : '提交举报' }}
       </button>
     </view>

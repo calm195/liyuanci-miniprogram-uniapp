@@ -52,10 +52,20 @@ function pageQuery(query: { cursor?: string; limit?: number }, maximum: number) 
 }
 export function validResourceResponse(operation: Operation, response: RequestResponse): boolean {
   const spec = resourceOperations[operation]
-  const cache = Object.entries(response.header ?? {}).find(
+  const cache = Object.entries(response.header ?? {}).filter(
     ([k]) => k.toLowerCase() === 'cache-control',
-  )?.[1]
-  if (typeof cache !== 'string' || cache.toLowerCase().trim() !== 'no-store') return false
+  )
+  // 代理与应用都可能发送 no-store，微信会将同名响应头合并为逗号列表。
+  // 仅接受非空且全部为 no-store 的指令；未知或冲突指令仍按契约失败关闭。
+  if (
+    !cache.length ||
+    !cache.every(
+      ([, value]) =>
+        typeof value === 'string' &&
+        value.split(',').every((directive) => directive.trim().toLowerCase() === 'no-store'),
+    )
+  )
+    return false
   if (response.statusCode === 200) return valid(spec.output, response.data)
   const body = response.data
   const errors: Readonly<Record<string, readonly string[]>> = spec.errors

@@ -167,7 +167,13 @@ onShow(() => {
     <text class="title">{{ id ? '管理我的树洞' : '写一篇树洞' }}</text>
     <navigator url="/pages/whispers/help">解忧与公共援助（离开会清空未保存正文）</navigator>
     <navigator url="/pages/whispers/mine">我的记录</navigator>
-    <button :disabled="locked" @click="runPageAction(load)">刷新状态（清空未保存修改）</button>
+    <button
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-editor-button-1')"
+      @click="runPageAction(load, 'pages-whispers-editor-button-1')"
+    >
+      刷新状态（清空未保存修改）
+    </button>
     <text v-if="record">{{ whisperStates[record.status] }}</text>
     <text v-if="record?.review_result?.reason">审核原因：{{ record.review_result.reason }}</text>
     <text v-if="record?.review_result?.revision_suggestion"
@@ -202,24 +208,36 @@ onShow(() => {
       :disabled="locked"
     />
     <text v-if="identityNotice">{{ identityNotice }}</text>
-    <button v-if="canSave" :disabled="locked" @click="runPageAction(save)">
+    <button
+      v-if="canSave"
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-editor-button-2')"
+      @click="runPageAction(save, 'pages-whispers-editor-button-2')"
+    >
       保存草稿（不会提交）
     </button>
     <text v-if="allowed('whisperPostSubmit')">提交即授权：当前版本审核合格后自动公开。</text>
-    <button v-if="allowed('whisperPostSubmit')" :disabled="locked" @click="runPageAction(submit)">
+    <button
+      v-if="allowed('whisperPostSubmit')"
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-editor-button-3')"
+      @click="runPageAction(submit, 'pages-whispers-editor-button-3')"
+    >
       显式提交审核
     </button>
     <button
       v-if="allowed('whisperPostWithdraw')"
       :disabled="locked"
-      @click="runPageAction(withdraw)"
+      :loading="isPageActionPending('pages-whispers-editor-button-4')"
+      @click="runPageAction(withdraw, 'pages-whispers-editor-button-4')"
     >
       撤回帖子
     </button>
     <button
       v-if="allowed('whisperCommentsSetting')"
       :disabled="locked"
-      @click="runPageAction(commentsSetting)"
+      :loading="isPageActionPending('pages-whispers-editor-button-5')"
+      @click="runPageAction(commentsSetting, 'pages-whispers-editor-button-5')"
     >
       {{ record?.comments_open ? '关闭评论' : '恢复评论' }}
     </button>
@@ -227,7 +245,8 @@ onShow(() => {
     <button
       v-if="retryReady"
       :disabled="(locked && !retryReady) || writing"
-      @click="runPageAction(page.retry)"
+      :loading="isPageActionPending('pages-whispers-editor-button-6')"
+      @click="runPageAction(page.retry, 'pages-whispers-editor-button-6')"
     >
       使用原请求重试
     </button>

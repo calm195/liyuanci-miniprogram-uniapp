@@ -287,7 +287,13 @@ onUnload(leave)
     <navigator url="/pages/inbox/index">聊天与通知</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text v-if="currentConversation">{{ canSend ? '当前可发送消息' : '当前会话只读' }}</text>
-    <button :disabled="reading || sending" @click="runPageAction(() => refresh())">刷新聊天</button>
+    <button
+      :disabled="reading || sending"
+      :loading="isPageActionPending('pages-chat-index-button-1')"
+      @click="runPageAction(() => refresh(), 'pages-chat-index-button-1')"
+    >
+      刷新聊天
+    </button>
     <scroll-view
       class="chat-timeline"
       scroll-y
@@ -316,12 +322,19 @@ onUnload(leave)
       </view>
       <view id="chat-end" />
     </scroll-view>
-    <button v-if="unreadArrival" @click="runPageAction(scrollLatest)">有新消息，查看最新</button>
+    <button
+      v-if="unreadArrival"
+      :loading="isPageActionPending('pages-chat-index-button-2')"
+      @click="runPageAction(scrollLatest, 'pages-chat-index-button-2')"
+    >
+      有新消息，查看最新
+    </button>
     <text v-if="currentConversation && !timeline.length && !reading">暂无已送达消息</text>
     <button
       v-if="hasMore && currentConversation"
       :disabled="reading || sending"
-      @click="runPageAction(() => refresh())"
+      :loading="isPageActionPending('pages-chat-index-button-3')"
+      @click="runPageAction(() => refresh(), 'pages-chat-index-button-3')"
     >
       继续读取消息
     </button>
@@ -348,16 +361,25 @@ onUnload(leave)
       <button
         v-if="!attempt"
         :disabled="!canSend || reading || sending"
-        @click="runPageAction(() => send())"
+        :loading="isPageActionPending('pages-chat-index-button-4')"
+        @click="runPageAction(() => send(), 'pages-chat-index-button-4')"
       >
         发送
       </button>
       <template v-else>
         <text>发送结果未确认，请重试或先核对聊天记录。</text>
-        <button :disabled="!canSend || reading || sending" @click="runPageAction(() => send(true))">
+        <button
+          :disabled="!canSend || reading || sending"
+          :loading="isPageActionPending('pages-chat-index-button-5')"
+          @click="runPageAction(() => send(true), 'pages-chat-index-button-5')"
+        >
           重试同一条消息
         </button>
-        <button :disabled="sending" @click="runPageAction(() => abandonAttempt())">
+        <button
+          :disabled="sending"
+          :loading="isPageActionPending('pages-chat-index-button-6')"
+          @click="runPageAction(() => abandonAttempt(), 'pages-chat-index-button-6')"
+        >
           放弃本次重试
         </button>
       </template>

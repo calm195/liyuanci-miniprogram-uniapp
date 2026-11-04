@@ -159,7 +159,12 @@ onShow(() => {
       ><navigator url="/pages/safety/index">警告与申诉</navigator></view
     >
     <text v-if="busy">正在加载资料…</text><text v-if="notice">{{ notice }}</text>
-    <button v-if="!pending" :disabled="busy || writing" @click="runPageAction(() => load())">
+    <button
+      v-if="!pending"
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-resources-detail-button-1')"
+      @click="runPageAction(() => load(), 'pages-resources-detail-button-1')"
+    >
       刷新资料
     </button>
     <template v-if="visible && detail">
@@ -170,10 +175,18 @@ onShow(() => {
         <text>更新时间：{{ beijingTime(detail.updated_at) }}（北京时间）</text>
         <text class="resource-text">下载链接：{{ detail.download_url }}</text>
         <text>提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
-        <button :disabled="writing || !!pending || busy" @click="runPageAction(() => copy(false))">
+        <button
+          :disabled="writing || !!pending || busy"
+          :loading="isPageActionPending('pages-resources-detail-button-2')"
+          @click="runPageAction(() => copy(false), 'pages-resources-detail-button-2')"
+        >
           复制下载信息
         </button>
-        <button :disabled="writing || !!pending || busy" @click="runPageAction(() => copy(true))">
+        <button
+          :disabled="writing || !!pending || busy"
+          :loading="isPageActionPending('pages-resources-detail-button-3')"
+          @click="runPageAction(() => copy(true), 'pages-resources-detail-button-3')"
+        >
           仅复制链接
         </button>
       </view>
@@ -185,7 +198,13 @@ onShow(() => {
           :key="option.kind"
           :disabled="!canFeedback || writing || !!pending"
           :class="{ chosen: choice === option.kind }"
-          @click="runPageAction(() => select(option.kind))"
+          :loading="isPageActionPending('pages-resources-detail-button-4' + ':' + option.kind)"
+          @click="
+            runPageAction(
+              () => select(option.kind),
+              'pages-resources-detail-button-4' + ':' + option.kind,
+            )
+          "
         >
           {{ choice === option.kind ? '已选择：' : '' }}{{ option.label }}
         </button>
@@ -198,13 +217,18 @@ onShow(() => {
         <button
           v-if="!pending"
           :disabled="!canFeedback || !choice || writing || busy"
-          @click="runPageAction(() => submit())"
+          :loading="isPageActionPending('pages-resources-detail-button-5')"
+          @click="runPageAction(() => submit(), 'pages-resources-detail-button-5')"
         >
           提交反馈
         </button>
         <template v-else
           ><text>反馈结果尚未确认，重试将核实同一次提交。</text
-          ><button :disabled="writing || busy" @click="runPageAction(() => submit(true))">
+          ><button
+            :disabled="writing || busy"
+            :loading="isPageActionPending('pages-resources-detail-button-6')"
+            @click="runPageAction(() => submit(true), 'pages-resources-detail-button-6')"
+          >
             重试本次反馈
           </button></template
         >

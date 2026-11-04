@@ -64,7 +64,13 @@ onShow(() => {
     <navigator url="/pages/whispers/help">解忧与公共援助</navigator>
     <navigator url="/pages/care/index">本人关怀与援助</navigator>
     <navigator url="/pages/safety/index">警告与申诉</navigator>
-    <button :disabled="locked" @click="runPageAction(load)">刷新当前状态</button>
+    <button
+      :disabled="locked"
+      :loading="isPageActionPending('pages-capsules-detail-button-1')"
+      @click="runPageAction(load, 'pages-capsules-detail-button-1')"
+    >
+      刷新当前状态
+    </button>
     <view v-if="record" class="card">
       <text>{{ capsuleStatus(record) }}</text>
       <text>预约时间（北京时间）：{{ beijingTime(record.unlock_at) }}</text>
@@ -84,19 +90,30 @@ onShow(() => {
       <button
         v-if="allowed('whisperCapsuleCancel')"
         :disabled="locked"
-        @click="runPageAction(() => command('whisperCapsuleCancel'))"
+        :loading="isPageActionPending('pages-capsules-detail-button-2')"
+        @click="
+          runPageAction(() => command('whisperCapsuleCancel'), 'pages-capsules-detail-button-2')
+        "
       >
         取消此胶囊并清除普通副本
       </button>
       <button
         v-if="allowed('whisperCapsuleDelete')"
         :disabled="locked"
-        @click="runPageAction(() => command('whisperCapsuleDelete'))"
+        :loading="isPageActionPending('pages-capsules-detail-button-3')"
+        @click="
+          runPageAction(() => command('whisperCapsuleDelete'), 'pages-capsules-detail-button-3')
+        "
       >
         删除此胶囊普通副本
       </button>
     </view>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-capsules-detail-button-4')"
+      @click="runPageAction(page.retry, 'pages-capsules-detail-button-4')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text

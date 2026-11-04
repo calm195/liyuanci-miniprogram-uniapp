@@ -109,7 +109,13 @@ onUnload(leave)
       ><button class="selected">还愿墙</button
       ><navigator url="/pages/wishes/index?own=1" open-type="redirect">我的心愿</navigator></view
     >
-    <button :disabled="busy" @click="runPageAction(() => load())">刷新</button>
+    <button
+      :disabled="busy"
+      :loading="isPageActionPending('pages-stories-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-stories-index-button-1')"
+    >
+      刷新
+    </button>
     <navigator url="/pages/wishes/index?own=1">从我的心愿管理还愿故事</navigator>
     <text v-if="busy">加载中…</text>
     <view v-for="content in rows" :key="content.id" class="card">
@@ -122,7 +128,12 @@ onUnload(leave)
       >
     </view>
     <text v-if="!busy && !error && !rows.length">暂无可展示的公开故事</text>
-    <button v-if="cursor && rows.length" :disabled="busy" @click="runPageAction(() => load(true))">
+    <button
+      v-if="cursor && rows.length"
+      :disabled="busy"
+      :loading="isPageActionPending('pages-stories-index-button-2')"
+      @click="runPageAction(() => load(true), 'pages-stories-index-button-2')"
+    >
       加载下一页
     </button>
     <text v-if="error" class="error">{{ error }}</text>

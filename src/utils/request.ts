@@ -26,6 +26,26 @@ type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete
   // 模块可按自己的正式契约验证封装、状态码与响应头。
   validateResponse?: (response: RequestResponse) => boolean
 }
+// 仅将明确的学生卡限制错误转换为可操作提示，不直接展示服务器内部消息。
+function responseErrorMessage(
+  status: number,
+  code: string | undefined,
+  path: string,
+  auth: boolean | undefined,
+) {
+  if (status === 401)
+    return auth === false ? '微信登录凭据无效，请重新登录' : '登录已过期，请重新登录'
+  if (path === '/me/student-card-assets') {
+    if (status === 413 || code === 'STUDENT_CARD_IMAGE_TOO_LARGE')
+      return '图片超过服务器大小上限，请压缩或裁剪后重新上传'
+    if (code === 'STUDENT_CARD_NORMALIZED_IMAGE_TOO_LARGE')
+      return '图片处理后超过服务器大小上限，请裁剪或降低分辨率后重新上传'
+    if (code === 'STUDENT_CARD_PIXELS_EXCEEDED')
+      return '图片像素超过服务器上限，请降低分辨率后重新上传'
+  }
+  return '请求未完成，请稍后重试'
+}
+
 // 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
 function isAllowedApiBaseUrl(value: string): boolean {
   if (/^https:\/\/[^/]+(?:\/[^?#]*)?$/.test(value)) return true
@@ -105,11 +125,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           if (response.statusCode < 200 || response.statusCode >= 300 || body?.code !== 0) {
             reject(
               new RequestError(
-                response.statusCode === 401
-                  ? options.auth === false
-                    ? '微信登录凭据无效，请重新登录'
-                    : '登录已过期，请重新登录'
-                  : '请求未完成，请稍后重试',
+                responseErrorMessage(response.statusCode, body?.error_code, pathname, options.auth),
                 body?.code || response.statusCode,
                 body?.error_code,
                 body?.request_id,

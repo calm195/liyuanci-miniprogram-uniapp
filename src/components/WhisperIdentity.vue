@@ -51,14 +51,26 @@ function pick(field: keyof WhisperTagsDraft, event: { detail: { value: string | 
 <template>
   <view class="card">
     <text>身份展示</text>
-    <button :disabled="disabled" @click="runPageAction(() => choose('anonymous'))">
+    <button
+      :disabled="disabled"
+      :loading="isPageActionPending('components-WhisperIdentity-button-1')"
+      @click="runPageAction(() => choose('anonymous'), 'components-WhisperIdentity-button-1')"
+    >
       {{ mode === 'anonymous' ? '已选：完全匿名' : '完全匿名' }}
     </button>
-    <button :disabled="disabled || !semi" @click="runPageAction(() => choose('semi'))">
+    <button
+      :disabled="disabled || !semi"
+      :loading="isPageActionPending('components-WhisperIdentity-button-2')"
+      @click="runPageAction(() => choose('semi'), 'components-WhisperIdentity-button-2')"
+    >
       {{ mode === 'semi' ? '已选：半匿名' : '半匿名' }}
     </button>
     <text v-if="!semi">受控年级资料未就绪，半匿名暂不可选。</text>
-    <button :disabled="disabled || !nickname?.active" @click="runPageAction(() => choose('named'))">
+    <button
+      :disabled="disabled || !nickname?.active"
+      :loading="isPageActionPending('components-WhisperIdentity-button-3')"
+      @click="runPageAction(() => choose('named'), 'components-WhisperIdentity-button-3')"
+    >
       {{ mode === 'named' ? '已选：树洞昵称' : '树洞昵称' }}
     </button>
     <text v-if="!nickname?.active">仅已审昵称可用，待审候选不能用于发布。</text>

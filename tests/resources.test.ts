@@ -50,6 +50,43 @@ test('REQ-023：正式学生schema字段/约束完整，正反夹具和31个规�
   }
   assert.equal(beijingTime('2026-10-29T20:15:00.123456Z'), '2026-10-30 04:15:00')
 })
+test('资料响应接受代理重复的no-store，仍拒绝缓存冲突与非法正文', async () => {
+  session.setToken('synthetic-resource-cache-tests')
+  const validBody = envelope(sample('resourceCategoriesList'))
+  const api = await resourcesRuntime(async () => validBody)
+  for (const header of [
+    { 'Cache-Control': 'no-store, no-store' },
+    { 'cache-control': ' No-Store , NO-STORE ' },
+    { 'Cache-Control': 'no-store', 'cache-control': 'no-store' },
+  ]) {
+    assert.equal(
+      api.validResourceResponse('resourceCategoriesList', { ...validBody, header }),
+      true,
+    )
+    assert.equal(
+      api.validResourceResponse('resourceCategoriesList', {
+        ...validBody,
+        header,
+        data: { ...validBody.data, unexpected: 'synthetic-unknown-field' },
+      }),
+      false,
+    )
+  }
+  for (const header of [
+    {},
+    { 'Cache-Control': '' },
+    { 'Cache-Control': 'no-store,' },
+    { 'Cache-Control': 'no-store, public' },
+    { 'Cache-Control': 'no-store, max-age=60' },
+    { 'Cache-Control': 'no-store', 'cache-control': 'public' },
+    { 'Cache-Control': ['no-store'] },
+  ]) {
+    assert.equal(
+      api.validResourceResponse('resourceCategoriesList', { ...validBody, header }),
+      false,
+    )
+  }
+})
 test('REQ-023：五接口完整路径、200封装、错误码配对、no-store及未知字段拒绝', async () => {
   session.setToken('synthetic-resource-tests')
   let response: {

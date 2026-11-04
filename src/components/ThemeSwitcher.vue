@@ -11,7 +11,8 @@ const theme = useThemeStore()
         class="flex-1"
         :class="{ 'theme-selected': theme.mode === 'light' }"
         :aria-pressed="theme.mode === 'light'"
-        @click="runPageAction(() => theme.setMode('light'))"
+        :loading="isPageActionPending('components-ThemeSwitcher-button-1')"
+        @click="runPageAction(() => theme.setMode('light'), 'components-ThemeSwitcher-button-1')"
       >
         {{ theme.mode === 'light' ? '已选：亮色' : '亮色' }}
       </button>
@@ -19,7 +20,8 @@ const theme = useThemeStore()
         class="flex-1"
         :class="{ 'theme-selected': theme.mode === 'dark' }"
         :aria-pressed="theme.mode === 'dark'"
-        @click="runPageAction(() => theme.setMode('dark'))"
+        :loading="isPageActionPending('components-ThemeSwitcher-button-2')"
+        @click="runPageAction(() => theme.setMode('dark'), 'components-ThemeSwitcher-button-2')"
       >
         {{ theme.mode === 'dark' ? '已选：暗色' : '暗色' }}
       </button>

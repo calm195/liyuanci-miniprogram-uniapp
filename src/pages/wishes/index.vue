@@ -115,7 +115,7 @@ function tab(value: boolean) {
   if (writing.value) return
   own.value = value
   state.value = ''
-  void load()
+  return load()
 }
 function edit(wish?: WishResult) {
   if (writing.value) return
@@ -253,7 +253,7 @@ function selectFilter(
   if (kind === 'category') category.value = categories[index]?.value || ''
   if (kind === 'campus') campus.value = campuses[index]?.value || ''
   if (kind === 'state') state.value = (Object.keys(wishStateLabels)[index] as WishState) || ''
-  void load()
+  return load()
 }
 function clearProjection() {
   generation++
@@ -316,7 +316,8 @@ onUnload(leave)
       <button
         :class="{ selected: !own }"
         :disabled="writing"
-        @click="runPageAction(() => tab(false))"
+        :loading="isPageActionPending('pages-wishes-index-button-1')"
+        @click="runPageAction(() => tab(false), 'pages-wishes-index-button-1')"
       >
         心愿广场
       </button>
@@ -324,7 +325,8 @@ onUnload(leave)
       <button
         :class="{ selected: own }"
         :disabled="writing"
-        @click="runPageAction(() => tab(true))"
+        :loading="isPageActionPending('pages-wishes-index-button-2')"
+        @click="runPageAction(() => tab(true), 'pages-wishes-index-button-2')"
       >
         我的心愿
       </button>
@@ -394,10 +396,17 @@ onUnload(leave)
       <text>身份标签可不填写。</text>
       <button
         :disabled="writing || (!config.useMock && !config.wishWritesReady)"
-        @click="runPageAction(() => save())"
+        :loading="isPageActionPending('pages-wishes-index-button-3')"
+        @click="runPageAction(() => save(), 'pages-wishes-index-button-3')"
       >
         {{ config.useMock ? '保存合成草稿' : '保存草稿' }}</button
-      ><button :disabled="writing" @click="runPageAction(() => cancelEdit())">取消</button>
+      ><button
+        :disabled="writing"
+        :loading="isPageActionPending('pages-wishes-index-button-4')"
+        @click="runPageAction(() => cancelEdit(), 'pages-wishes-index-button-4')"
+      >
+        取消
+      </button>
     </view>
 
     <view v-else>
@@ -406,7 +415,13 @@ onUnload(leave)
           class="filter-chip"
           :class="{ selected: !category }"
           :disabled="writing"
-          @click="runPageAction(() => selectFilter('category', { detail: { value: 0 } }))"
+          :loading="isPageActionPending('pages-wishes-index-button-5')"
+          @click="
+            runPageAction(
+              () => selectFilter('category', { detail: { value: 0 } }),
+              'pages-wishes-index-button-5',
+            )
+          "
         >
           全部
         </button>
@@ -416,7 +431,13 @@ onUnload(leave)
           class="filter-chip"
           :class="{ selected: category === item.value }"
           :disabled="writing"
-          @click="runPageAction(() => selectFilter('category', { detail: { value: index + 1 } }))"
+          :loading="isPageActionPending('pages-wishes-index-button-6' + ':' + item.value)"
+          @click="
+            runPageAction(
+              () => selectFilter('category', { detail: { value: index + 1 } }),
+              'pages-wishes-index-button-6' + ':' + item.value,
+            )
+          "
         >
           {{ item.label }}
         </button>
@@ -437,7 +458,12 @@ onUnload(leave)
           @change="runPageAction(() => selectFilter('state', $event))"
           ><view>{{ state ? wishStateLabels[state] : '全部状态' }} ▾</view></picker
         >
-        <button class="small-link" :disabled="busy || writing" @click="runPageAction(() => load())">
+        <button
+          class="small-link"
+          :disabled="busy || writing"
+          :loading="isPageActionPending('pages-wishes-index-button-7')"
+          @click="runPageAction(() => load(), 'pages-wishes-index-button-7')"
+        >
           {{ busy ? '加载中…' : '刷新心愿' }}
         </button>
       </view>
@@ -455,13 +481,20 @@ onUnload(leave)
         <view v-if="!config.useMock && own">
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'putWishesIdContent')"
-            @click="runPageAction(() => edit(wish))"
+            :loading="isPageActionPending('pages-wishes-index-button-8' + ':' + wish.id)"
+            @click="runPageAction(() => edit(wish), 'pages-wishes-index-button-8' + ':' + wish.id)"
           >
             编辑
           </button>
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'deleteWishesIdDraft')"
-            @click="runPageAction(() => act(wish, 'delete'))"
+            :loading="isPageActionPending('pages-wishes-index-button-9' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'delete'),
+                'pages-wishes-index-button-9' + ':' + wish.id,
+              )
+            "
           >
             删除草稿
           </button>
@@ -469,13 +502,25 @@ onUnload(leave)
             :disabled="
               !config.wishWritesReady || writing || !allowed(wish, 'postWishesIdSubmitReview')
             "
-            @click="runPageAction(() => act(wish, 'submit'))"
+            :loading="isPageActionPending('pages-wishes-index-button-10' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'submit'),
+                'pages-wishes-index-button-10' + ':' + wish.id,
+              )
+            "
           >
             提交审核
           </button>
           <button
             :disabled="!config.wishWritesReady || writing || !allowed(wish, 'postWishesIdPublish')"
-            @click="runPageAction(() => act(wish, 'publish'))"
+            :loading="isPageActionPending('pages-wishes-index-button-11' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'publish'),
+                'pages-wishes-index-button-11' + ':' + wish.id,
+              )
+            "
           >
             上架
           </button>
@@ -483,37 +528,68 @@ onUnload(leave)
         <view v-if="config.useMock && own">
           <button
             v-if="['draft', 'rejected'].includes(wish.current_state)"
-            @click="runPageAction(() => edit(wish))"
+            :loading="isPageActionPending('pages-wishes-index-button-12' + ':' + wish.id)"
+            @click="runPageAction(() => edit(wish), 'pages-wishes-index-button-12' + ':' + wish.id)"
           >
             编辑
           </button>
           <button
             v-if="['draft', 'rejected'].includes(wish.current_state)"
-            @click="runPageAction(() => act(wish, 'submit'))"
+            :loading="isPageActionPending('pages-wishes-index-button-13' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'submit'),
+                'pages-wishes-index-button-13' + ':' + wish.id,
+              )
+            "
           >
             提交合成审核
           </button>
           <button
             v-if="wish.current_state === 'draft'"
-            @click="runPageAction(() => act(wish, 'delete'))"
+            :loading="isPageActionPending('pages-wishes-index-button-14' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'delete'),
+                'pages-wishes-index-button-14' + ':' + wish.id,
+              )
+            "
           >
             删除草稿
           </button>
           <button
             v-if="wish.current_state === 'pending_review'"
-            @click="runPageAction(() => act(wish, 'approve'))"
+            :loading="isPageActionPending('pages-wishes-index-button-15' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'approve'),
+                'pages-wishes-index-button-15' + ':' + wish.id,
+              )
+            "
           >
             演示：审核通过
           </button>
           <button
             v-if="wish.current_state === 'pending_review'"
-            @click="runPageAction(() => act(wish, 'reject'))"
+            :loading="isPageActionPending('pages-wishes-index-button-16' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'reject'),
+                'pages-wishes-index-button-16' + ':' + wish.id,
+              )
+            "
           >
             演示：审核驳回
           </button>
           <button
             v-if="wish.current_state === 'ready'"
-            @click="runPageAction(() => act(wish, 'publish'))"
+            :loading="isPageActionPending('pages-wishes-index-button-17' + ':' + wish.id)"
+            @click="
+              runPageAction(
+                () => act(wish, 'publish'),
+                'pages-wishes-index-button-17' + ':' + wish.id,
+              )
+            "
           >
             合成上架
           </button>
@@ -523,7 +599,8 @@ onUnload(leave)
       <button
         v-if="!config.useMock && cursor"
         :disabled="busy || writing"
-        @click="runPageAction(() => load(true))"
+        :loading="isPageActionPending('pages-wishes-index-button-18')"
+        @click="runPageAction(() => load(true), 'pages-wishes-index-button-18')"
       >
         加载更多
       </button>
@@ -531,7 +608,8 @@ onUnload(leave)
         v-if="config.useMock || (config.wishWritesReady && canCreate)"
         class="floating-compose"
         :disabled="writing"
-        @click="runPageAction(() => edit())"
+        :loading="isPageActionPending('pages-wishes-index-button-19')"
+        @click="runPageAction(() => edit(), 'pages-wishes-index-button-19')"
       >
         ＋ 许个心愿
       </button>

@@ -36,8 +36,20 @@ function retry() {
           mode="widthFix"
           @error="failed = true"
         />
-        <button v-if="failed" @click="runPageAction(() => retry())">重试加载</button>
-        <button v-else @click="runPageAction(() => preview())">查看大图</button>
+        <button
+          v-if="failed"
+          :loading="isPageActionPending('components-ResourceContribution-button-1')"
+          @click="runPageAction(() => retry(), 'components-ResourceContribution-button-1')"
+        >
+          重试加载
+        </button>
+        <button
+          v-else
+          :loading="isPageActionPending('components-ResourceContribution-button-2')"
+          @click="runPageAction(() => preview(), 'components-ResourceContribution-button-2')"
+        >
+          查看大图
+        </button>
       </template>
       <button @click="emit('close')">关闭</button>
     </view>

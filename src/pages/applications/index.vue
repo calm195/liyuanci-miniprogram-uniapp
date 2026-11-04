@@ -237,7 +237,7 @@ function selectStatus(event: { detail: { value: string | number } }) {
     (Object.keys(applicationStatusLabels)[Number(event.detail.value) - 1] as ApplicationStatus) ||
     ''
   notice.value = ''
-  void load()
+  return load()
 }
 function leave() {
   visible = false
@@ -285,7 +285,13 @@ onUnload(leave)
     >
       <view>状态：{{ status ? applicationStatusLabels[status] : '全部' }}</view>
     </picker>
-    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
+    <button
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-applications-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-applications-index-button-1')"
+    >
+      刷新
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(currentWish.id)}`"
@@ -303,7 +309,11 @@ onUnload(leave)
           placeholder="说说你希望如何帮助对方"
         />
         <text>{{ Array.from(message).length }}/100</text>
-        <button :disabled="busy || writing" @click="runPageAction(() => submit())">
+        <button
+          :disabled="busy || writing"
+          :loading="isPageActionPending('pages-applications-index-button-2')"
+          @click="runPageAction(() => submit(), 'pages-applications-index-button-2')"
+        >
           提交应愿申请
         </button>
       </template>
@@ -332,7 +342,13 @@ onUnload(leave)
         </navigator>
         <button
           :disabled="busy || writing || !mayAccept(application)"
-          @click="runPageAction(() => accept(application))"
+          :loading="isPageActionPending('pages-applications-index-button-3' + ':' + application.id)"
+          @click="
+            runPageAction(
+              () => accept(application),
+              'pages-applications-index-button-3' + ':' + application.id,
+            )
+          "
         >
           确定这位应愿人
         </button>
@@ -348,7 +364,13 @@ onUnload(leave)
         <button
           v-if="mayWithdraw(application)"
           :disabled="busy || writing"
-          @click="runPageAction(() => withdraw(application))"
+          :loading="isPageActionPending('pages-applications-index-button-4' + ':' + application.id)"
+          @click="
+            runPageAction(
+              () => withdraw(application),
+              'pages-applications-index-button-4' + ':' + application.id,
+            )
+          "
         >
           撤销申请
         </button>
@@ -357,7 +379,8 @@ onUnload(leave)
     <button
       v-if="scoped && cursor"
       :disabled="busy || writing"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-applications-index-button-5')"
+      @click="runPageAction(() => load(true), 'pages-applications-index-button-5')"
     >
       加载下一页
     </button>

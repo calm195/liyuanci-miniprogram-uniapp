@@ -133,7 +133,13 @@ onShow(() => {
     <text class="title">{{ id ? '修改我的暖评' : '写一条暖评' }}</text>
     <navigator url="/pages/whispers/help">解忧与公共援助（离开会清空未提交文字）</navigator>
     <navigator url="/pages/whispers/mine">我的记录</navigator>
-    <button :disabled="locked" @click="runPageAction(load)">刷新上下文（清空未提交修改）</button>
+    <button
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-comment-editor-button-1')"
+      @click="runPageAction(load, 'pages-whispers-comment-editor-button-1')"
+    >
+      刷新上下文（清空未提交修改）
+    </button>
     <view v-if="post" class="card"><text>当前父帖</text><WhisperContent :content="post" /></view>
     <text v-if="record">{{ whisperStates[record.status] }}</text>
     <text v-if="record?.review_result?.reason">原因：{{ record.review_result.reason }}</text>
@@ -173,12 +179,21 @@ onShow(() => {
       <text
         >文字仅在本页内存保留，不自动保存；提交即进入审核，审核合格后自动公开。修改会先隐藏旧暖评并重新审核。</text
       >
-      <button :disabled="locked" @click="runPageAction(submit)">
+      <button
+        :disabled="locked"
+        :loading="isPageActionPending('pages-whispers-comment-editor-button-2')"
+        @click="runPageAction(submit, 'pages-whispers-comment-editor-button-2')"
+      >
         {{ id ? '修改并重新送审' : '提交暖评审核' }}
       </button>
     </view>
     <text v-if="identityNotice">{{ identityNotice }}</text>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-comment-editor-button-3')"
+      @click="runPageAction(page.retry, 'pages-whispers-comment-editor-button-3')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text

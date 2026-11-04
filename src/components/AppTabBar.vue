@@ -12,7 +12,13 @@ defineProps<{ active: MainTab }>()
       class="tabbar-item"
       :class="{ 'tabbar-active': active === item.key }"
       :aria-label="item.label + (active === item.key ? '，当前页面' : '')"
-      @click="runPageAction(() => switchMainTab(item.key, active))"
+      :loading="isPageActionPending('components-AppTabBar-button-1' + ':' + item.key)"
+      @click="
+        runPageAction(
+          () => switchMainTab(item.key, active),
+          'components-AppTabBar-button-1' + ':' + item.key,
+        )
+      "
     >
       <AppIcon :name="item.icon" :active="active === item.key" :size="44" />
       <text class="ui-text">{{ item.label }}</text>

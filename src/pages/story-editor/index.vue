@@ -170,7 +170,11 @@ onUnload(leave)
 <template>
   <AppPage>
     <text class="title">我的还愿故事</text>
-    <button :disabled="busy || writing" @click="runPageAction(() => load())">
+    <button
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-story-editor-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-story-editor-index-button-1')"
+    >
       刷新状态（清空输入）
     </button>
     <text v-if="busy">加载中…</text>
@@ -209,14 +213,16 @@ onUnload(leave)
         <button
           v-if="allowed('submit')"
           :disabled="busy || writing"
-          @click="runPageAction(() => act('submit'))"
+          :loading="isPageActionPending('pages-story-editor-index-button-2')"
+          @click="runPageAction(() => act('submit'), 'pages-story-editor-index-button-2')"
         >
           提交还愿故事
         </button>
         <button
           v-if="allowed('update')"
           :disabled="busy || writing"
-          @click="runPageAction(() => act('update'))"
+          :loading="isPageActionPending('pages-story-editor-index-button-3')"
+          @click="runPageAction(() => act('update'), 'pages-story-editor-index-button-3')"
         >
           提交故事新版本
         </button>
@@ -224,7 +230,8 @@ onUnload(leave)
       <button
         v-if="allowed('withdraw')"
         :disabled="busy || writing"
-        @click="runPageAction(() => act('withdraw'))"
+        :loading="isPageActionPending('pages-story-editor-index-button-4')"
+        @click="runPageAction(() => act('withdraw'), 'pages-story-editor-index-button-4')"
       >
         撤回故事
       </button>

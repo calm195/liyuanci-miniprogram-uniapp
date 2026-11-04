@@ -98,12 +98,12 @@ function changeCategory(event: { detail: { value: string | number } }) {
   const index = Number(event.detail.value)
   if (!Number.isInteger(index) || index < 0 || index > categories.value.length) return
   category.value = categories.value[index - 1]?.id || ''
-  void search()
+  return search()
 }
 function resetSearch() {
   keyword.value = ''
   category.value = ''
-  void search()
+  return search()
 }
 function openContribution() {
   if (visible.value) contribution.value = true
@@ -126,7 +126,13 @@ onShow(() => {
     </view>
     <view v-if="error" class="card">
       <text>{{ error }}</text>
-      <button :disabled="busy" @click="runPageAction(() => load())">刷新重试</button>
+      <button
+        :disabled="busy"
+        :loading="isPageActionPending('pages-resources-index-button-1')"
+        @click="runPageAction(() => load(), 'pages-resources-index-button-1')"
+      >
+        刷新重试
+      </button>
       <navigator url="/pages/safety/index">警告与申诉</navigator>
     </view>
     <text v-if="busy" class="page-footnote">正在加载资料…</text
@@ -135,7 +141,11 @@ onShow(() => {
       <view class="card">
         <view class="section-heading"
           ><text class="section-title">发现资料</text
-          ><button class="small-link" @click="runPageAction(() => openContribution())">
+          ><button
+            class="small-link"
+            :loading="isPageActionPending('pages-resources-index-button-2')"
+            @click="runPageAction(() => openContribution(), 'pages-resources-index-button-2')"
+          >
             资料投稿 ＋
           </button></view
         >
@@ -150,9 +160,17 @@ onShow(() => {
           @confirm="runPageAction(() => search())"
         />
         <view class="flex gap-3"
-          ><button class="primary-button flex-1" @click="runPageAction(() => search())">
+          ><button
+            class="primary-button flex-1"
+            :loading="isPageActionPending('pages-resources-index-button-3')"
+            @click="runPageAction(() => search(), 'pages-resources-index-button-3')"
+          >
             搜索资料</button
-          ><button class="flex-1" @click="runPageAction(() => resetSearch())">
+          ><button
+            class="flex-1"
+            :loading="isPageActionPending('pages-resources-index-button-4')"
+            @click="runPageAction(() => resetSearch(), 'pages-resources-index-button-4')"
+          >
             清空筛选
           </button></view
         >
@@ -174,7 +192,12 @@ onShow(() => {
           ><text class="ui-text">查看介绍与下载信息</text><AppIcon name="arrow" :size="30"
         /></view>
       </navigator>
-      <button v-if="cursor" :disabled="busy" @click="runPageAction(() => search(true))">
+      <button
+        v-if="cursor"
+        :disabled="busy"
+        :loading="isPageActionPending('pages-resources-index-button-5')"
+        @click="runPageAction(() => search(true), 'pages-resources-index-button-5')"
+      >
         加载更多
       </button>
       <ResourceContribution :open="contribution" @close="contribution = false" />

@@ -3,7 +3,11 @@ import 'vue'
 declare module 'vue' {
   interface ComponentCustomProperties {
     pageIsVisible: boolean
+    pageInteractionMounted: boolean
     isPageVisible: boolean
-    runPageAction<T>(action: () => T): T | undefined
+    pageActionKey: string
+    pageActionEpoch: number
+    isPageActionPending(key: string): boolean
+    runPageAction<T>(action: () => T, key?: string): T | undefined
   }
 }

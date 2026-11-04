@@ -146,24 +146,47 @@ onShow(() => {
     <navigator url="/pages/whispers/mine">我的记录</navigator>
     <navigator url="/pages/safety/index">警告与申诉</navigator>
     <navigator url="/pages/care/index">本人关怀与援助</navigator>
-    <button :disabled="locked" @click="runPageAction(() => load())">刷新通知</button>
+    <button
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-notifications-button-1')"
+      @click="runPageAction(() => load(), 'pages-whispers-notifications-button-1')"
+    >
+      刷新通知
+    </button>
     <text v-if="ready">已加载通知中 {{ unread }} 条未读</text>
     <text v-if="ready && !items.length && !busy">当前页暂无模块通知。</text>
     <view v-for="item in items" :key="item.id" class="card">
       <text>{{ item.kind === 'whisper_comment' ? '树洞有暖评进展' : '本人胶囊有新进展' }}</text>
       <text>{{ item.read ? '已读' : '未读' }}</text>
-      <button :disabled="locked" @click="runPageAction(() => open(item))">
+      <button
+        :disabled="locked"
+        :loading="isPageActionPending('pages-whispers-notifications-button-2' + ':' + item.id)"
+        @click="
+          runPageAction(() => open(item), 'pages-whispers-notifications-button-2' + ':' + item.id)
+        "
+      >
         重验并查看当前内容
       </button>
       <button
         v-if="!item.read && canWhisperAction('Notification', item, 'whisperNotificationRead')"
         :disabled="locked"
-        @click="runPageAction(() => markRead(item))"
+        :loading="isPageActionPending('pages-whispers-notifications-button-3' + ':' + item.id)"
+        @click="
+          runPageAction(
+            () => markRead(item),
+            'pages-whispers-notifications-button-3' + ':' + item.id,
+          )
+        "
       >
         标为已读
       </button>
     </view>
-    <button v-if="cursor" :disabled="locked" @click="runPageAction(() => load(true))">
+    <button
+      v-if="cursor"
+      :disabled="locked"
+      :loading="isPageActionPending('pages-whispers-notifications-button-4')"
+      @click="runPageAction(() => load(true), 'pages-whispers-notifications-button-4')"
+    >
       加载下一页
     </button>
     <view v-if="capsule" class="card">
@@ -182,12 +205,18 @@ onShow(() => {
       <button
         v-if="capsuleNotice"
         :disabled="locked"
-        @click="runPageAction(() => open(capsuleNotice!))"
+        :loading="isPageActionPending('pages-whispers-notifications-button-5')"
+        @click="runPageAction(() => open(capsuleNotice!), 'pages-whispers-notifications-button-5')"
       >
         重新读取此胶囊
       </button>
     </view>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-notifications-button-6')"
+      @click="runPageAction(page.retry, 'pages-whispers-notifications-button-6')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text

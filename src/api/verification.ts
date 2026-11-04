@@ -1,13 +1,21 @@
 import { request } from '@/utils/request'
 import { session } from '@/utils/session'
-import { studentCardMultipart } from '@/utils/student-card'
+import {
+  studentCardMultipart,
+  assertStudentCardSize,
+  assertStudentCardDimensions,
+} from '@/utils/student-card'
 import type { StudentCardAsset, Verification, VerificationInput } from '@/types/api'
 
 export async function uploadStudentCard(filePath: string, key: string) {
   const epoch = session.getEpoch()
   if (!session.getToken() || !key) throw new Error('请先登录后重新上传学生卡')
+  // 先读取文件元数据，超限图片不读入内存、不发送网络请求。
+  const file = await uni.getFileInfo({ filePath })
+  assertStudentCardSize(file.size)
   // 平台解码结果与文件签名共同校验，不能只信扩展名。
   const image = await uni.getImageInfo({ src: filePath })
+  assertStudentCardDimensions(image.width, image.height)
   const data = await new Promise<ArrayBuffer>((resolve, reject) => {
     uni.getFileSystemManager().readFile({
       filePath,

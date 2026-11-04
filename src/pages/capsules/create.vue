@@ -120,10 +120,20 @@ onShow(() => {
       <switch :checked="accepted" :disabled="locked" @change="acceptSafety" /><text
         >我已阅读并确认安全告知</text
       >
-      <button :disabled="locked || !canCreate" @click="runPageAction(submit)">
+      <button
+        :disabled="locked || !canCreate"
+        :loading="isPageActionPending('pages-capsules-create-button-1')"
+        @click="runPageAction(submit, 'pages-capsules-create-button-1')"
+      >
         确认封存并开始安全处理
       </button>
-      <button :disabled="locked" @click="runPageAction(load)">刷新资格与时间（清空输入）</button>
+      <button
+        :disabled="locked"
+        :loading="isPageActionPending('pages-capsules-create-button-2')"
+        @click="runPageAction(load, 'pages-capsules-create-button-2')"
+      >
+        刷新资格与时间（清空输入）
+      </button>
     </view>
     <view v-if="receipt" class="card">
       <text>{{ capsuleStatus(receipt) }}</text>
@@ -131,7 +141,12 @@ onShow(() => {
         >重新读取详情</navigator
       >
     </view>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-capsules-create-button-3')"
+      @click="runPageAction(page.retry, 'pages-capsules-create-button-3')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text
