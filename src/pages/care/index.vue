@@ -138,7 +138,13 @@ onUnload(leave)
     </view>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <navigator v-if="id" url="/pages/care/index">查看本人关怀通知</navigator>
-    <button :disabled="busy" @click="runPageAction(() => load())">重新读取</button>
+    <button
+      :disabled="busy"
+      :loading="isPageActionPending('pages-care-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-care-index-button-1')"
+    >
+      重新读取
+    </button>
     <text v-if="busy">读取中…</text>
     <view v-if="currentCard" class="card">
       <text class="font-bold">援助资料</text>
@@ -156,9 +162,20 @@ onUnload(leave)
       <text v-if="scoped && loaded && !rows.length">当前已读取的通知中暂无关怀卡片。</text>
       <view v-for="(item, index) in rows" :key="item.id" class="card">
         <text>关怀资料 {{ index + 1 }}</text>
-        <button :disabled="busy" @click="runPageAction(() => open(item))">查看当前关怀卡</button>
+        <button
+          :disabled="busy"
+          :loading="isPageActionPending('pages-care-index-button-2' + ':' + item.id)"
+          @click="runPageAction(() => open(item), 'pages-care-index-button-2' + ':' + item.id)"
+        >
+          查看当前关怀卡
+        </button>
       </view>
-      <button v-if="scoped && cursor" :disabled="busy" @click="runPageAction(() => load(true))">
+      <button
+        v-if="scoped && cursor"
+        :disabled="busy"
+        :loading="isPageActionPending('pages-care-index-button-3')"
+        @click="runPageAction(() => load(true), 'pages-care-index-button-3')"
+      >
         继续读取通知
       </button>
     </template>

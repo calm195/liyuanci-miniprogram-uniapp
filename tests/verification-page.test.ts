@@ -68,7 +68,7 @@ async function setup() {
     .split('</script>')[0]!
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard };`
+  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
@@ -297,4 +297,52 @@ test('REQ-018：账号变化清空认证姓名、学号、审核记录与学生�
   assert.equal(s.page.studentNumber.value, '')
   assert.equal(s.page.asset.value, null)
   assert.equal(s.page.currentReview.value, null)
+})
+
+test('认证页每个动作只显示自身进度，并阻止重复上传、查询和提交', async () => {
+  const { page, hooks, config, setSubmit, sent } = await setup()
+  hooks.show!()
+  await settle()
+  config.verificationWritesReady = true
+  let choose!: (result: { tempFilePaths: string[] }) => void
+  let chooseCalls = 0
+  Object.assign(globalThis, {
+    uni: {
+      chooseImage: (options: { success: typeof choose }) => {
+        chooseCalls++
+        choose = options.success
+      },
+    },
+  })
+  try {
+    const upload = page.chooseCard()
+    assert.equal(page.uploading.value, true)
+    assert.equal(page.submitting.value, false)
+    assert.equal(page.querying.value, false)
+    await page.chooseCard()
+    await page.queryAsset()
+    await page.submitReal()
+    assert.equal(chooseCalls, 1)
+    assert.equal(sent.length, 0)
+    choose({ tempFilePaths: ['synthetic-path'] })
+    await upload
+    assert.equal(page.busy.value, false)
+    await page.queryAsset()
+    page.name.value = '合成姓名'
+    page.studentNumber.value = '合成学号'
+    let complete!: (result: unknown) => void
+    setSubmit(() => new Promise((resolve) => (complete = resolve)))
+    const submit = page.submitReal()
+    assert.equal(page.submitting.value, true)
+    assert.equal(page.uploading.value, false)
+    assert.equal(page.querying.value, false)
+    await page.chooseCard()
+    await page.submitReal()
+    assert.equal(chooseCalls, 1)
+    complete({})
+    await submit
+    assert.equal(page.busy.value, false)
+  } finally {
+    Reflect.deleteProperty(globalThis, 'uni')
+  }
 })

@@ -102,7 +102,13 @@ onUnload(leave)
 <template>
   <AppPage>
     <text class="title">公开主页</text>
-    <button :disabled="busy" @click="runPageAction(() => load())">刷新</button>
+    <button
+      :disabled="busy"
+      :loading="isPageActionPending('pages-public-profile-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-public-profile-index-button-1')"
+    >
+      刷新
+    </button>
     <text v-if="busy">加载中…</text>
     <view v-if="currentProfile" class="card">
       <text>{{ currentProfile.nickname }}</text>
@@ -148,7 +154,8 @@ onUnload(leave)
     <button
       v-if="currentProfile && cursor"
       :disabled="busy"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-public-profile-index-button-2')"
+      @click="runPageAction(() => load(true), 'pages-public-profile-index-button-2')"
     >
       加载下一页
     </button>

@@ -47,9 +47,9 @@ onUnload(leave)
     <text>登录后仍需提交学生认证，人工审核通过后才能发布、申请和聊天。</text>
     <text v-if="config.useMock">当前为合成 Mock，请返回首页选择合成状态。</text>
     <button
-      :loading="submitting || store.busy"
+      :loading="isPageActionPending('pages-login-index-button-1')"
       :disabled="submitting || store.busy || config.useMock"
-      @click="runPageAction(() => login())"
+      @click="runPageAction(() => login(), 'pages-login-index-button-1')"
     >
       微信登录
     </button>

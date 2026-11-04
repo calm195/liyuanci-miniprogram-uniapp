@@ -125,17 +125,31 @@ onShow(() => {
     </view>
     <ThemeSwitcher />
     <view v-if="user.isLoggedIn" class="card">
-      <button v-if="!config.useMock" :disabled="user.busy" @click="runPageAction(() => refresh())">
+      <button
+        v-if="!config.useMock"
+        :disabled="user.busy"
+        :loading="isPageActionPending('pages-profile-index-button-1')"
+        @click="runPageAction(() => refresh(), 'pages-profile-index-button-1')"
+      >
         刷新认证状态
       </button>
-      <button :disabled="user.busy" @click="runPageAction(() => logout())">退出登录</button>
+      <button
+        :disabled="user.busy"
+        :loading="isPageActionPending('pages-profile-index-button-2')"
+        @click="runPageAction(() => logout(), 'pages-profile-index-button-2')"
+      >
+        退出登录
+      </button>
     </view>
     <view v-if="config.useMock" class="card"
       ><text class="notice">合成演示 · 不发送 API</text
       ><button
         v-for="state in states"
         :key="state"
-        @click="runPageAction(() => user.simulate(state))"
+        :loading="isPageActionPending('pages-profile-index-button-3' + ':' + state)"
+        @click="
+          runPageAction(() => user.simulate(state), 'pages-profile-index-button-3' + ':' + state)
+        "
       >
         {{ state }}
       </button></view

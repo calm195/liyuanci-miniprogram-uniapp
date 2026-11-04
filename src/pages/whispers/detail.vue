@@ -146,7 +146,11 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">树洞详情</text
-    ><button :disabled="busy || writing || retryReady" @click="runPageAction(() => load())">
+    ><button
+      :disabled="busy || writing || retryReady"
+      :loading="isPageActionPending('pages-whispers-detail-button-1')"
+      @click="runPageAction(() => load(), 'pages-whispers-detail-button-1')"
+    >
       刷新当前内容
     </button>
     <view v-if="post" class="card"
@@ -165,7 +169,8 @@ onShow(() => {
           canWhisperAction('PublicPost', post, 'whisperHugSet')
         "
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(() => hug(!post!.my_hug!.active))"
+        :loading="isPageActionPending('pages-whispers-detail-button-2')"
+        @click="runPageAction(() => hug(!post!.my_hug!.active), 'pages-whispers-detail-button-2')"
       >
         {{ post.my_hug.active ? '取消抱抱' : '抱抱' }}
       </button>
@@ -185,7 +190,8 @@ onShow(() => {
           canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
         "
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(() => block())"
+        :loading="isPageActionPending('pages-whispers-detail-button-3')"
+        @click="runPageAction(() => block(), 'pages-whispers-detail-button-3')"
       >
         屏蔽此内容的发布者
       </button>
@@ -202,7 +208,10 @@ onShow(() => {
           canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
         "
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(() => block(comment))"
+        :loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
+        @click="
+          runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
+        "
       >
         屏蔽此暖评的发布者
       </button></view
@@ -211,11 +220,17 @@ onShow(() => {
     <button
       v-if="cursor"
       :disabled="busy || writing || retryReady"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-whispers-detail-button-5')"
+      @click="runPageAction(() => load(true), 'pages-whispers-detail-button-5')"
     >
       加载下一页暖评</button
     ><text v-if="commentsError" class="error">{{ commentsError }}</text>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-detail-button-6')"
+      @click="runPageAction(page.retry, 'pages-whispers-detail-button-6')"
+    >
       使用原请求重试</button
     ><text v-if="notice" class="notice">{{ notice }}</text
     ><text v-if="error" class="error">{{ error }}</text>

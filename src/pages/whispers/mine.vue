@@ -89,17 +89,23 @@ onShow(() => {
     ><navigator url="/pages/whispers/nickname">树洞昵称</navigator>
     <button
       :disabled="busy || writing || retryReady"
-      @click="runPageAction(() => switchTab('posts'))"
+      :loading="isPageActionPending('pages-whispers-mine-button-1')"
+      @click="runPageAction(() => switchTab('posts'), 'pages-whispers-mine-button-1')"
     >
       {{ tab === 'posts' ? '已选：我的帖子' : '我的帖子' }}
     </button>
     <button
       :disabled="busy || writing || retryReady"
-      @click="runPageAction(() => switchTab('comments'))"
+      :loading="isPageActionPending('pages-whispers-mine-button-2')"
+      @click="runPageAction(() => switchTab('comments'), 'pages-whispers-mine-button-2')"
     >
       {{ tab === 'comments' ? '已选：我的评论' : '我的评论' }}
     </button>
-    <button :disabled="busy || writing || retryReady" @click="runPageAction(() => load())">
+    <button
+      :disabled="busy || writing || retryReady"
+      :loading="isPageActionPending('pages-whispers-mine-button-3')"
+      @click="runPageAction(() => load(), 'pages-whispers-mine-button-3')"
+    >
       刷新状态
     </button>
     <view v-for="post in posts" :key="post.id" class="card"
@@ -140,7 +146,10 @@ onShow(() => {
       <button
         v-if="canWhisperAction('OwnerComment', comment, 'whisperCommentWithdraw')"
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(() => withdraw(comment))"
+        :loading="isPageActionPending('pages-whispers-mine-button-4' + ':' + comment.id)"
+        @click="
+          runPageAction(() => withdraw(comment), 'pages-whispers-mine-button-4' + ':' + comment.id)
+        "
       >
         撤回评论
       </button>
@@ -149,11 +158,17 @@ onShow(() => {
     <button
       v-if="cursor"
       :disabled="busy || writing || retryReady"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-whispers-mine-button-5')"
+      @click="runPageAction(() => load(true), 'pages-whispers-mine-button-5')"
     >
       加载下一页
     </button>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-mine-button-6')"
+      @click="runPageAction(page.retry, 'pages-whispers-mine-button-6')"
+    >
       使用原请求重试</button
     ><text v-if="notice" class="notice">{{ notice }}</text
     ><text v-if="error" class="error">{{ error }}</text>

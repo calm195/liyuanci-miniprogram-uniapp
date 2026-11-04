@@ -113,7 +113,11 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">举报树洞内容</text
-    ><button :disabled="busy || writing || retryReady" @click="runPageAction(load)">
+    ><button
+      :disabled="busy || writing || retryReady"
+      :loading="isPageActionPending('pages-whispers-report-button-1')"
+      @click="runPageAction(load, 'pages-whispers-report-button-1')"
+    >
       重新核对来源
     </button>
     <view v-if="target" class="card"
@@ -122,15 +126,30 @@ onShow(() => {
         v-for="item in module.config?.report_types || []"
         :key="item.code"
         :disabled="busy || writing || retryReady"
-        @click="runPageAction(() => (typeCode = item.code))"
+        :loading="isPageActionPending('pages-whispers-report-button-2' + ':' + item.code)"
+        @click="
+          runPageAction(
+            () => (typeCode = item.code),
+            'pages-whispers-report-button-2' + ':' + item.code,
+          )
+        "
       >
         {{ typeCode === item.code ? '已选：' : '' }}{{ item.label }}</button
       ><text v-if="!module.config?.report_types.length">举报类型资料尚不可用，不能提交。</text
-      ><button :disabled="busy || writing || retryReady" @click="runPageAction(submit)">
+      ><button
+        :disabled="busy || writing || retryReady"
+        :loading="isPageActionPending('pages-whispers-report-button-3')"
+        @click="runPageAction(submit, 'pages-whispers-report-button-3')"
+      >
         提交举报
       </button></view
     >
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-report-button-4')"
+      @click="runPageAction(page.retry, 'pages-whispers-report-button-4')"
+    >
       使用原请求重试</button
     ><text v-if="notice" class="notice">{{ notice }}</text
     ><text v-if="error" class="error">{{ error }}</text>

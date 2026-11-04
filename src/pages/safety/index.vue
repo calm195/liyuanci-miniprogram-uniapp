@@ -326,7 +326,7 @@ async function appeal() {
 function selectTab(value: 'warnings' | 'appeals') {
   if (busy.value || writing.value || uncertain.value) return
   tab.value = value
-  void load()
+  return load()
 }
 function openAppeal(warning: Warning) {
   if (
@@ -382,17 +382,23 @@ onUnload(leave)
     <text v-if="scoped && user.user?.penalty_notice">{{ user.user.penalty_notice }}</text>
     <button
       :disabled="busy || writing || uncertain"
-      @click="runPageAction(() => selectTab('warnings'))"
+      :loading="isPageActionPending('pages-safety-index-button-1')"
+      @click="runPageAction(() => selectTab('warnings'), 'pages-safety-index-button-1')"
     >
       本人警告
     </button>
     <button
       :disabled="busy || writing || uncertain"
-      @click="runPageAction(() => selectTab('appeals'))"
+      :loading="isPageActionPending('pages-safety-index-button-2')"
+      @click="runPageAction(() => selectTab('appeals'), 'pages-safety-index-button-2')"
     >
       本人申诉
     </button>
-    <button :disabled="busy || writing || uncertain" @click="runPageAction(() => load())">
+    <button
+      :disabled="busy || writing || uncertain"
+      :loading="isPageActionPending('pages-safety-index-button-3')"
+      @click="runPageAction(() => load(), 'pages-safety-index-button-3')"
+    >
       刷新
     </button>
     <template v-if="tab === 'warnings'">
@@ -401,7 +407,13 @@ onUnload(leave)
         <text>{{ warning.notice }}</text>
         <button
           :disabled="busy || writing || !permitted('postMeWarningsIdDisplay')"
-          @click="runPageAction(() => warningAction(warning, 'display'))"
+          :loading="isPageActionPending('pages-safety-index-button-4' + ':' + warning.id)"
+          @click="
+            runPageAction(
+              () => warningAction(warning, 'display'),
+              'pages-safety-index-button-4' + ':' + warning.id,
+            )
+          "
         >
           阅读警告并核验计时
         </button>
@@ -409,19 +421,40 @@ onUnload(leave)
           <text>首次展示：{{ warning.first_displayed_at }}</text>
           <text>可确认时间：{{ warning.confirmable_at }}</text>
           <text>约剩 {{ countdown }} 秒；确认资格以服务端时间为准，重新进入不重置计时。</text>
-          <button :disabled="busy || writing" @click="runPageAction(() => refreshWarning())">
+          <button
+            :disabled="busy || writing"
+            :loading="isPageActionPending('pages-safety-index-button-5' + ':' + warning.id)"
+            @click="
+              runPageAction(
+                () => refreshWarning(),
+                'pages-safety-index-button-5' + ':' + warning.id,
+              )
+            "
+          >
             核对服务端确认时间
           </button>
           <button
             :disabled="busy || writing || !mayAck"
-            @click="runPageAction(() => warningAction(warning, 'ack'))"
+            :loading="isPageActionPending('pages-safety-index-button-6' + ':' + warning.id)"
+            @click="
+              runPageAction(
+                () => warningAction(warning, 'ack'),
+                'pages-safety-index-button-6' + ':' + warning.id,
+              )
+            "
           >
             已阅读并确认
           </button>
         </template>
         <button
           :disabled="busy || writing || !permitted('postMeAppeals')"
-          @click="runPageAction(() => openAppeal(warning))"
+          :loading="isPageActionPending('pages-safety-index-button-7' + ':' + warning.id)"
+          @click="
+            runPageAction(
+              () => openAppeal(warning),
+              'pages-safety-index-button-7' + ':' + warning.id,
+            )
+          "
         >
           对此警告申诉
         </button>
@@ -439,7 +472,8 @@ onUnload(leave)
         />
         <button
           :disabled="busy || writing || !permitted('postMeAppeals')"
-          @click="runPageAction(() => appeal())"
+          :loading="isPageActionPending('pages-safety-index-button-8')"
+          @click="runPageAction(() => appeal(), 'pages-safety-index-button-8')"
         >
           {{ uncertain ? '重试同一次申诉' : '提交申诉' }}
         </button>
@@ -455,7 +489,8 @@ onUnload(leave)
     <button
       v-if="scoped && cursor"
       :disabled="busy || writing || uncertain"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-safety-index-button-9')"
+      @click="runPageAction(() => load(true), 'pages-safety-index-button-9')"
     >
       加载下一页
     </button>

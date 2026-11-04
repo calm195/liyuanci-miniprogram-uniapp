@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
 import { session } from '../src/utils/session.ts'
-import { studentCardMultipart } from '../src/utils/student-card.ts'
+import {
+  studentCardMultipart,
+  assertStudentCardSize,
+  assertStudentCardDimensions,
+} from '../src/utils/student-card.ts'
 // T009 / REQ-002、018：替换平台传输，直接执行生产请求层；不访问网络。
 const config = { apiBaseUrl: 'https://synthetic.invalid/api/v1', useMock: false, isDev: false }
 let statusCode = 200
@@ -187,13 +191,21 @@ test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及
 })
 
 // 复用实际请求层执行认证适配，平台传输仍为合成替代。
-Object.assign(globalThis, { __verificationTest: { request, session, studentCardMultipart } })
+Object.assign(globalThis, {
+  __verificationTest: {
+    request,
+    session,
+    studentCardMultipart,
+    assertStudentCardSize,
+    assertStudentCardDimensions,
+  },
+})
 const verificationSource = readFileSync(
   new URL('../src/api/verification.ts', import.meta.url),
   'utf8',
-).replace(/^import .*\n/gm, '')
+).replace(/^import\s[\s\S]*?from\s+'[^']+'\n/gm, '')
 const verificationPrelude =
-  'const { request, session, studentCardMultipart } = globalThis.__verificationTest;\n'
+  'const { request, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions } = globalThis.__verificationTest;\n'
 const verificationCompiled = ts.transpileModule(verificationPrelude + verificationSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText
@@ -343,7 +355,8 @@ test('T013：二进制 multipart 实际请求层保留 boundary、学生 Bearer 
     data: { asset_id: 'synthetic', scan_status: 'pending' },
   }
   Object.assign(uni, {
-    getImageInfo: async () => ({ type: 'jpeg' }),
+    getFileInfo: async () => ({ size: 3 }),
+    getImageInfo: async () => ({ type: 'jpeg', width: 2, height: 2 }),
     getFileSystemManager: () => ({
       readFile: (options: { success: (value: { data: ArrayBuffer }) => void }) =>
         options.success({ data: new Uint8Array([255, 216, 255]).buffer }),
@@ -373,4 +386,31 @@ test('T009 / REQ-002、018：登录409不自动重发，调用方网络重发保
   await api.login('synthetic-code', 'synthetic-attempt')
   assert.deepEqual(sent.data, original)
   assert.equal(calls, before + 2)
+})
+
+test('学生卡原图、处理后大小、像素及代理413分别给出安全可操作提示', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  session.setToken('synthetic-student-token')
+  for (const [status, errorCode, expected] of [
+    [413, '', /超过服务器大小上限/],
+    [400, 'STUDENT_CARD_IMAGE_TOO_LARGE', /压缩或裁剪/],
+    [400, 'STUDENT_CARD_NORMALIZED_IMAGE_TOO_LARGE', /处理后.*裁剪或降低分辨率/],
+    [400, 'STUDENT_CARD_PIXELS_EXCEEDED', /像素.*降低分辨率/],
+  ] as const) {
+    statusCode = status
+    data =
+      status === 413
+        ? 'synthetic proxy HTML'
+        : {
+            code: status,
+            error_code: errorCode,
+            request_id: 'synthetic-limit',
+            message: 'synthetic private detail',
+          }
+    await assert.rejects(
+      request({ url: '/me/student-card-assets', method: 'POST', silent: true }),
+      expected,
+    )
+  }
 })

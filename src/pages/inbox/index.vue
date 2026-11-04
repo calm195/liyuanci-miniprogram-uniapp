@@ -107,7 +107,7 @@ function selectTab(value: 'conversations' | 'notifications') {
   if (writing.value || busy.value || value === tab.value) return
   tab.value = value
   notice.value = ''
-  void load()
+  return load()
 }
 async function markRead(notification: AppNotification) {
   if (
@@ -200,14 +200,28 @@ onUnload(leave)
     <navigator url="/pages/care/index">关怀与援助</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <view class="flex flex-wrap gap-3">
-      <button :disabled="busy || writing" @click="runPageAction(() => selectTab('conversations'))">
+      <button
+        :disabled="busy || writing"
+        :loading="isPageActionPending('pages-inbox-index-button-1')"
+        @click="runPageAction(() => selectTab('conversations'), 'pages-inbox-index-button-1')"
+      >
         聊天
       </button>
-      <button :disabled="busy || writing" @click="runPageAction(() => selectTab('notifications'))">
+      <button
+        :disabled="busy || writing"
+        :loading="isPageActionPending('pages-inbox-index-button-2')"
+        @click="runPageAction(() => selectTab('notifications'), 'pages-inbox-index-button-2')"
+      >
         通知
       </button>
     </view>
-    <button :disabled="busy || writing" @click="runPageAction(() => load())">刷新</button>
+    <button
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-inbox-index-button-3')"
+      @click="runPageAction(() => load(), 'pages-inbox-index-button-3')"
+    >
+      刷新
+    </button>
     <text v-if="busy">加载中…</text>
     <template v-if="tab === 'conversations'">
       <text v-if="scoped && !busy && !conversationRows.length">暂无可访问会话</text>
@@ -245,21 +259,39 @@ onUnload(leave)
         <button
           v-if="notificationConversation(notification)"
           :disabled="busy || writing"
-          @click="runPageAction(() => openNotification(notification))"
+          :loading="isPageActionPending('pages-inbox-index-button-4' + ':' + notification.id)"
+          @click="
+            runPageAction(
+              () => openNotification(notification),
+              'pages-inbox-index-button-4' + ':' + notification.id,
+            )
+          "
         >
           打开聊天
         </button>
         <button
           v-if="notification.kind === 'message_reviewed'"
           :disabled="busy || writing"
-          @click="runPageAction(() => selectTab('conversations'))"
+          :loading="isPageActionPending('pages-inbox-index-button-5' + ':' + notification.id)"
+          @click="
+            runPageAction(
+              () => selectTab('conversations'),
+              'pages-inbox-index-button-5' + ':' + notification.id,
+            )
+          "
         >
           查看聊天列表
         </button>
         <button
           v-if="!notification.read"
           :disabled="busy || writing"
-          @click="runPageAction(() => markRead(notification))"
+          :loading="isPageActionPending('pages-inbox-index-button-6' + ':' + notification.id)"
+          @click="
+            runPageAction(
+              () => markRead(notification),
+              'pages-inbox-index-button-6' + ':' + notification.id,
+            )
+          "
         >
           标为已读
         </button>
@@ -268,7 +300,8 @@ onUnload(leave)
     <button
       v-if="scoped && cursor"
       :disabled="busy || writing"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-inbox-index-button-7')"
+      @click="runPageAction(() => load(true), 'pages-inbox-index-button-7')"
     >
       加载下一页
     </button>

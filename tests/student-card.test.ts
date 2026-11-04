@@ -3,7 +3,11 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
-import { studentCardMultipart } from '../src/utils/student-card.ts'
+import {
+  studentCardMultipart,
+  assertStudentCardSize,
+  assertStudentCardDimensions,
+} from '../src/utils/student-card.ts'
 
 test('T013：单个 file、显式图片 MIME、boundary 与二进制内容保持一致', () => {
   for (const [type, signature] of [
@@ -45,6 +49,9 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
   ) as ArrayBuffer
   assert.equal(bytes instanceof ArrayBuffer, false)
   let changeDuringRead = false
+  let fileSize = bytes.byteLength
+  let imageWidth = 2
+  let reads = 0
   Object.assign(globalThis, {
     __studentCardApi: {
       request: async (options: Record<string, unknown>) => {
@@ -52,11 +59,15 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
       },
       session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
       studentCardMultipart,
+      assertStudentCardSize,
+      assertStudentCardDimensions,
     },
     uni: {
-      getImageInfo: async () => ({ type: 'png' }),
+      getFileInfo: async () => ({ size: fileSize }),
+      getImageInfo: async () => ({ type: 'png', width: imageWidth, height: 2 }),
       getFileSystemManager: () => ({
         readFile: (options: { success: (value: { data: ArrayBuffer }) => void }) => {
+          reads++
           if (changeDuringRead) epoch++
           options.success({ data: bytes })
         },
@@ -67,9 +78,9 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
     const source = readFileSync(
       new URL('../src/api/verification.ts', import.meta.url),
       'utf8',
-    ).replace(/^import .*\n/gm, '')
+    ).replace(/^import\s[\s\S]*?from\s+'[^']+'\n/gm, '')
     const compiled = ts.transpileModule(
-      `const { request, session, studentCardMultipart } = globalThis.__studentCardApi;\n${source}`,
+      `const { request, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions } = globalThis.__studentCardApi;\n${source}`,
       { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } },
     ).outputText
     const { uploadStudentCard } = await import(
@@ -84,6 +95,15 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
     assert.match(headers['Content-Type']!, /^multipart\/form-data; boundary=/)
     assert.equal(headers['Idempotency-Key'], 'synthetic-key')
     assert.equal(sent[0]!.filePath, undefined)
+    const previousReads = reads
+    fileSize = 8 * 1024 * 1024 + 1
+    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /8 MiB/)
+    fileSize = bytes.byteLength
+    imageWidth = 4_000_000
+    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /400 万像素/)
+    imageWidth = 2
+    assert.equal(reads, previousReads)
+    assert.equal(sent.length, 1)
     changeDuringRead = true
     await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /会话已变化/)
     assert.equal(sent.length, 1)
@@ -91,4 +111,13 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
     Reflect.deleteProperty(globalThis, 'uni')
     Reflect.deleteProperty(globalThis, '__studentCardApi')
   }
+})
+
+test('学生卡文件和像素边界在网络发送前明确提示，等于上限仍可接受', () => {
+  assert.doesNotThrow(() => assertStudentCardSize(8 * 1024 * 1024))
+  assert.throws(() => assertStudentCardSize(8 * 1024 * 1024 + 1), /8 MiB/)
+  assert.throws(() => assertStudentCardSize(Number.NaN), /无法确认/)
+  assert.doesNotThrow(() => assertStudentCardDimensions(2000, 2000))
+  assert.throws(() => assertStudentCardDimensions(2001, 2000), /400 万像素/)
+  assert.throws(() => assertStudentCardDimensions(0, 2000), /无法确认/)
 })

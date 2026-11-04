@@ -349,7 +349,11 @@ onUnload(leave)
     <ThemeSwitcher />
     <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">个人资料与隐私</text>
-    <button :disabled="busy || writing" @click="runPageAction(() => load())">
+    <button
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-settings-index-button-1')"
+      @click="runPageAction(() => load(), 'pages-settings-index-button-1')"
+    >
       刷新设置（清空未保存修改）
     </button>
     <text v-if="busy">加载中…</text>
@@ -367,20 +371,23 @@ onUnload(leave)
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
       <button
         :disabled="busy || writing || !allowed('putMeProfile')"
-        @click="runPageAction(() => (hidden = true))"
+        :loading="isPageActionPending('pages-settings-index-button-2')"
+        @click="runPageAction(() => (hidden = true), 'pages-settings-index-button-2')"
       >
         {{ hidden === true ? '已选择：隐藏身份标签' : '隐藏身份标签' }}
       </button>
       <button
         :disabled="busy || writing || !allowed('putMeProfile')"
-        @click="runPageAction(() => (hidden = false))"
+        :loading="isPageActionPending('pages-settings-index-button-3')"
+        @click="runPageAction(() => (hidden = false), 'pages-settings-index-button-3')"
       >
         {{ hidden === false ? '已选择：显示身份标签' : '显示身份标签' }}
       </button>
       <button
         v-if="allowed('putMeProfile')"
         :disabled="busy || writing"
-        @click="runPageAction(() => act('profile'))"
+        :loading="isPageActionPending('pages-settings-index-button-4')"
+        @click="runPageAction(() => act('profile'), 'pages-settings-index-button-4')"
       >
         保存资料与隐私设置
       </button>
@@ -395,7 +402,8 @@ onUnload(leave)
         <text>当前选择：{{ targetName }}</text>
         <button
           :disabled="busy || writing || retryReady"
-          @click="runPageAction(() => act('block'))"
+          :loading="isPageActionPending('pages-settings-index-button-5')"
+          @click="runPageAction(() => act('block'), 'pages-settings-index-button-5')"
         >
           拉黑此用户
         </button>
@@ -405,7 +413,13 @@ onUnload(leave)
         <button
           v-if="unblockAllowed(entry)"
           :disabled="busy || writing"
-          @click="runPageAction(() => act('unblock', entry))"
+          :loading="isPageActionPending('pages-settings-index-button-6' + ':' + entry.block_id)"
+          @click="
+            runPageAction(
+              () => act('unblock', entry),
+              'pages-settings-index-button-6' + ':' + entry.block_id,
+            )
+          "
         >
           解除拉黑
         </button>
@@ -414,12 +428,18 @@ onUnload(leave)
       <button
         v-if="cursor && blocksReady"
         :disabled="busy || writing"
-        @click="runPageAction(() => load(true))"
+        :loading="isPageActionPending('pages-settings-index-button-7')"
+        @click="runPageAction(() => load(true), 'pages-settings-index-button-7')"
       >
         加载下一页
       </button>
     </view>
-    <button v-if="retryReady" :disabled="busy || writing" @click="runPageAction(retryWrite)">
+    <button
+      v-if="retryReady"
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-settings-index-button-8')"
+      @click="runPageAction(retryWrite, 'pages-settings-index-button-8')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text>

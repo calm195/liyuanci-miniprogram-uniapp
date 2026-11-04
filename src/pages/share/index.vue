@@ -128,14 +128,20 @@ onUnload(leave)
     <button
       v-if="!reference && kind && id"
       :disabled="busy"
-      @click="runPageAction(() => load(true))"
+      :loading="isPageActionPending('pages-share-index-button-1')"
+      @click="runPageAction(() => load(true), 'pages-share-index-button-1')"
     >
       生成分享
     </button>
     <navigator v-if="!reference && !user.isLoggedIn" url="/pages/login/index"
       >登录后生成分享</navigator
     >
-    <button v-if="reference" :disabled="busy" @click="runPageAction(() => load())">
+    <button
+      v-if="reference"
+      :disabled="busy"
+      :loading="isPageActionPending('pages-share-index-button-2')"
+      @click="runPageAction(() => load(), 'pages-share-index-button-2')"
+    >
       重新读取分享内容
     </button>
     <text v-if="busy">加载中…</text>

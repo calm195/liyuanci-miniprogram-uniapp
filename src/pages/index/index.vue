@@ -82,7 +82,14 @@ const shortcuts = [
     <view v-if="!rows.length" class="empty-state">
       <AppIcon name="fish" :size="52" />
       <text>{{ busy ? '正在捞起新鲜心愿…' : error || '心愿池静静的，等你投下第一份期待。' }}</text>
-      <button v-if="error" class="small-link" @click="runPageAction(() => load())">再捞一次</button>
+      <button
+        v-if="error"
+        class="small-link"
+        :loading="isPageActionPending('pages-index-index-button-1')"
+        @click="runPageAction(() => load(), 'pages-index-index-button-1')"
+      >
+        再捞一次
+      </button>
     </view>
     <view class="section-heading"
       ><text class="section-title">悄悄话</text
@@ -111,7 +118,8 @@ const shortcuts = [
       <button
         v-if="whispersError"
         class="small-link"
-        @click="runPageAction(() => refreshWhispers())"
+        :loading="isPageActionPending('pages-index-index-button-2')"
+        @click="runPageAction(() => refreshWhispers(), 'pages-index-index-button-2')"
       >
         重新加载
       </button>

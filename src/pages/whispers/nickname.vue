@@ -66,7 +66,11 @@ onShow(() => {
   <AppPage>
     <text class="title">树洞昵称</text>
     <text>这是独立的树洞昵称，可重名，不关联公开主页。新昵称先审后用，旧内容保留原身份快照。</text>
-    <button :disabled="busy || writing || retryReady" @click="runPageAction(load)">
+    <button
+      :disabled="busy || writing || retryReady"
+      :loading="isPageActionPending('pages-whispers-nickname-button-1')"
+      @click="runPageAction(load, 'pages-whispers-nickname-button-1')"
+    >
       刷新昵称审核状态
     </button>
     <view v-if="state" class="card">
@@ -91,11 +95,21 @@ onShow(() => {
         placeholder="2–20个Unicode码点"
         placeholder-class="field-placeholder"
       />
-      <button v-if="canSave" :disabled="busy || writing || retryReady" @click="runPageAction(save)">
+      <button
+        v-if="canSave"
+        :disabled="busy || writing || retryReady"
+        :loading="isPageActionPending('pages-whispers-nickname-button-2')"
+        @click="runPageAction(save, 'pages-whispers-nickname-button-2')"
+      >
         提交昵称候选
       </button>
     </view>
-    <button v-if="retryReady" :disabled="writing" @click="runPageAction(page.retry)">
+    <button
+      v-if="retryReady"
+      :disabled="writing"
+      :loading="isPageActionPending('pages-whispers-nickname-button-3')"
+      @click="runPageAction(page.retry, 'pages-whispers-nickname-button-3')"
+    >
       使用原请求重试
     </button>
     <text v-if="notice" class="notice">{{ notice }}</text

@@ -30,7 +30,12 @@ const { items, cursor, ready, busy, error, load } = useWhisperFeed()
     >
     <view class="section-heading"
       ><text class="section-title">听见彼此</text
-      ><button class="small-link" :disabled="busy" @click="runPageAction(() => load())">
+      ><button
+        class="small-link"
+        :disabled="busy"
+        :loading="isPageActionPending('pages-whispers-index-button-1')"
+        @click="runPageAction(() => load(), 'pages-whispers-index-button-1')"
+      >
         {{ busy ? '加载中…' : '刷新' }}
       </button></view
     >
@@ -51,7 +56,12 @@ const { items, cursor, ready, busy, error, load } = useWhisperFeed()
     <view v-if="ready && !items.length && !busy" class="empty-state"
       ><AppIcon name="chat" :size="52" /><text>这里静静的，等一个轻轻的声音。</text></view
     >
-    <button v-if="cursor" :disabled="busy" @click="runPageAction(() => load(true))">
+    <button
+      v-if="cursor"
+      :disabled="busy"
+      :loading="isPageActionPending('pages-whispers-index-button-2')"
+      @click="runPageAction(() => load(true), 'pages-whispers-index-button-2')"
+    >
       加载下一页
     </button>
     <text v-if="error" class="notice">{{ error }}</text>
