@@ -169,7 +169,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
     })
   } catch (error) {
     const failure = error instanceof RequestError ? error : new RequestError('请求处理失败', -1)
-    if (!options.silent) uni.showToast({ title: failure.message, icon: 'none' })
+    if (!options.silent) uni.$emit?.('app:notice', { message: failure.message, kind: 'error' })
     throw failure
   }
 }

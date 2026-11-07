@@ -31,10 +31,17 @@ export function createPageInteractionMixin(syncNative: () => void) {
         pageIsVisible: false,
         pageInteractionMounted: false,
         pageActionKey: '',
+        pageLastActionKey: '',
         pageActionEpoch: 0,
       }
     },
     computed: {
+      pageActionIdentity(this: ComponentPublicInstance) {
+        return pageOwner(this)?.pageLastActionKey ?? ''
+      },
+      pageActionGeneration(this: ComponentPublicInstance) {
+        return pageOwner(this)?.pageActionEpoch ?? 0
+      },
       isPageVisible(this: ComponentPublicInstance) {
         // 子组件首次渲染时父子桥接可能尚未完成，ready 标识确保归属会重新计算。
         if (!this.pageInteractionMounted) return false
@@ -81,6 +88,7 @@ export function createPageInteractionMixin(syncNative: () => void) {
         if (!owner?.pageIsVisible || owner.pageActionKey) return
         if (currentPageOwner() !== owner) return
         // 页面和组件共享同一个动作归属；循环按钮的 key 包含目标，进度只显示在本次按钮。
+        owner.pageLastActionKey = scopedActionKey(this, key)
         const epoch = ++owner.pageActionEpoch
         owner.pageActionKey = scopedActionKey(this, key)
         const finish = () => {

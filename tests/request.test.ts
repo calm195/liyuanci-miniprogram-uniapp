@@ -23,8 +23,8 @@ Object.assign(globalThis, {
       sent = options
       options.success({ statusCode, data })
     },
-    $emit() {
-      expired++
+    $emit(event: string) {
+      if (event === 'auth:expired') expired++
     },
     showToast() {},
   },
