@@ -1,7 +1,8 @@
 import { request, RequestError } from '@/utils/request'
 import type { RequestResponse } from '@/utils/request'
 import { session } from '@/utils/session'
-import { resourceOperations, resourceSchemas } from '@/utils/resource-contract'
+import { resourceOperations } from '@/utils/resource-contract'
+import { resourceSchemas } from '@/utils/resource-contract-extensions'
 import {
   matchesResourceSchema,
   normalizeResourceText,

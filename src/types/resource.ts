@@ -10,7 +10,24 @@ export interface ResourceFeedback {
   version: number
   updated_at: string
 }
+export interface ResourceFile {
+  id: string
+  name: string
+  content_type: string
+  size: number
+}
+export interface ResourceFeedbackSummary {
+  content_version: number
+  valid: number
+  link_invalid: number
+  outdated: number
+  incomplete: number
+  total: number
+}
 export interface ResourceSummary {
+  feedback_summary?: ResourceFeedbackSummary
+  file?: ResourceFile | null
+
   id: string
   title: string
   category: ResourceCategory
@@ -29,6 +46,7 @@ export interface ResourceDetail extends Omit<ResourceSummary, 'description_excer
   allowed_actions: ('copy_download' | 'submit_feedback')[]
 }
 export interface ResourceDownload {
+  file?: ResourceFile | null
   resource_id: string
   version: number
   download_url: string

@@ -207,6 +207,12 @@ export function matchesResourceSchema(
         obj.download_url + (obj.extraction_code === null ? '' : '\n提取码：' + obj.extraction_code)
     )
       return false
+    if (
+      schema['x-invariant'] === 'feedback_summary' &&
+      obj.total !==
+        Number(obj.valid) + Number(obj.link_invalid) + Number(obj.outdated) + Number(obj.incomplete)
+    )
+      return false
     if (schema['x-invariant'] === 'student_detail') {
       if (Number(obj.content_version) > Number(obj.version)) return false
       const own = obj.my_feedback as Record<string, unknown> | null

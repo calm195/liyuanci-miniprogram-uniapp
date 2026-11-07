@@ -1,7 +1,7 @@
 import type { ResourceFeedbackKind, ResourcePage } from '../types/resource.ts'
 import type { UserInfo } from '../types/api.ts'
 export const resourceFeedbackChoices: { kind: ResourceFeedbackKind; label: string }[] = [
-  { kind: 'valid', label: '有效' },
+  { kind: 'valid', label: '有用' },
   { kind: 'link_invalid', label: '链接失效' },
   { kind: 'outdated', label: '年代久远' },
   { kind: 'incomplete', label: '不全' },
