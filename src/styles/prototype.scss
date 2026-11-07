@@ -74,8 +74,13 @@
 }
 .page button.tabbar-item {
   flex: 1;
+  // 导航按钮尺寸不随切换状态变化，底部安全区由外层统一保留。
+  box-sizing: border-box;
+  height: 90rpx;
+  min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-direction: column;
   gap: 4rpx;
   margin: 0;
