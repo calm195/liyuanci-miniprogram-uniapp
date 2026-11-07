@@ -39,11 +39,12 @@ export const useEntryStore = defineStore('entry', () => {
       guide.value = result
       guideVisible.value =
         result.version > 0 && (force || result.acknowledged_version < result.version)
-      if (force && !result.version) uni.showToast({ title: '使用说明正在准备中', icon: 'none' })
+      if (force && !result.version)
+        uni.$emit?.('app:notice', { message: '使用说明正在准备中', kind: 'info' })
     } catch {
       if (force && epoch === session.getEpoch()) {
         error.value = '使用说明读取失败，请稍后重试。'
-        uni.showToast({ title: error.value, icon: 'none' })
+        uni.$emit?.('app:notice', { message: error.value, kind: 'error' })
       }
     } finally {
       busy.value = false

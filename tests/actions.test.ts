@@ -68,34 +68,38 @@ test('B14 / REQ-018：正式动作投影、目标、未知与缺失均失败关�
 })
 test('B14 / 002-A/B/C：首次省略版本，重提只取审核记录，扫描通过不代替认证授权', () => {
   const asset = { asset_id: 'synthetic-asset', scan_status: 'approved' } as const
-  const first = verificationInput('合成姓名', '合成学号', asset, { state: 'absent', record: null })
+  const first = verificationInput('合成姓名', '202600001234', asset, {
+    state: 'absent',
+    record: null,
+  })
   assert.equal(Object.prototype.hasOwnProperty.call(first, 'expected_version'), false)
   const record = { request_id: 'synthetic-review', status: 'rejected', version: 7 } as const
   assert.equal(
-    verificationInput('合成姓名', '合成学号', asset, { state: 'present', record }).expected_version,
+    verificationInput('合成姓名', '202600001234', asset, { state: 'present', record })
+      .expected_version,
     7,
   )
   for (const scan_status of ['pending', 'rejected'] as const)
     assert.throws(() =>
       verificationInput(
         '合成姓名',
-        '合成学号',
+        '202600001234',
         { ...asset, scan_status },
         { state: 'absent', record: null },
       ),
     )
   assert.throws(() =>
-    verificationInput('合成姓名', '合成学号', asset, { state: 'unknown', record: null }),
+    verificationInput('合成姓名', '202600001234', asset, { state: 'unknown', record: null }),
   )
   for (const status of ['pending', 'approved'] as const)
     assert.throws(() =>
-      verificationInput('合成姓名', '合成学号', asset, {
+      verificationInput('合成姓名', '202600001234', asset, {
         state: 'present',
         record: { ...record, status },
       }),
     )
   assert.throws(() =>
-    verificationInput('合成姓名', '合成学号', asset, {
+    verificationInput('合成姓名', '202600001234', asset, {
       state: 'present',
       record: { ...record, version: 0 },
     }),
@@ -123,17 +127,32 @@ test('B14 / 002-A/B/C：首次省略版本，重提只取审核记录，扫描�
 test('REQ-002：认证材料原样传递，UTF-8 安全边界不截断输入', () => {
   const asset = { asset_id: 'synthetic-card', scan_status: 'approved' } as const
   const review = { state: 'absent', record: null } as const
-  const input = verificationInput(' 合成姓名 ', ' synthetic-number ', asset, review)
+  const input = verificationInput(' 合成姓名 ', '202600001234', asset, review)
   assert.equal(input.name, ' 合成姓名 ')
-  assert.equal(input.student_number, ' synthetic-number ')
-  assert.equal(
-    verificationInput('😀'.repeat(64), '号'.repeat(42) + 'ab', asset, review).name.length,
-    128,
-  )
+  assert.equal(input.student_number, '202600001234')
+  assert.equal(verificationInput('😀'.repeat(64), '202600001234', asset, review).name.length, 128)
   for (const [name, number] of [
-    ['😀'.repeat(64) + 'a', '合成学号'],
+    ['😀'.repeat(64) + 'a', '202600001234'],
     ['合成姓名', '号'.repeat(43)],
     ['合成姓名', 'a'.repeat(129)],
   ])
     assert.throws(() => verificationInput(name!, number!, asset, review), /输入大小限制/)
+})
+
+test('学号严格为四位年份加八位数字，前导零保留，不接受空格或字母', () => {
+  const asset = { asset_id: 'synthetic-card', scan_status: 'approved' } as const
+  const review = { state: 'absent', record: null } as const
+  assert.equal(
+    verificationInput('合成姓名', '202600000001', asset, review).student_number,
+    '202600000001',
+  )
+  for (const number of [
+    '20260000001',
+    '2026000000001',
+    '000000000001',
+    '20260000000a',
+    ' 202600000001',
+    '２０２６０００００００１',
+  ])
+    assert.throws(() => verificationInput('合成姓名', number, asset, review), /4位年份/)
 })

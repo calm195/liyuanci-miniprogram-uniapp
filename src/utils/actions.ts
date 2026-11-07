@@ -85,6 +85,7 @@ export function verificationInput(
   if (!name.trim() || !studentNumber.trim()) throw new Error('请填写姓名和学号')
   if (utf8Bytes(name) > 256 || utf8Bytes(studentNumber) > 128)
     throw new Error('姓名或学号超出接口输入大小限制')
+  if (!/^[1-9][0-9]{11}$/.test(studentNumber)) throw new Error('学号须为4位年份加8位数字，共12位')
   if (!asset?.asset_id || asset.scan_status !== 'approved')
     throw new Error('学生卡安全扫描尚未通过')
   if (review.state === 'unknown') throw new Error('请先读取当前审核记录')
