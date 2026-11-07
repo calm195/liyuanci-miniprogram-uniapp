@@ -414,3 +414,37 @@ test('学生卡原图、处理后大小、像素及代理413分别给出安全�
     )
   }
 })
+
+test('头像上传的本人版本作为 multipart 文本字段发送', async () => {
+  config.useMock = false
+  config.isDev = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  session.setToken('synthetic-avatar-token')
+  let upload: Record<string, unknown> = {}
+  Object.assign(uni, {
+    uploadFile(options: { success: (response: unknown) => void }) {
+      upload = options
+      options.success({
+        statusCode: 200,
+        data: JSON.stringify({ code: 0, request_id: 'synthetic-avatar', data: { version: 20 } }),
+      })
+    },
+  })
+  assert.deepEqual(
+    await request({
+      url: '/me/avatar',
+      method: 'POST',
+      filePath: 'synthetic-avatar-local',
+      uploadFormData: { expected_version: '19' },
+      header: { 'Idempotency-Key': 'synthetic-avatar-key' },
+    }),
+    { version: 20 },
+  )
+  assert.equal(upload.url, config.apiBaseUrl + '/me/avatar')
+  assert.equal(upload.name, 'file')
+  assert.deepEqual(upload.formData, { expected_version: '19' })
+  assert.deepEqual(upload.header, {
+    Authorization: 'Bearer synthetic-avatar-token',
+    'Idempotency-Key': 'synthetic-avatar-key',
+  })
+})

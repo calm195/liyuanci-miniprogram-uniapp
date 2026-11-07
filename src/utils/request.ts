@@ -23,6 +23,7 @@ type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete
   auth?: boolean
   silent?: boolean
   filePath?: string
+  uploadFormData?: Record<string, string>
   // 模块可按自己的正式契约验证封装、状态码与响应头。
   validateResponse?: (response: RequestResponse) => boolean
 }
@@ -147,6 +148,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           url: transport.url,
           filePath: options.filePath,
           name: 'file',
+          formData: options.uploadFormData,
           header: transport.header,
           timeout: transport.timeout,
           success: (response) => {
