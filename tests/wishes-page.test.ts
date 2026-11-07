@@ -25,7 +25,7 @@ const sample: WishResult = {
     'postWishesIdSubmitReview',
     'postWishesIdPublish',
   ],
-  own_content: { ...emptyWish(), body: '合成正文' },
+  own_content: { ...emptyWish(), title: '合成标题', body: '合成正文' },
 }
 type Transport = {
   url: string
@@ -88,7 +88,7 @@ async function setup() {
           next_cursor: nextCursor,
         }
   }
-  Object.assign(globalThis, { __wishRequest: request })
+  Object.assign(globalThis, { __wishRequest: request, uni: { stopPullDownRefresh() {} } })
   const api = await moduleFrom(
     `const request = globalThis.__wishRequest;\n${stripImports(readFileSync(new URL('../src/api/wishes.ts', import.meta.url), 'utf8'))}`,
   )
@@ -111,6 +111,9 @@ async function setup() {
       wishStateLabels,
       publicWishBody,
       ownWishBody,
+      onPullDownRefresh: (fn: () => void) => {
+        hooks.pull = fn
+      },
       onLoad: (fn: (query: Record<string, string>) => void) => {
         hooks.load = fn as () => void
       },
@@ -129,9 +132,9 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const names =
-    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onLoad, onShow, onHide, onUnload'
+    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onPullDownRefresh, onLoad, onShow, onHide, onUnload'
   const page = await moduleFrom(
-    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectGender, selectIdentityCampus, error, editing, writing, rows, category, state };`,
+    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state };`,
   )
   hooks.show!()
   await settle()
@@ -177,42 +180,34 @@ test('B14 / I2-A01：默认入口关闭，缺失/错误投影/跨目标和会话
   await page.act(wish, 'publish')
   assert.equal(writes(calls).length, 0)
 })
-test('B14 / I2-01：实际页面和API构造可选性别创建，无标签省略、保密显式传值', async () => {
+test('实际页面提交心愿标题和自定义报答，不提供身份标签编辑', async () => {
   const { page, config, calls } = await setup()
   config.wishWritesReady = true
   page.edit()
+  page.form.value.title = '一起看书'
   page.form.value.body = '合成创建'
-  page.selectIdentityCampus({ detail: { value: 1 } })
-  page.selectGender({ detail: { value: 3 } })
+  page.form.value.reward_method = 'custom'
+  page.form.value.reward_text = '分享读书笔记'
   await page.save()
-  assert.deepEqual(writes(calls)[0]?.data?.identity_tags, {
-    campus: 'wushan',
-    gender: 'undisclosed',
-  })
-  assert.equal(writes(calls)[0]?.url, '/wishes')
-  page.edit()
-  page.form.value.body = '合成无标签'
-  page.selectGender({ detail: { value: 1 } })
-  page.selectIdentityCampus({ detail: { value: 2 } })
-  page.selectGender({ detail: { value: 0 } })
-  assert.deepEqual({ ...page.form.value.identity_tags }, { campus: 'university_town' })
-  page.selectIdentityCampus({ detail: { value: 0 } })
-  await page.save()
-  assert.equal(Object.prototype.hasOwnProperty.call(writes(calls)[1]?.data, 'identity_tags'), false)
+  assert.equal(writes(calls)[0]?.data?.title, '一起看书')
+  assert.equal(writes(calls)[0]?.data?.reward_text, '分享读书笔记')
+  assert.equal(Object.prototype.hasOwnProperty.call(writes(calls)[0]?.data, 'identity_tags'), false)
 })
-test('B14 / I2-01/02：实际API绑定资源及正文版本，标签更新语义未知时拦截', async () => {
+test('B14 / I2-01/02：实际API绑定资源及正文版本，原有身份标签随版本保留', async () => {
   const { page, config, calls } = await setup()
   config.wishWritesReady = true
   page.edit(page.items.value[0])
+  page.form.value.title = '合成标题'
   page.form.value.body = '合成改版'
   await page.save()
   assert.equal(writes(calls)[0]?.url, '/wishes/synthetic-wish-a/content')
   assert.equal(writes(calls)[0]?.data?.expected_version, 9)
+  page.items.value[0].own_content.title = '合成标题'
   page.items.value[0].own_content.identity_tags = { gender: 'male' }
   page.edit(page.items.value[0])
   await page.save()
-  assert.equal(writes(calls).length, 1)
-  assert.match(page.error.value, /标签更新/)
+  assert.equal(writes(calls).length, 2)
+  assert.deepEqual(writes(calls)[1]?.data?.identity_tags, { gender: 'male' })
 })
 test('B14 / I2-02–05：送审/上架/删草稿使用正式动作和目标版本', async () => {
   for (const action of ['submit', 'publish', 'delete'] as const) {
@@ -377,4 +372,30 @@ test('REQ-003：公共分类筛选与分页游标保留平铺正文，重复资�
       (call) => call.url.includes('category=team') && call.url.includes('cursor=cursor%2F%2B'),
     ),
   )
+})
+
+test('自定义报答切换预选清理旧文字，编辑中下拉保留草稿与可保存目标', async () => {
+  const { page, config, calls, hooks } = await setup()
+  config.wishWritesReady = true
+  page.edit(page.items.value[0])
+  page.form.value.reward_method = 'custom'
+  page.form.value.reward_text = '一起分享笔记'
+  page.form.value.body = '未保存的草稿'
+  page.selectFormOption('reward_method', { detail: { value: 0 } })
+  assert.equal(page.form.value.reward_method, 'milk_tea')
+  assert.equal(page.form.value.reward_text, undefined)
+  await hooks.pull!()
+  assert.equal(page.form.value.body, '未保存的草稿')
+  await page.save()
+  assert.equal(writes(calls)[0]?.data?.body, '未保存的草稿')
+  assert.equal(writes(calls)[0]?.data?.expected_version, 9)
+})
+
+test('同会话下拉重读列表时保留已有行，完成后替换为新结果', async () => {
+  const { page, setRows } = await setup()
+  setRows([{ ...sample, id: 'new-wish' }])
+  const pending = page.load()
+  assert.equal(page.rows.value[0]?.id, sample.id)
+  await pending
+  assert.equal(page.rows.value[0]?.id, 'new-wish')
 })

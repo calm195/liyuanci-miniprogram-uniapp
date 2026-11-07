@@ -47,22 +47,34 @@ export function useResourcePage(clear: () => void) {
   }
   async function enter(load: (active: () => boolean) => Promise<void>) {
     if (!visible) return
-    reset()
+    if (busy.value) return
+    if (!ready.value) reset()
+    else {
+      generation++
+      error.value = ''
+      notice.value = ''
+      gate.value = ''
+    }
     const g = generation,
       epoch = session.getEpoch()
     // 首次刷新可将 user 从 null 更新为当前主体，刷新期间只绑定会话与页面。
     const current = () => visible && g === generation && epoch === session.getEpoch()
     busy.value = true
     try {
-      if (session.getToken() && !config.useMock) await user.refresh()
+      if (session.getToken() && !config.useMock) await user.refresh(false, true)
       if (!current()) return
       gate.value = resourceGate(user.user, user.validated, session.getToken(), config.useMock)
-      if (gate.value) return
+      if (gate.value) {
+        clear()
+        ready.value = false
+        return
+      }
       await load(ticket())
       if (current()) ready.value = true
     } catch (failure) {
       if (current()) {
         clear()
+        ready.value = false
         error.value = resourceFailure(failure)
       }
     } finally {

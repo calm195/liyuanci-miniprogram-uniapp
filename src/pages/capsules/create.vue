@@ -46,9 +46,9 @@ async function load() {
     clock.value = Date.parse(module.config.server_now)
     receivedAt = Date.now()
     const local = beijingTime(new Date(clock.value + 86400000).toISOString())
-    date.value = local.slice(0, 10)
-    time.value = local.slice(11, 16)
-    second.value = local.slice(17, 19)
+    if (!date.value) date.value = local.slice(0, 10)
+    if (!time.value) time.value = local.slice(11, 16)
+    if (!second.value) second.value = local.slice(17, 19)
   })
 }
 async function submit() {
@@ -80,6 +80,7 @@ async function submit() {
     error.value = failure instanceof Error ? failure.message : '请核对输入。'
   }
 }
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -87,18 +88,11 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">写给未来的自己</text>
-    <navigator url="/pages/whispers/help">解忧与公共援助（离开会清空未封存正文）</navigator>
-    <navigator url="/pages/capsules/index">我的胶囊</navigator>
     <text
       >仅本人日常读取，系统安全扫描；命中后限授权人员处理。封存后不可编辑；未解锁不回显正文。</text
     >
     <view v-if="!receipt" class="card">
-      <textarea
-        v-model="body"
-        :maxlength="-1"
-        :disabled="locked"
-        placeholder="最多500个Unicode码点"
-      />
+      <textarea v-model="body" :maxlength="-1" :disabled="locked" placeholder="最多500个字" />
       <text>{{ Array.from(body).length }}/500</text>
       <text>预约时间（北京时间，精确到秒）</text>
       <picker mode="date" :value="date" :disabled="locked" @change="date = $event.detail.value"
@@ -127,13 +121,6 @@ onShow(() => {
       >
         确认封存并开始安全处理
       </button>
-      <button
-        :disabled="locked"
-        :loading="isPageActionPending('pages-capsules-create-button-2')"
-        @click="runPageAction(load, 'pages-capsules-create-button-2')"
-      >
-        刷新资格与时间（清空输入）
-      </button>
     </view>
     <view v-if="receipt" class="card">
       <text>{{ capsuleStatus(receipt) }}</text>
@@ -153,3 +140,15 @@ onShow(() => {
     ><text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.card {
+  border-radius: 28rpx;
+  padding: 32rpx;
+}
+.card > text {
+  display: block;
+  margin-bottom: 20rpx;
+  line-height: 1.7;
+}
+</style>

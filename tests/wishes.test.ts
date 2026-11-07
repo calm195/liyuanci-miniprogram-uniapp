@@ -12,6 +12,7 @@ test('T015 / REQ-003：500 Unicode 码点、默认值、期限和枚举边界', 
   assert.equal(input.duration_days, 7)
   assert.equal(input.reward_method, 'sincere_thanks')
   assert.ok(validateWish(input))
+  input.title = '合成心愿'
   input.body = '😀'.repeat(500)
   assert.equal(validateWish(input), '')
   input.body += ' '
@@ -29,7 +30,7 @@ test('T015 / REQ-008、018：屏障隐藏本人正文，公开列表不从私有
     version: 1,
     current_state: 'published',
     allowed_actions: [],
-    own_content: { ...emptyWish(), body: '合成本人正文' },
+    own_content: { ...emptyWish(), title: '合成心愿', body: '合成本人正文' },
   }
   assert.equal(publicWishBody(wish), '')
   assert.equal(ownWishBody(wish), '合成本人正文')
@@ -70,7 +71,7 @@ const { useWishStore } = await import(
 test('T015 / REQ-004、005、015：合成审核不直通，驳回改版重审，上架满额不误报', () => {
   setActivePinia(createPinia())
   const store = useWishStore()
-  const input = { ...emptyWish(), body: '合成测试心愿' }
+  const input = { ...emptyWish(), title: '合成心愿', body: '合成测试心愿' }
   const wish = store.save(input)
   assert.throws(() => store.transition(wish.id, 'publish'))
   store.transition(wish.id, 'submit')
@@ -104,7 +105,7 @@ test('T015 / REQ-004、005、015：合成审核不直通，驳回改版重审，
 })
 
 test('T015 / REQ-003、018：可选标签省略与保密不同，性别映射及空年级边界', () => {
-  const input = { ...emptyWish(), body: '合成标签心愿' }
+  const input = { ...emptyWish(), title: '合成心愿', body: '合成标签心愿' }
   assert.equal(Object.prototype.hasOwnProperty.call(input, 'identity_tags'), false)
   assert.equal(validateWish(input), '')
   assert.deepEqual(
@@ -124,4 +125,19 @@ test('T015 / REQ-003、018：可选标签省略与保密不同，性别映射及
   assert.ok(
     validateWish({ ...input, identity_tags: { campus: 'invalid' } } as unknown as WishInput),
   )
+})
+
+test('标题与自定义报答按Unicode码点校验', () => {
+  const input = {
+    ...emptyWish(),
+    title: '😀'.repeat(40),
+    body: '心愿',
+    reward_method: 'custom' as const,
+    reward_text: '谢谢'.repeat(50),
+  }
+  assert.equal(validateWish(input), '')
+  assert.ok(validateWish({ ...input, title: input.title + '字' }))
+  assert.ok(validateWish({ ...input, title: ' ' }))
+  assert.ok(validateWish({ ...input, reward_text: ' ' }))
+  assert.ok(validateWish({ ...input, reward_text: '字'.repeat(101) }))
 })

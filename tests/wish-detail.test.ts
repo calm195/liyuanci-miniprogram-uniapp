@@ -75,6 +75,7 @@ async function setup() {
       campuses,
       rewards,
       wishStateLabels,
+      onPullDownRefresh: () => {},
       onLoad: (fn: typeof hooks.load) => {
         hooks.load = fn!
       },
@@ -96,7 +97,7 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, changeWishState, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry };`,
+    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, changeWishState, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry };`,
   )
   hooks.load!({ id: sample.id })
   hooks.show!()

@@ -10,6 +10,7 @@ import { WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { setup, sample, postId, commentId } from './support/whisper-pages-runtime.ts'
 test('REQ-009：保存只创建草稿，提交单独授权，更新取本人版本，正文不隐式trim', async () => {
   const s = await setup('editor')
+  s.runtime.title.value = '合成标题'
   const r = s.runtime
   r.body.value = '  合成😀正文  '
   await r.save()
@@ -31,6 +32,7 @@ test('REQ-009：保存只创建草稿，提交单独授权，更新取本人版�
 })
 test('REQ-009：500码点通过，501／全空白／孤立代理项不发送；游客与未授权不发帖', async () => {
   const s = await setup('editor')
+  s.runtime.title.value = '合成标题'
   const r = s.runtime
   for (const text of ['😀'.repeat(501), '  \n ', '\ud800']) {
     r.body.value = text
@@ -51,6 +53,7 @@ test('REQ-009：500码点通过，501／全空白／孤立代理项不发送；�
 })
 test('REQ-009：三档身份只用受控版本，named使用active而非candidate，字典缺失禁止semi', async () => {
   const s = await setup('editor')
+  s.runtime.title.value = '合成标题'
   const r = s.runtime
   r.body.value = '合成正文'
   r.mode.value = 'named'
@@ -86,6 +89,7 @@ test('REQ-009：隐私屏障清正文与编辑，撤回／开关使用最新资�
   s.setOwner({
     ...s.owner(),
     status: 'privacy_hold',
+    title: null,
     body: null,
     identity_input: null,
     allowed_actions: ['whisperPostWithdraw'],
@@ -101,6 +105,7 @@ test('REQ-009：隐私屏障清正文与编辑，撤回／开关使用最新资�
 })
 test('REQ-009/018：结果未知原键原体重试，不确认成功；离页与同账号换会话清输入和晚到结果', async () => {
   const s = await setup('editor')
+  s.runtime.title.value = '合成标题'
   const r = s.runtime
   const original = s.defaultTransport()
   let fail = true
@@ -148,6 +153,7 @@ test('REQ-009：版本冲突刷新当前状态，受限后不能沿用旧正文�
       s.setOwner({
         ...s.owner(),
         status: 'restricted',
+        title: null,
         body: null,
         identity_input: null,
         allowed_actions: ['whisperPostWithdraw'],
@@ -239,11 +245,11 @@ test('REQ-014：匿名屏蔽只提交来源内容版本，成功清正文，不�
   assert.match(s.runtime.page.notice.value, /已受理/)
 })
 test('REQ-009/018：我的帖子和评论切页隔离，隐私记录不回显原文，仅显示安全候选', async () => {
-  const s = await setup('mine')
+  const mine = await setup('mine')
+  assert.equal(mine.runtime.posts.value.length, 1)
+  const s = await setup('settings')
   const r = s.runtime
-  assert.equal(r.posts.value.length, 1)
   await r.switchTab('comments')
-  assert.equal(r.posts.value.length, 0)
   assert.equal(r.comments.value[0].status, 'context_changed')
   const original = s.defaultTransport()
   s.transport(async (input) =>
@@ -271,7 +277,7 @@ test('REQ-009/018：我的帖子和评论切页隔离，隐私记录不回显原
   assert.equal(r.comments.value[0].recovery_body, '已脱敏合成候选')
   session.setToken('synthetic-new-session')
   assert.deepEqual(r.comments.value, [])
-  assert.deepEqual(r.posts.value, [])
+  assert.equal(r.state.value, null)
 })
 test('REQ-011：公共解忧无需登录，资料缺失保持不可用，不把本人关怀卡当公共目录', async () => {
   const s = await setup('help', {}, true)
@@ -381,4 +387,113 @@ test('REQ-014：真实工作区缺屏蔽能力时不借公共投影放行，本�
   s.runtime.post.value.viewer_is_author = true
   await s.runtime.block()
   assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
+})
+
+test('体验版标题必填并按字符计数，保存与编辑回显同一标题版本', async () => {
+  const s = await setup('editor')
+  const r = s.runtime
+  r.body.value = '今天想说的话'
+  for (const title of ['', '  ', '😀'.repeat(41), '\ud800']) {
+    r.title.value = title
+    await r.save()
+  }
+  assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
+  r.title.value = '😀'.repeat(40)
+  await r.save()
+  assert.equal(s.calls.find((x) => x.method === 'POST')!.data?.title, '😀'.repeat(40))
+  assert.equal(r.title.value, '😀'.repeat(40))
+  assert.equal(r.changed.value, false)
+})
+
+test('下拉期间保留当前列表，成功替换且权威失效清空，编辑输入保留', async () => {
+  const s = await setup('index')
+  const original = s.defaultTransport()
+  let finish!: (value: unknown) => void
+  s.transport((input) =>
+    input.url.startsWith('/whispers/posts?')
+      ? new Promise((resolve) => {
+          finish = resolve
+        })
+      : original(input),
+  )
+  const pending = s.refresh()
+  await settle()
+  assert.equal(s.runtime.items.value.length, 1)
+  finish({ items: [{ ...s.publicPost(), title: '刷新后的标题' }], next_cursor: null })
+  await pending
+  assert.equal(s.runtime.items.value[0].title, '刷新后的标题')
+  s.transport(async () => {
+    throw new RequestError('合成失权', 403, 'FORBIDDEN', '', 403)
+  })
+  await s.refresh()
+  assert.deepEqual(s.runtime.items.value, [])
+  const editing = await setup('editor', { id: postId })
+  editing.runtime.title.value = '尚未保存的标题'
+  editing.runtime.body.value = '尚未保存的正文'
+  await editing.refresh()
+  assert.equal(editing.runtime.title.value, '尚未保存的标题')
+  assert.equal(editing.runtime.body.value, '尚未保存的正文')
+  editing.transport(async () => {
+    throw new RequestError('合成网络故障', -1)
+  })
+  await editing.refresh()
+  assert.equal(editing.runtime.body.value, '尚未保存的正文')
+})
+
+test('本人详情原地打开共用编辑器，内容正常回显，改稿后不继续展示旧公开投影', async () => {
+  const s = await setup('detail', { id: postId })
+  await s.runtime.edit()
+  assert.equal(s.runtime.editing.value, true)
+  assert.equal(s.runtime.editor.title.value, '合成旧标题')
+  assert.equal(s.runtime.editor.body.value, '合成旧正文')
+  assert.equal(s.runtime.post.value, null)
+  s.runtime.editor.title.value = '新标题'
+  await s.runtime.editor.save()
+  assert.equal(s.runtime.editor.record.value.title, '新标题')
+  assert.deepEqual(s.routes, [])
+})
+
+test('本人草稿先只读查看，取消编辑丢弃未保存输入，再编辑读取已保存版本', async () => {
+  const s = await setup('detail', { id: postId, manage: '1' })
+  const r = s.runtime
+  assert.equal(r.editing.value, false)
+  assert.equal(r.ownerPost.value.body, '合成旧正文')
+  assert.ok(!s.calls.some((x) => x.url === '/me/whispers/nickname'))
+  await r.edit()
+  r.editor.body.value = '未保存的修改'
+  await r.cancelEdit()
+  assert.equal(r.editing.value, false)
+  assert.equal(r.ownerPost.value.body, '合成旧正文')
+  assert.equal(r.editor.body.value, '')
+  assert.ok(s.calls.every((x) => x.method === 'GET'))
+  await r.edit()
+  assert.equal(r.editor.body.value, '合成旧正文')
+})
+
+test('已公开的本人帖子取消编辑后回到公开详情和暖评', async () => {
+  const s = await setup('detail', { id: postId })
+  s.setOwner({ ...s.owner(), status: 'published' })
+  const r = s.runtime
+  assert.equal(r.comments.value.length, 1)
+  await r.edit()
+  await r.cancelEdit()
+  assert.equal(r.editing.value, false)
+  assert.equal(r.post.value.id, postId)
+  assert.equal(r.comments.value.length, 1)
+})
+
+test('悄悄话设置对原帖关闭和不可访问给提示，昵称审核与评论分页独立', async () => {
+  const s = await setup('settings')
+  assert.equal(s.runtime.state.value.active.label, '合成旧昵称')
+  await s.runtime.switchTab('comments')
+  s.setPublic({ ...s.publicPost(), comments_open: false })
+  await s.runtime.openComment(s.runtime.comments.value[0])
+  assert.match(s.runtime.page.notice.value, /评论已关闭/)
+  assert.equal(s.routes.length, 1)
+  s.transport(async () => {
+    throw new RequestError('合成不可查看', 404, 'NOT_FOUND', '', 404)
+  })
+  await s.runtime.openComment(s.runtime.comments.value[0])
+  assert.match(s.runtime.page.notice.value, /关闭、违规或当前不可查看/)
+  assert.equal(s.routes.length, 1)
 })

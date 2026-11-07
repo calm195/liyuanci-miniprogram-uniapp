@@ -53,6 +53,7 @@ async function command(operation: 'whisperCapsuleCancel' | 'whisperCapsuleDelete
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
 })
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -60,17 +61,7 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">本人胶囊详情</text>
-    <navigator url="/pages/capsules/index">我的胶囊</navigator>
-    <navigator url="/pages/whispers/help">解忧与公共援助</navigator>
-    <navigator url="/pages/care/index">本人关怀与援助</navigator>
-    <navigator url="/pages/safety/index">警告与申诉</navigator>
-    <button
-      :disabled="locked"
-      :loading="isPageActionPending('pages-capsules-detail-button-1')"
-      @click="runPageAction(load, 'pages-capsules-detail-button-1')"
-    >
-      刷新当前状态
-    </button>
+
     <view v-if="record" class="card">
       <text>{{ capsuleStatus(record) }}</text>
       <text>预约时间（北京时间）：{{ beijingTime(record.unlock_at) }}</text>
@@ -120,3 +111,15 @@ onShow(() => {
     ><text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.card {
+  border-radius: 28rpx;
+  padding: 32rpx;
+}
+.card > text {
+  display: block;
+  margin-bottom: 20rpx;
+  line-height: 1.7;
+}
+</style>

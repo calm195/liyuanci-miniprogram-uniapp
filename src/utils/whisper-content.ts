@@ -36,7 +36,7 @@ export function whisperText(value: string, min = 1, max = 500) {
     points.length > max ||
     points.some((p) => p.length === 1 && p.charCodeAt(0) >= 0xd800 && p.charCodeAt(0) <= 0xdfff)
   )
-    throw new Error(`请填写${min}至${max}个Unicode码点的非空白文字。`)
+    throw new Error(`请填写${min}至${max}个字的非空白文字。`)
   return value
 }
 export function semiReady(config: ModuleConfig | null): boolean {

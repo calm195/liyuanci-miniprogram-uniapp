@@ -215,3 +215,26 @@ test('REQ-007：静默资格刷新保留已验证展示直到返回，失败撤�
   await assert.rejects(store.refresh(false, true))
   assert.equal(store.validated, false)
 })
+
+test('恢复默认头像的回执同步到个人中心，迟到的旧资料不能恢复头像', async () => {
+  const store = setup()
+  const uploaded = {
+    ...me,
+    version: 2,
+    avatar_id: 'synthetic-avatar-id',
+    avatar_url: 'https://synthetic.invalid/avatar',
+  }
+  loadMe = async () => uploaded
+  await store.login()
+  const pending = deferred<UserInfo>()
+  loadMe = () => pending.promise
+  const refresh = store.refresh(false, true)
+  const epoch = session.getEpoch()
+  const restored = { ...me, version: 3 }
+  assert.deepEqual(store.acceptAvatarProfile(restored, epoch), restored)
+  pending.resolve(uploaded)
+  await refresh
+  assert.deepEqual(store.user, restored)
+  session.setToken('synthetic-new-session')
+  assert.equal(store.acceptAvatarProfile({ ...uploaded, version: 4 }, epoch), null)
+})

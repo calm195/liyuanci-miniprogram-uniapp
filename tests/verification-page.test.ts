@@ -49,6 +49,7 @@ async function setup() {
       RequestError,
       uploadStudentCard: async () => ({ asset_id: 'synthetic-upload', scan_status: 'pending' }),
       session: { getEpoch: () => epoch },
+      onPullDownRefresh: () => {},
       onShow: (fn: () => void) => {
         hooks.show = fn
       },
@@ -68,7 +69,7 @@ async function setup() {
     .split('</script>')[0]!
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
+  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText

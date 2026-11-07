@@ -59,6 +59,9 @@ export const useWishStore = defineStore('wishes', () => {
       wish.current_state = 'published'
       wish.public = {
         id: wish.id,
+        title: wish.own_content!.title,
+        reward_text: wish.own_content!.reward_text,
+        reward_method: wish.own_content!.reward_method,
         body: wish.own_content!.body,
         content_version: wish.content_version!,
         school_related: false,

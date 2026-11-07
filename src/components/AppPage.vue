@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useThemeStore } from '@/stores/theme'
+import EntryPrompts from '@/components/EntryPrompts.vue'
 import AppTabBar from '@/components/AppTabBar.vue'
 import type { MainTab } from '@/utils/navigation'
 defineProps<{ tab?: MainTab; title?: string; brand?: boolean }>()
@@ -17,5 +18,6 @@ const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 0
     </view>
     <view class="page-content"><slot /></view>
     <AppTabBar v-if="tab" :active="tab" />
+    <EntryPrompts v-if="isPageVisible" />
   </view>
 </template>

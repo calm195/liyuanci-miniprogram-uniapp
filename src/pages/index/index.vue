@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import WishPreview from '@/components/WishPreview.vue'
@@ -32,6 +33,14 @@ const shortcuts = [
   },
   { label: '资料广场', caption: '认证后查看', art: '', url: '/pages/resources/index' },
 ]
+onPullDownRefresh(async () => {
+  try {
+    await load()
+    await refreshWhispers()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage tab="home" title="鲤愿池" brand>
@@ -82,14 +91,6 @@ const shortcuts = [
     <view v-if="!rows.length" class="empty-state">
       <AppIcon name="fish" :size="52" />
       <text>{{ busy ? '正在捞起新鲜心愿…' : error || '心愿池静静的，等你投下第一份期待。' }}</text>
-      <button
-        v-if="error"
-        class="small-link"
-        :loading="isPageActionPending('pages-index-index-button-1')"
-        @click="runPageAction(() => load(), 'pages-index-index-button-1')"
-      >
-        再捞一次
-      </button>
     </view>
     <view class="section-heading"
       ><text class="section-title">悄悄话</text
@@ -115,14 +116,6 @@ const shortcuts = [
           : whispersError ||
             (whispersReady ? '有些话，轻轻说就好。这里有人愿意听。' : '心事也值得被温柔以待。')
       }}</text>
-      <button
-        v-if="whispersError"
-        class="small-link"
-        :loading="isPageActionPending('pages-index-index-button-2')"
-        @click="runPageAction(() => refreshWhispers(), 'pages-index-index-button-2')"
-      >
-        重新加载
-      </button>
     </view>
     <text class="page-footnote">许愿有人应，心事有人听。</text>
   </AppPage>

@@ -18,6 +18,7 @@ export const rewards = [
   { value: 'reciprocal_gift', label: '同款回礼' },
   { value: 'skill_exchange', label: '技能互换' },
   { value: 'sincere_thanks', label: '一句真诚感谢' },
+  { value: 'custom', label: '自己填写' },
 ] as const
 export type WishState =
   | 'draft'
@@ -37,12 +38,13 @@ export const genders = [
 ] as const
 export interface IdentityTags {
   campus?: (typeof campuses)[number]['value']
-  // 在读年级字典尚未交付，不从年份推断或编造选项。
   grade?: string
   // 省略表示未填写，与主动选择保密不同。
   gender?: (typeof genders)[number]['value']
 }
 export interface WishInput {
+  title: string
+  reward_text?: string
   identity_tags?: IdentityTags
   category: (typeof categories)[number]['value']
   body: string
@@ -65,8 +67,8 @@ export interface WishResult {
   }
   expires_at?: string | null
   participant?: WishPublicContent
-  own_content?: Omit<WishInput, 'reward_method' | 'duration_days'> &
-    Partial<Pick<WishInput, 'reward_method' | 'duration_days'>>
+  own_content?: Omit<WishInput, 'title' | 'reward_method' | 'duration_days'> &
+    Partial<Pick<WishInput, 'title' | 'reward_method' | 'duration_days'>>
   public?: WishPublicContent
   review_result?: {
     decision: 'pending' | 'approved' | 'rejected'
@@ -76,6 +78,8 @@ export interface WishResult {
   }
 }
 export interface WishPublicContent {
+  title?: string
+  reward_text?: string
   author?: { id: string; nickname: string; identity_tags?: IdentityTags }
   id: string
   body: string

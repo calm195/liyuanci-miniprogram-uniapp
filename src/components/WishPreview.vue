@@ -36,27 +36,36 @@ const author = computed(() =>
         {{ categories.find((item) => item.value === content?.category)?.label }}
       </text>
     </view>
+    <text v-if="content" class="section-title">{{ content.title || '未命名心愿' }}</text>
     <text class="wish-body">{{ body || '内容暂不可查看' }}</text>
-    <view v-if="content" class="card-meta">
-      <view v-if="content.campus" class="meta-item">
+    <text v-if="body && wish.public?.school_related" class="notice">{{
+      wish.public.notice_text || '未经证实'
+    }}</text>
+    <view v-if="content || !compact" class="card-meta">
+      <view v-if="content?.campus" class="meta-item">
         <AppIcon name="pin" :size="28" />
         <text class="ui-text">{{
           campuses.find((item) => item.value === content?.campus)?.label
         }}</text>
       </view>
-      <view v-if="content.reward_method" class="meta-item">
+      <view v-if="content?.reward_method" class="meta-item">
         <AppIcon name="gift" :size="28" />
         <text class="ui-text">{{
+          content.reward_text ||
           rewards.find((item) => item.value === content?.reward_method)?.label
         }}</text>
       </view>
-    </view>
-    <text v-if="body && wish.public?.school_related" class="notice">{{
-      wish.public.notice_text || '未经证实'
-    }}</text>
-    <view v-if="!compact" class="card-footer">
-      <text class="ui-text">每一份善意，都值得被看见</text>
-      <view class="outline-pill">查看心愿 ›</view>
+      <text v-if="!compact" class="wish-link">查看心愿 ›</text>
     </view>
   </navigator>
 </template>
+
+<style scoped>
+.wish-link {
+  margin-left: auto;
+  color: var(--theme-teal);
+  font-size: 26rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+</style>

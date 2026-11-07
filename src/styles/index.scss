@@ -20,3 +20,25 @@ picker {
 button::after {
   border: none;
 }
+
+.page .moderation-link {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  min-height: 56rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-danger);
+  font-size: 26rpx;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-underline-offset: 5rpx;
+}
+
+.page button.moderation-link[disabled] {
+  background: transparent;
+  color: var(--theme-muted);
+}

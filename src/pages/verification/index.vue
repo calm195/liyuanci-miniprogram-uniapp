@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -272,6 +273,13 @@ onUnload(() => {
   selectingCard = false
   visible = false
   clearPrivateData()
+})
+onPullDownRefresh(async () => {
+  try {
+    await refreshReview()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
 })
 </script>
 <template>

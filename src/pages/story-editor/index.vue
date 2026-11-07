@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -50,7 +51,6 @@ async function load() {
   const owner = user.user?.id
   const active = () =>
     visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
-  clear()
   error.value = ''
   if (config.useMock || !session.getToken() || !id.value) {
     error.value = config.useMock ? '故事管理需连接真实服务。' : '请登录后从我的心愿进入故事管理。'
@@ -58,7 +58,7 @@ async function load() {
   }
   busy.value = true
   try {
-    await user.refresh(false)
+    await user.refresh(false, true)
     if (!active()) return
     const result = await getWish(id.value)
     if (!active()) return
@@ -134,7 +134,10 @@ async function act(action: StoryAction) {
   } finally {
     if (active()) {
       writing.value = false
-      if (refresh) await load()
+      if (refresh) {
+        body.value = ''
+        await load()
+      }
     }
   }
 }
@@ -166,17 +169,21 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    const draft = body.value
+    const epoch = session.getEpoch()
+    await load()
+    if (epoch === session.getEpoch() && currentWish.value) body.value = draft
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
     <text class="title">我的还愿故事</text>
-    <button
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-story-editor-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-story-editor-index-button-1')"
-    >
-      刷新状态（清空输入）
-    </button>
+
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <text>心愿状态：{{ wishStateLabels[currentWish.current_state] }}</text>

@@ -18,4 +18,5 @@ export interface ShareLink {
 export interface ShareTarget {
   target_kind: ShareKind
   target: WishPublicContent
+  grade_label?: string
 }

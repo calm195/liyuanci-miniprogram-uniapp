@@ -58,6 +58,7 @@ async function save() {
     error.value = failure instanceof Error ? failure.message : '请核对昵称。'
   }
 }
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -66,13 +67,7 @@ onShow(() => {
   <AppPage>
     <text class="title">树洞昵称</text>
     <text>这是独立的树洞昵称，可重名，不关联公开主页。新昵称先审后用，旧内容保留原身份快照。</text>
-    <button
-      :disabled="busy || writing || retryReady"
-      :loading="isPageActionPending('pages-whispers-nickname-button-1')"
-      @click="runPageAction(load, 'pages-whispers-nickname-button-1')"
-    >
-      刷新昵称审核状态
-    </button>
+
     <view v-if="state" class="card">
       <text>当前已审昵称：{{ state.active?.label || '暂无' }}</text>
       <view v-if="state.candidate"
@@ -92,7 +87,7 @@ onShow(() => {
         v-model="label"
         :maxlength="-1"
         :disabled="busy || writing || retryReady"
-        placeholder="2–20个Unicode码点"
+        placeholder="昵称2至20个字"
         placeholder-class="field-placeholder"
       />
       <button

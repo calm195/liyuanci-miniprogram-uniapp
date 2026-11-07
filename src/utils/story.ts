@@ -1,6 +1,7 @@
 import type { UserInfo } from '../types/api.ts'
 import type { WishResult, WishPublicContent } from '../types/wish.ts'
-import type { ShareLink } from '../types/story.ts'
+import { campuses, categories } from '../types/wish.ts'
+import type { ShareLink, ShareTarget } from '../types/story.ts'
 import { canWishAction } from './actions.ts'
 export type StoryAction = 'submit' | 'update' | 'withdraw'
 const actions = {
@@ -33,7 +34,19 @@ export function isPublicContent(value: WishPublicContent): boolean {
     typeof value.school_related === 'boolean'
   )
 }
-// 分享卡只携带引用与固定标题，既不携带正文，也不执行服务端返回的任意路由。
+// 分享标题只取公开标题和标签，不把正文带入微信卡片。
+export function shareCard(share: ShareTarget) {
+  const { target } = share
+  const title = target.title?.trim() || (share.target_kind === 'story' ? '还愿故事' : '公开心愿')
+  const tags = [
+    campuses.find((item) => item.value === target.campus)?.label,
+    share.grade_label?.trim(),
+    categories.find((item) => item.value === target.category)?.label,
+  ].filter((tag): tag is string => !!tag)
+  return { title, tags }
+}
+
+// 分享回流只携带引用，不执行服务端返回的任意路由。
 export function sharePath(link: ShareLink): string {
   if (!link || typeof link.ref !== 'string' || !link.ref) throw new Error('分享引用无效')
   const path = `/pages/share/index?ref=${encodeURIComponent(link.ref)}`

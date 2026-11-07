@@ -9,13 +9,14 @@ const directory = ref<HelpDirectory | null>(null)
 const page = useWhisperPage(() => {
   directory.value = null
 })
-const { busy, error } = page
+const { error } = page
 async function load() {
   await page.read(async (active) => {
     const result = await callWhisper('whisperHelpGet', {})
     if (active()) directory.value = result
   })
 }
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -23,13 +24,7 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">解忧与公共援助</text><text>无需登录即可查看经核验的公共援助目录。</text>
-    <button
-      :disabled="busy"
-      :loading="isPageActionPending('pages-whispers-help-button-1')"
-      @click="runPageAction(load, 'pages-whispers-help-button-1')"
-    >
-      刷新目录
-    </button>
+
     <view v-if="directory?.status === 'ready'"
       ><text>目录版本：{{ directory.version }}</text
       ><text>核验日期（UTC）：{{ directory.verified_at }}</text

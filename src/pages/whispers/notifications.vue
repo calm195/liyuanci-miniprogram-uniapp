@@ -44,6 +44,7 @@ async function load(more = false) {
       query: { limit: 20, ...(previous ? { cursor: previous } : {}) },
     })
     if (!active()) return
+    if (!more) seen.clear()
     const merged = mergeWhisperPage(more ? items.value : [], result, previous, seen)
     items.value = merged.items
     cursor.value = merged.cursor
@@ -136,6 +137,7 @@ async function open(reference: Notification) {
     throw new Error('通知来源与目标不匹配，已停止跳转。')
   }, true)
 }
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -143,16 +145,7 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">悄悄鲤通知</text>
-    <navigator url="/pages/whispers/mine">我的记录</navigator>
-    <navigator url="/pages/safety/index">警告与申诉</navigator>
-    <navigator url="/pages/care/index">本人关怀与援助</navigator>
-    <button
-      :disabled="locked"
-      :loading="isPageActionPending('pages-whispers-notifications-button-1')"
-      @click="runPageAction(() => load(), 'pages-whispers-notifications-button-1')"
-    >
-      刷新通知
-    </button>
+
     <text v-if="ready">已加载通知中 {{ unread }} 条未读</text>
     <text v-if="ready && !items.length && !busy">当前页暂无模块通知。</text>
     <view v-for="item in items" :key="item.id" class="card">
@@ -202,14 +195,6 @@ onShow(() => {
         >{{ capsule.body }}</text
       >
       <text v-else>当前不能读取正文，以重新读取的服务端状态为准。</text>
-      <button
-        v-if="capsuleNotice"
-        :disabled="locked"
-        :loading="isPageActionPending('pages-whispers-notifications-button-5')"
-        @click="runPageAction(() => open(capsuleNotice!), 'pages-whispers-notifications-button-5')"
-      >
-        重新读取此胶囊
-      </button>
     </view>
     <button
       v-if="retryReady"
@@ -223,3 +208,15 @@ onShow(() => {
     ><text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.card {
+  border-radius: 28rpx;
+  padding: 32rpx;
+}
+.card > text {
+  display: block;
+  margin-bottom: 20rpx;
+  line-height: 1.7;
+}
+</style>

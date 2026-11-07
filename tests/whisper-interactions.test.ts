@@ -293,3 +293,33 @@ test('REQ-010/014：抱抱连点互斥、未知结果原请求重试；暖评屏
     },
   })
 })
+
+test('广场卡片直接抱抱与取消，列表只采用权威回执并串行点击', async () => {
+  const s = await setup('index')
+  s.setPublic({
+    ...s.publicPost(),
+    viewer_is_author: false,
+    allowed_actions: ['whisperHugSet'],
+    my_hug: { active: false, version: 3 },
+  })
+  await s.runtime.load()
+  const original = s.defaultTransport()
+  s.transport(async (input) =>
+    input.url.endsWith('/hugs')
+      ? {
+          post_id: postId,
+          hug_count: input.data?.active ? 99 : 70,
+          my_hug: { active: input.data?.active, version: input.data?.active ? 4 : 5 },
+        }
+      : original(input),
+  )
+  await Promise.all([
+    s.runtime.hug(s.runtime.items.value[0]),
+    s.runtime.hug(s.runtime.items.value[0]),
+  ])
+  assert.equal(s.calls.filter((x) => x.url.endsWith('/hugs')).length, 1)
+  assert.equal(s.runtime.items.value[0].hug_count, 99)
+  await s.runtime.hug(s.runtime.items.value[0])
+  assert.equal(s.runtime.items.value[0].hug_count, 70)
+  assert.equal(s.runtime.items.value[0].my_hug.active, false)
+})

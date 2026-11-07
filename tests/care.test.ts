@@ -201,19 +201,20 @@ test('REQ-017：无关通知和空页允许继续翻页，通知内容不作为�
   )
   assert.throws(() => mergeCareNotifications([], { items: [], next_cursor: '' }))
 })
-test('REQ-017：页面注册、个人中心及通知入口齐全，资源仅用文本组件展示', () => {
+test('REQ-017：关怀已注册且安全与关怀入口保留在个人中心，资源仅用文本组件展示', () => {
   const page = readFileSync(new URL('../src/pages/care/index.vue', import.meta.url), 'utf8')
   assert.ok(
     readFileSync(new URL('../src/pages.json', import.meta.url), 'utf8').includes(
       'pages/care/index',
     ),
   )
-  for (const file of ['profile', 'inbox'])
-    assert.ok(
-      readFileSync(new URL(`../src/pages/${file}/index.vue`, import.meta.url), 'utf8').includes(
-        '/pages/care/index',
-      ),
-    )
+  const profile = readFileSync(new URL('../src/pages/profile/index.vue', import.meta.url), 'utf8')
+  assert.match(profile, /\/pages\/care\/index/)
+  assert.match(profile, /\/pages\/safety\/index/)
+  for (const page of ['inbox', 'chat']) {
+    const source = readFileSync(new URL(`../src/pages/${page}/index.vue`, import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /\/pages\/(care|safety)\/index/)
+  }
   assert.equal(/<web-view|<rich-text|makePhoneCall|setClipboardData/.test(page), false)
   assert.ok(page.includes('不承诺全天人工值守'))
 })

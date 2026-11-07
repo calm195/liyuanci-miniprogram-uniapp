@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { beijingTime } from '@/utils/capsules'
@@ -145,6 +146,13 @@ onLoad((query) => {
 onShow(() => {
   void load()
 })
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
@@ -155,18 +163,10 @@ onShow(() => {
       <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
     </view>
     <view v-if="error" class="card"
-      ><text>{{ error }}</text
-      ><navigator url="/pages/safety/index">警告与申诉</navigator></view
+      ><text>{{ error }}</text></view
     >
     <text v-if="busy">正在加载资料…</text><text v-if="notice">{{ notice }}</text>
-    <button
-      v-if="!pending"
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-resources-detail-button-1')"
-      @click="runPageAction(() => load(), 'pages-resources-detail-button-1')"
-    >
-      刷新资料
-    </button>
+
     <template v-if="visible && detail">
       <view class="card">
         <text class="title">{{ detail.title }}</text

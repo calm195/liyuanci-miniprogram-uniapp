@@ -29,12 +29,17 @@ async function load(more = false) {
       query: { limit: 20, ...(previous ? { cursor: previous } : {}) },
     })
     if (!active()) return
+    if (!more) seen.clear()
     const merged = mergeWhisperPage(more ? items.value : [], result, previous, seen)
     items.value = merged.items
     cursor.value = merged.cursor
     ready.value = true
   }, more)
 }
+function createCapsule() {
+  uni.navigateTo({ url: '/pages/capsules/create' })
+}
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
@@ -42,19 +47,14 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">我的时光胶囊</text>
-    <navigator url="/pages/capsules/create">写给未来的自己</navigator>
-    <navigator url="/pages/whispers/help">解忧与公共援助</navigator>
-    <navigator url="/pages/whispers/notifications">悄悄鲤通知</navigator>
-    <button
-      :disabled="locked"
-      :loading="isPageActionPending('pages-capsules-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-capsules-index-button-1')"
-    >
-      刷新列表
-    </button>
+    <button class="create-capsule" @click="createCapsule">＋ 写给未来的自己</button>
+
     <text v-if="ready && !items.length">当前页暂无胶囊。</text>
     <view v-for="item in items" :key="item.id" class="card">
-      <text>{{ capsuleStatus(item) }}</text>
+      <text class="capsule-state">{{ capsuleStatus(item) }}</text
+      ><text v-if="item.status === 'unlocked' && item.preview" class="capsule-preview"
+        >{{ item.preview }}…</text
+      >
       <text>预约时间（北京时间）：{{ beijingTime(item.unlock_at) }}</text>
       <navigator :url="`/pages/capsules/detail?id=${encodeURIComponent(item.id)}`"
         >读取当前详情与管理</navigator
@@ -71,3 +71,24 @@ onShow(() => {
     <text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.card {
+  border-radius: 28rpx;
+  padding: 32rpx;
+}
+.card > text {
+  display: block;
+  margin-bottom: 20rpx;
+  line-height: 1.7;
+}
+.capsule-state {
+  font-weight: 600;
+}
+.capsule-preview {
+  font-size: 34rpx;
+}
+.create-capsule {
+  margin: 24rpx 0;
+}
+</style>

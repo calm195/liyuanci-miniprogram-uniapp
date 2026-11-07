@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import AppIcon from '@/components/AppIcon.vue'
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import { useThemeStore } from '@/stores/theme'
+import { useEntryStore } from '@/stores/entry'
 import { useUserStore } from '@/stores/user'
 import { config } from '@/config'
 import type { VerificationState } from '@/types/api'
 const user = useUserStore()
+const theme = useThemeStore()
+const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 const wishStates = [
   { label: '待审核', icon: 'send', state: 'pending_review' },
@@ -16,18 +21,19 @@ const wishStates = [
 ]
 const groups = [
   [
-    { label: '我的消息', icon: 'bell', url: '/pages/inbox/index' },
+    { label: '通知中心', icon: 'bell', url: '/pages/inbox/index' },
+    { label: '聊天', icon: 'chat', url: '/pages/inbox/index?view=conversations' },
     { label: '我的应愿', icon: 'send', url: '/pages/applications/index' },
     { label: '身份认证', icon: 'shield', url: '/pages/verification/index' },
   ],
   [
+    { label: '悄悄话设置', icon: 'settings', url: '/pages/whispers/settings' },
     { label: '我的悄悄话', icon: 'chat', url: '/pages/whispers/mine' },
-    { label: '悄悄鲤通知', icon: 'bell', url: '/pages/whispers/notifications' },
     { label: '我的时光胶囊', icon: 'clock', url: '/pages/capsules/index' },
-    { label: '资料广场', icon: 'book', url: '/pages/resources/index' },
   ],
   [
     { label: '个人资料与隐私', icon: 'lock', url: '/pages/settings/index' },
+    { label: '黑名单', icon: 'shield', url: '/pages/blacklist/index' },
     { label: '警告与申诉', icon: 'shield', url: '/pages/safety/index' },
     { label: '关怀与援助', icon: 'heart', url: '/pages/care/index' },
     { label: '解忧与公共援助', icon: 'leaf', url: '/pages/whispers/help' },
@@ -36,7 +42,7 @@ const groups = [
 ]
 async function refresh() {
   try {
-    await user.refresh()
+    await user.refresh(true, true)
   } catch {
     /* 请求层统一提示，资格维持未校验状态。 */
   }
@@ -51,11 +57,18 @@ async function logout() {
 onShow(() => {
   void refresh()
 })
+onPullDownRefresh(async () => {
+  try {
+    await refresh()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage tab="mine" title="我的">
     <view class="profile-heading">
-      <image src="/static/illustrations/profile-koi.png" class="profile-avatar" mode="aspectFit" />
+      <ProfileAvatar :src="user.user?.avatar_url" class="profile-avatar" />
       <view class="profile-copy">
         <text class="profile-name">{{
           user.user?.nickname || (user.isLoggedIn ? '一条热心的锦鲤' : '遇见你，真好')
@@ -69,6 +82,26 @@ onShow(() => {
         class="small-link"
         ><AppIcon name="chevron" :size="34"
       /></navigator>
+    </view>
+    <view class="profile-tools">
+      <button
+        :loading="isPageActionPending('src-pages-profile-index.vue-action-1')"
+        @click="runPageAction(() => entry.showGuide(true), 'src-pages-profile-index.vue-action-1')"
+      >
+        功能使用说明
+      </button>
+      <button
+        :aria-label="theme.mode === 'dark' ? '切换亮色' : '切换暗色'"
+        :loading="isPageActionPending('src-pages-profile-index.vue-action-2')"
+        @click="
+          runPageAction(
+            () => theme.setMode(theme.mode === 'dark' ? 'light' : 'dark'),
+            'src-pages-profile-index.vue-action-2',
+          )
+        "
+      >
+        <AppIcon name="sun" :size="38" />
+      </button>
     </view>
     <view class="profile-banner">
       <text class="section-title">把善意，攒成好运</text>
@@ -123,16 +156,7 @@ onShow(() => {
         ><AppIcon name="chevron" :size="28"
       /></navigator>
     </view>
-    <ThemeSwitcher />
     <view v-if="user.isLoggedIn" class="card">
-      <button
-        v-if="!config.useMock"
-        :disabled="user.busy"
-        :loading="isPageActionPending('pages-profile-index-button-1')"
-        @click="runPageAction(() => refresh(), 'pages-profile-index-button-1')"
-      >
-        刷新认证状态
-      </button>
       <button
         :disabled="user.busy"
         :loading="isPageActionPending('pages-profile-index-button-2')"
@@ -157,3 +181,18 @@ onShow(() => {
     <text class="page-footnote">许愿有人应，心事有人听。</text>
   </AppPage>
 </template>
+
+<style scoped>
+.profile-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+.profile-tools button {
+  margin: 0;
+  background: transparent;
+  color: var(--theme-teal);
+  font-size: 26rpx;
+}
+</style>

@@ -3,6 +3,10 @@ export type VerificationState = 'unverified' | 'pending' | 'verified' | 'rejecte
 export interface UserInfo {
   id: string
   version: number
+  avatar_url?: string
+  avatar_id?: string
+  grade_options?: { code: string; label: string }[]
+  identity_tags?: import('./wish').IdentityTags
   nickname?: string
   verification: VerificationState
   hide_identity_tags?: boolean

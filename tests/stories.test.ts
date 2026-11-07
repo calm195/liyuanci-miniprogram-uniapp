@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { reactive } from 'vue'
+import { nextTick, reactive } from 'vue'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
-import { canStoryAction, isPublicContent, sharePath } from '../src/utils/story.ts'
+import { canStoryAction, isPublicContent, shareCard, sharePath } from '../src/utils/story.ts'
 import type { WishResult, WishPublicContent } from '../src/types/wish.ts'
 const actor = {
   id: 'synthetic-owner',
@@ -22,6 +22,9 @@ const wish: WishResult = {
 const publicStory: WishPublicContent = {
   id: wish.id,
   body: '合成故事',
+  title: '找到一起练琴的伙伴',
+  campus: 'wushan',
+  category: 'team',
   content_version: 2,
   school_related: true,
   notice_codes: ['UNVERIFIED_SCHOOL'],
@@ -56,7 +59,7 @@ async function setup(page: string, query: Record<string, string> = {}) {
     if (input.url.startsWith('/stories?')) return { items: [{ ...publicStory }], next_cursor: null }
     if (input.url === '/share-links')
       return { ref: 'synthetic-ref', miniapp_route: '/pages/share/index?ref=synthetic-ref' }
-    return { target_kind: 'story', target: { ...publicStory } }
+    return { target_kind: 'story', target: { ...publicStory }, grade_label: '大三' }
   }
   const request = async (input: Input) => {
     calls.push(input)
@@ -76,6 +79,14 @@ async function setup(page: string, query: Record<string, string> = {}) {
   let modal: (() => void) | undefined
   let delayConfirm = false
   const context = {
+    defineProps: () => ({ storyId: query.id }),
+    defineExpose: () => {},
+    onMounted: (fn: () => unknown) => {
+      hooks.mount = fn
+    },
+    onUnmounted: (fn: () => unknown) => {
+      hooks.unmount = fn
+    },
     config: { useMock: false, wishWritesReady: true },
     useUserStore: () => user,
     session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
@@ -84,8 +95,20 @@ async function setup(page: string, query: Record<string, string> = {}) {
     canStoryAction,
     isPublicContent,
     sharePath,
+    shareCard,
+    nextTick,
     RequestError,
     uni: {
+      createCanvasContext: () => ({
+        setFillStyle: () => {},
+        fillRect: () => {},
+        setFontSize: () => {},
+        fillText: () => {},
+        measureText: (text: string) => ({ width: text.length * 30 }),
+        draw: (_reserve: boolean, callback: () => void) => callback(),
+      }),
+      canvasToTempFilePath: (options: { success: (result: { tempFilePath: string }) => void }) =>
+        options.success({ tempFilePath: '/tmp/synthetic-cover.png' }),
       showModal: (options: { success: (result: { confirm: boolean }) => void }) => {
         modal = () => options.success({ confirm })
         if (!delayConfirm) modal()
@@ -107,13 +130,15 @@ async function setup(page: string, query: Record<string, string> = {}) {
       hooks.share = fn
     },
   }
+  const source =
+    page === 'stories' ? '../src/components/StoryWall.vue' : `../src/pages/${page}/index.vue`
   const runtime = await loadRuntime(
-    pageScript(new URL(`../src/pages/${page}/index.vue`, import.meta.url)) +
-      `\nexport { ${exports} }`,
+    pageScript(new URL(source, import.meta.url)) + `\nexport { ${exports} }`,
     context,
   )
-  hooks.load(query)
-  hooks.show()
+  hooks.load?.(query)
+  if (page === 'stories') hooks.mount()
+  else hooks.show()
   await settle()
   return {
     runtime,
@@ -341,7 +366,7 @@ test('REQ-015/018：故事详情只请求当前公开投影，目标错配、屏
   await pending
   assert.equal(s.runtime.rows.value.length, 0)
 })
-test('REQ-008/018：创建分享只有kind/id；微信卡固定标题和引用，回流每次onShow重验并404清空', async () => {
+test('REQ-008/018：创建分享只有kind/id；微信卡含公开标题与标签，路由只含引用，回流每次onShow重验并404清空', async () => {
   const s = await setup('share', { kind: 'story', id: wish.id })
   assert.equal(s.calls.length, 0)
   await s.runtime.load(true)
@@ -349,8 +374,8 @@ test('REQ-008/018：创建分享只有kind/id；微信卡固定标题和引用�
   assert.deepEqual(create.data, { target_kind: 'story', id: wish.id })
   assert.equal(s.runtime.currentTarget.value.target.body, publicStory.body)
   assert.deepEqual(s.hooks.share(), {
-    title: '鲤愿池 · 心愿与还愿故事',
-    imageUrl: '/static/share-cover.png',
+    title: '找到一起练琴的伙伴 · 五山 · 大三 · 组队',
+    imageUrl: '/tmp/synthetic-cover.png',
     path: '/pages/share/index?ref=synthetic-ref',
   })
   s.hooks.hide()

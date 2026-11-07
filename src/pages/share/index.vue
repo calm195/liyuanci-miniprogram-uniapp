@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { session } from '@/utils/session'
 import { createShare, resolveShare } from '@/api/stories'
-import { sharePath, isPublicContent } from '@/utils/story'
+import { shareCard, sharePath, isPublicContent } from '@/utils/story'
 import type { ShareKind, ShareTarget } from '@/types/story'
 import PublicContent from '@/components/PublicContent.vue'
 const user = useUserStore()
@@ -15,6 +16,7 @@ const id = ref('')
 const reference = ref('')
 const target = ref<ShareTarget | null>(null)
 const path = ref('')
+const cover = ref('')
 const busy = ref(false)
 const error = ref('')
 const readEpoch = ref(-1)
@@ -24,6 +26,7 @@ let generation = 0
 function clear() {
   target.value = null
   path.value = ''
+  cover.value = ''
   readEpoch.value = -1
 }
 async function load(create = false) {
@@ -71,6 +74,11 @@ async function load(create = false) {
     })
     target.value = result
     readEpoch.value = epoch
+    await nextTick()
+    if (active()) {
+      const image = await drawCover(result).catch(() => '')
+      if (active()) cover.value = image
+    }
   } catch {
     if (!active()) return
     clear()
@@ -81,16 +89,73 @@ async function load(create = false) {
     if (current === generation) busy.value = false
   }
 }
-// 微信分享回调同步返回已准备的引用。回流页每次显示都重新请求公开投影。
-onShareAppMessage(() => ({
-  title: '鲤愿池 · 心愿与还愿故事',
-  // 显式使用通用封面，避免微信默认截取当前页面正文作为卡片图片。
-  imageUrl: '/static/share-cover.png',
-  path:
-    visible && readEpoch.value === session.getEpoch() && currentTarget.value && path.value
-      ? path.value
-      : '/pages/index/index',
-}))
+// 使用独立封面展示标题和标签，避免微信截取页面正文。
+async function drawCover(share: ShareTarget): Promise<string> {
+  const card = shareCard(share)
+  const canvas = uni.createCanvasContext('wish-share-cover')
+  canvas.setFillStyle('#edf7f4')
+  canvas.fillRect(0, 0, 400, 320)
+  canvas.setFillStyle('#216a60')
+  canvas.setFontSize(23)
+  canvas.fillText('鲤愿池', 30, 53)
+  canvas.setFillStyle('#173d39')
+  canvas.setFontSize(30)
+  let line = ''
+  let y = 120
+  for (const character of card.title) {
+    if (canvas.measureText(line + character).width > 340) {
+      if (y === 204) {
+        while (canvas.measureText(line + '…').width > 340) line = line.slice(0, -1)
+        line += '…'
+        break
+      }
+      canvas.fillText(line, 30, y)
+      line = ''
+      y += 42
+    }
+    line += character
+  }
+  canvas.fillText(line, 30, y)
+  canvas.setFontSize(22)
+  let x = 30
+  for (const tag of card.tags) {
+    const width = canvas.measureText(tag).width + 24
+    canvas.setFillStyle('#d6ebe5')
+    canvas.fillRect(x, 247, width, 38)
+    canvas.setFillStyle('#216a60')
+    canvas.fillText(tag, x + 12, 273)
+    x += width + 10
+  }
+  return new Promise((resolve) => {
+    canvas.draw(false, () =>
+      uni.canvasToTempFilePath({
+        canvasId: 'wish-share-cover',
+        destWidth: 800,
+        destHeight: 640,
+        success: ({ tempFilePath }) => resolve(tempFilePath),
+        fail: () => resolve(''),
+      }),
+    )
+  })
+}
+
+// 回流页每次显示都重新请求当前公开投影。
+onShareAppMessage(() => {
+  const share = currentTarget.value
+  if (!visible || !share || !path.value) {
+    return {
+      title: '鲤愿池 · 心愿与还愿故事',
+      imageUrl: '/static/share-cover.png',
+      path: '/pages/index/index',
+    }
+  }
+  const { title, tags } = shareCard(share)
+  return {
+    title: [title, ...tags].join(' · '),
+    imageUrl: cover.value || '/static/share-cover.png',
+    path: path.value,
+  }
+})
 function leave() {
   visible = false
   generation++
@@ -120,6 +185,13 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
@@ -147,15 +219,24 @@ onUnload(leave)
     <text v-if="busy">加载中…</text>
     <view v-if="currentTarget" class="card">
       <text>{{ currentTarget.target_kind === 'story' ? '还愿故事' : '公开心愿' }}</text>
+      <text>{{ shareCard(currentTarget).title }}</text>
+      <text v-if="shareCard(currentTarget).tags.length">
+        {{ shareCard(currentTarget).tags.join(' · ') }}
+      </text>
       <PublicContent :content="currentTarget.target" :kind="currentTarget.target_kind" />
       <navigator
         :url="`/pages/${currentTarget.target_kind === 'story' ? 'stories' : 'wish-detail'}/index?id=${encodeURIComponent(currentTarget.target.id)}`"
         >查看当前详情</navigator
       >
-      <button open-type="share">分享给微信好友</button>
+      <button open-type="share" :disabled="busy">分享给微信好友</button>
     </view>
     <text v-if="!reference && (!kind || !id)" class="error">分享链接无效。</text>
     <text v-if="error" class="error">{{ error }}</text>
     <navigator url="/pages/stories/index">前往还愿墙</navigator>
+    <canvas
+      canvas-id="wish-share-cover"
+      style="position: fixed; left: -1000px; width: 400px; height: 320px"
+      aria-hidden="true"
+    />
   </AppPage>
 </template>

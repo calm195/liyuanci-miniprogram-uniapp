@@ -3,6 +3,7 @@ import type { WishInput, WishResult, WishState } from '../types/wish.ts'
 
 export function emptyWish(): WishInput {
   return {
+    title: '',
     category: 'help',
     body: '',
     campus: 'any',
@@ -11,6 +12,11 @@ export function emptyWish(): WishInput {
   }
 }
 export function validateWish(input: WishInput): string {
+  if (!input.title.trim()) return '请填写心愿标题'
+  if (Array.from(input.title).length > 40) return '心愿标题不能超过 40 个字'
+  if (input.reward_method === 'custom' && !input.reward_text?.trim()) return '请填写报答方式'
+  if (input.reward_method !== 'custom' && input.reward_text) return '请选择自己填写后输入报答方式'
+  if (Array.from(input.reward_text || '').length > 100) return '报答方式不能超过 100 个字'
   if (!input.body.trim()) return '请填写心愿正文'
   if (Array.from(input.body).length > 500) return '心愿正文不能超过 500 个字'
   if (!Number.isInteger(input.duration_days) || input.duration_days < 1 || input.duration_days > 30)

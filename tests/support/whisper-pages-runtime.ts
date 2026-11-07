@@ -49,6 +49,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     version: 8,
     content_version: 3,
     status: 'draft',
+    title: '合成旧标题',
     body: '合成旧正文',
     identity_input: { mode: 'anonymous' },
     allowed_actions: [
@@ -129,6 +130,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       owner = {
         ...owner,
         version: owner.version + 1,
+        title: String(input.data?.title ?? '未命名悄悄话'),
         body: String(input.data?.body),
         identity_input: input.data?.identity as { mode: string },
       }
@@ -139,6 +141,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
         owner = {
           ...owner,
           version: owner.version + 1,
+          title: String(input.data?.title ?? '未命名悄悄话'),
           body: String(input.data?.body),
           identity_input: input.data?.identity as { mode: string },
         }
@@ -232,12 +235,14 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     hide: [],
     unload: [],
     load: [],
+    refresh: [],
   }
   const platform = {
     onShow: (fn: () => unknown) => hooks.show!.push(fn),
     onHide: (fn: () => unknown) => hooks.hide!.push(fn),
     onUnload: (fn: () => unknown) => hooks.unload!.push(fn),
     onLoad: (fn: () => unknown) => hooks.load!.push(fn),
+    onPullDownRefresh: (fn: () => unknown) => hooks.refresh!.push(fn),
   }
   const storeRuntime = await loadRuntime(
     readFileSync(new URL('../../src/stores/whispers.ts', import.meta.url), 'utf8'),
@@ -253,6 +258,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       useUserStore: () => user,
       RequestError,
       createWhisperScope: api.createWhisperScope,
+      uni: { stopPullDownRefresh() {} },
     },
   )
   const feed = await loadRuntime(
@@ -263,6 +269,21 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       useWhispersStore: () => module,
       useWhisperPage: controller.useWhisperPage,
       mergeWhisperPage: content.mergeWhisperPage,
+      canWhisperAction: api.canWhisperAction,
+      whisperKey: api.whisperKey,
+    },
+  )
+  const postEditor = await loadRuntime(
+    readFileSync(
+      new URL('../../src/composables/use-whisper-post-editor.ts', import.meta.url),
+      'utf8',
+    ),
+    {
+      ...api,
+      ...content,
+      session,
+      useWhispersStore: () => module,
+      useWhisperPage: controller.useWhisperPage,
     },
   )
   const exports: Record<string, string> = {
@@ -270,23 +291,31 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     'capsules/create': 'body,date,time,second,accepted,receipt,canCreate,load,submit,page',
     'capsules/detail': 'id,record,allowed,load,command,page',
     editor:
-      'id,record,body,mode,tags,nickname,identityNotice,canSave,changed,load,save,submit,withdraw,commentsSetting,page',
+      'id,record,title,body,mode,tags,nickname,identityNotice,canSave,changed,load,save,submit,withdraw,commentsSetting,page',
     nickname: 'state,label,canSave,load,save,page',
-    mine: 'tab,posts,comments,cursor,ready,load,switchTab,withdraw,page',
-    detail: 'post,comments,cursor,commentsError,load,block,hug,page',
+    mine: 'posts,cursor,ready,load,page',
+    settings:
+      'tab,state,label,canSave,comments,cursor,ready,load,switchTab,withdraw,openComment,save,page',
+    detail:
+      'post,ownerPost,comments,cursor,commentsError,load,block,hug,edit,cancelEdit,editing,editor,page',
     'comment-editor': 'id,postId,record,post,body,mode,tags,nickname,canSubmit,load,submit,page',
     notifications: 'items,cursor,ready,capsule,capsuleNotice,unread,load,markRead,open,page',
     help: 'directory,load,page',
     report: 'target,typeCode,load,submit,page',
-    index: 'items,cursor,ready,busy,error,load',
+    index: 'items,cursor,ready,busy,error,load,hug',
   }
-  const source =
+  let source =
     pageScript(
       new URL(
         `../../src/pages/${name.startsWith('capsules/') ? name : 'whispers/' + name}.vue`,
         import.meta.url,
       ),
     ) + `\nexport { ${exports[name]} }`
+  if (name === 'editor')
+    source = source.replace(
+      'const { id, page, load } = editor',
+      `const { ${exports[name]} } = editor`,
+    )
   const runtime = await loadRuntime(source, {
     ...platform,
     uni: { navigateTo: ({ url }: { url: string }) => routes.push(url) },
@@ -299,6 +328,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     useWhispersStore: () => module,
     useWhisperPage: controller.useWhisperPage,
     useWhisperFeed: feed.useWhisperFeed,
+    useWhisperPostEditor: postEditor.useWhisperPostEditor,
   })
   for (const fn of hooks.load!) fn(query)
   for (const fn of hooks.show!) fn()
@@ -335,6 +365,10 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     defaultTransport: () => transport,
     show: async () => {
       for (const fn of hooks.show!) fn()
+      await settle()
+    },
+    refresh: async () => {
+      for (const fn of hooks.refresh!) await fn()
       await settle()
     },
     hide: () => {

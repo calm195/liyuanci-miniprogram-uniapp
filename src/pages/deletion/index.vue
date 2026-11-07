@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -118,6 +119,14 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    if (deletion.receipt) await deletion.read()
+    else await refresh()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>

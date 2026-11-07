@@ -196,7 +196,7 @@ test('REQ-010：页面注册与原通知入口分离，正文和身份不持久�
     )
   }
   const source = readFileSync(new URL('../src/pages/inbox/index.vue', import.meta.url), 'utf8')
-  assert.match(source, /pages\/whispers\/notifications/)
+  assert.match(source, /通知中心/)
   assert.match(source, /listNotifications/)
 })
 

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { session } from '@/utils/session'
@@ -11,7 +12,7 @@ import { notificationConversation } from '@/utils/chat'
 import type { AppNotification, Conversation } from '@/types/chat'
 
 const user = useUserStore()
-const tab = ref<'conversations' | 'notifications'>('conversations')
+const tab = ref<'conversations' | 'notifications'>('notifications')
 const conversations = ref<Conversation[]>([])
 const notifications = ref<AppNotification[]>([])
 const cursor = ref<string | null>(null)
@@ -60,7 +61,10 @@ async function load(more = false) {
     epoch === session.getEpoch() &&
     owner === user.user?.id &&
     mode === tab.value
-  if (!more) clear()
+  if (!more) {
+    cursor.value = null
+    usedCursors.clear()
+  }
   error.value = ''
   if (config.useMock || !owner || !session.getToken()) {
     error.value = config.useMock ? '聊天与通知需连接真实服务。' : '请登录后查看聊天与通知。'
@@ -68,7 +72,7 @@ async function load(more = false) {
   }
   busy.value = true
   try {
-    await user.refresh(false)
+    await user.refresh(false, true)
     if (!isCurrent()) return
     if (mode === 'conversations') {
       const page = await listConversations(nextCursor)
@@ -106,6 +110,7 @@ async function load(more = false) {
 function selectTab(value: 'conversations' | 'notifications') {
   if (writing.value || busy.value || value === tab.value) return
   tab.value = value
+  clear()
   notice.value = ''
   return load()
 }
@@ -185,53 +190,37 @@ watch(
   },
   { flush: 'sync' },
 )
+onLoad((query) => {
+  tab.value = query?.view === 'conversations' ? 'conversations' : 'notifications'
+})
 onShow(() => {
   visible = true
   void load()
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
-    <navigator url="/pages/whispers/notifications">悄悄鲤通知</navigator>
-    <text class="title">聊天与通知</text>
-    <navigator url="/pages/safety/index">警告与申诉</navigator>
-    <navigator url="/pages/care/index">关怀与援助</navigator>
+    <text class="title">{{ tab === 'conversations' ? '聊天' : '通知中心' }}</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <view class="flex flex-wrap gap-3">
-      <button
-        :disabled="busy || writing"
-        :loading="isPageActionPending('pages-inbox-index-button-1')"
-        @click="runPageAction(() => selectTab('conversations'), 'pages-inbox-index-button-1')"
-      >
-        聊天
-      </button>
-      <button
-        :disabled="busy || writing"
-        :loading="isPageActionPending('pages-inbox-index-button-2')"
-        @click="runPageAction(() => selectTab('notifications'), 'pages-inbox-index-button-2')"
-      >
-        通知
-      </button>
-    </view>
-    <button
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-inbox-index-button-3')"
-      @click="runPageAction(() => load(), 'pages-inbox-index-button-3')"
-    >
-      刷新
-    </button>
     <text v-if="busy">加载中…</text>
     <template v-if="tab === 'conversations'">
       <text v-if="scoped && !busy && !conversationRows.length">暂无可访问会话</text>
       <navigator
-        v-for="(conversation, index) in conversationRows"
+        v-for="conversation in conversationRows"
         :key="conversation.id"
         class="card"
         :url="`/pages/chat/index?id=${encodeURIComponent(conversation.id)}`"
       >
-        <text>匿名会话 {{ index + 1 }}</text>
+        <text>{{ conversation.wish_title || '未命名心愿' }}</text>
         <text>{{ conversation.can_write ? '可聊天' : '只读' }}</text>
       </navigator>
     </template>
@@ -240,19 +229,14 @@ onUnload(leave)
       <text v-if="scoped && !busy && !notificationRows.length">暂无通知</text>
       <view v-for="notification in notificationRows" :key="notification.id" class="card">
         <navigator
-          v-if="notification.kind === 'penalty_notice' && notification.target_ref"
-          :url="`/pages/safety/index?tab=appeals&penaltyId=${encodeURIComponent(notification.target_ref)}&notificationId=${encodeURIComponent(notification.id)}`"
-          >查看警告或对此处罚申诉</navigator
+          v-if="notification.target_kind === 'post' && notification.target_ref"
+          :url="`/pages/whispers/detail?id=${encodeURIComponent(notification.target_ref)}`"
+          >查看悄悄话与暖评</navigator
         >
         <navigator
-          v-if="notification.kind === 'appeal_result'"
-          url="/pages/safety/index?tab=appeals"
-          >查看当前申诉结果</navigator
-        >
-        <navigator
-          v-if="notification.kind === 'crisis_care' && notification.target_ref"
-          :url="`/pages/care/index?id=${encodeURIComponent(notification.target_ref)}`"
-          >查看关怀与援助资料</navigator
+          v-if="notification.target_kind === 'capsule' && notification.target_ref"
+          :url="`/pages/capsules/detail?id=${encodeURIComponent(notification.target_ref)}`"
+          >查看时光胶囊</navigator
         >
         <text>{{ notification.read ? '已读' : '未读' }}</text>
         <text>{{ notification.notice || '有新进展，请查看相关页面。' }}</text>

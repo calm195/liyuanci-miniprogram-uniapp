@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -374,6 +375,13 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
@@ -394,13 +402,7 @@ onUnload(leave)
     >
       本人申诉
     </button>
-    <button
-      :disabled="busy || writing || uncertain"
-      :loading="isPageActionPending('pages-safety-index-button-3')"
-      @click="runPageAction(() => load(), 'pages-safety-index-button-3')"
-    >
-      刷新
-    </button>
+
     <template v-if="tab === 'warnings'">
       <text v-if="scoped && !busy && !warningRows.length">暂无未确认警告</text>
       <view v-for="warning in warningRows" :key="warning.id" class="card">
@@ -478,7 +480,7 @@ onUnload(leave)
           {{ uncertain ? '重试同一次申诉' : '提交申诉' }}
         </button>
       </view>
-      <text v-if="scoped && !penaltyId">从本人警告或处罚通知进入，可针对对应处罚提交申诉。</text>
+      <text v-if="scoped && !penaltyId">可在「本人警告」选择对应记录提交申诉。</text>
       <text v-if="uncertain">离开页面将清除未确认内容，请避免重复新建申诉。</text>
       <view v-for="(item, index) in appealRows" :key="item.id" class="card">
         <text>申诉 {{ index + 1 }}：{{ appealLabels[item.status] || '状态待核对' }}</text>
@@ -494,7 +496,6 @@ onUnload(leave)
     >
       加载下一页
     </button>
-    <navigator url="/pages/inbox/index">查看处罚通知</navigator>
     <text v-if="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </AppPage>

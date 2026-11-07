@@ -1,22 +1,34 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
+import WhisperPostEditor from '@/components/WhisperPostEditor.vue'
+import { useWhisperPostEditor } from '@/composables/use-whisper-post-editor'
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { session } from '@/utils/session'
 import { callWhisper } from '@/api/whispers'
 import { useWhispersStore } from '@/stores/whispers'
 import { useWhisperPage } from '@/composables/use-whisper-page'
-import { mergeWhisperPage } from '@/utils/whisper-content'
+import { mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
-import type { PublicPost, PublicComment } from '@/types/whispers'
+import type { OwnerPost, PublicPost, PublicComment } from '@/types/whispers'
 const module = useWhispersStore()
 const id = ref('')
+const editing = ref(false)
+const manage = ref(false)
+const editor = useWhisperPostEditor()
+const ownerPost = ref<OwnerPost | null>(null)
 const post = ref<PublicPost | null>(null)
 const comments = ref<PublicComment[]>([])
 const cursor = ref<string | null>(null)
 const commentsError = ref('')
 const seen = new Set<string>()
 function clear() {
+  editing.value = false
+  ownerPost.value = null
+  clearPublic()
+}
+function clearPublic() {
   post.value = null
   comments.value = []
   cursor.value = null
@@ -25,6 +37,24 @@ function clear() {
 }
 const page = useWhisperPage(clear)
 const { busy, writing, error, notice, retryReady } = page
+async function edit() {
+  if ((!ownerPost.value && !post.value?.viewer_is_author) || editor.locked.value) return
+  editor.id.value = id.value
+  await editor.load()
+  if (editor.record.value) {
+    manage.value = true
+    editing.value = true
+    ownerPost.value = null
+    clearPublic()
+    error.value = ''
+  } else error.value = editor.error.value
+}
+async function cancelEdit() {
+  if (!editing.value || editor.locked.value) return
+  editor.page.reset()
+  editing.value = false
+  await load()
+}
 async function load(more = false) {
   if (more && (!post.value || !cursor.value)) return
   const previous = more ? cursor.value! : undefined
@@ -33,6 +63,17 @@ async function load(more = false) {
     if (!more) await module.refresh()
     if (!active()) return
     if (!module.config?.enabled) throw new Error('树洞尚未开放或当前不可用。')
+    if (manage.value && !more) {
+      if (!session.getToken()) throw new Error('请登录后查看自己的心事。')
+      const result = await callWhisper('whisperOwnPostGet', { path: { post_id: id.value } })
+      if (!active()) return
+      if (result.id !== id.value) throw new Error('帖子目标不匹配，请重新打开。')
+      ownerPost.value = result
+      if (result.status !== 'published') {
+        clearPublic()
+        return
+      }
+    }
     const result = await callWhisper('whisperPostGet', { path: { post_id: id.value } })
     if (!active()) return
     if (result.id !== id.value) throw new Error('帖子目标不匹配，请重新打开。')
@@ -58,6 +99,7 @@ async function load(more = false) {
         )
       )
         throw new Error('评论与原帖正文版本不匹配，请刷新。')
+      if (!more) seen.clear()
       const merged = mergeWhisperPage(more ? comments.value : [], list, previous, seen)
       comments.value = merged.items
       cursor.value = merged.cursor
@@ -138,23 +180,40 @@ async function block(comment?: PublicComment) {
 }
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
+  manage.value = query?.manage === '1'
 })
+page.onRefresh(() => (editing.value ? editor.load(true) : load()))
 onShow(() => {
   void load()
 })
 </script>
 <template>
   <AppPage>
-    <text class="title">树洞详情</text
-    ><button
-      :disabled="busy || writing || retryReady"
-      :loading="isPageActionPending('pages-whispers-detail-button-1')"
-      @click="runPageAction(() => load(), 'pages-whispers-detail-button-1')"
-    >
-      刷新当前内容
-    </button>
-    <view v-if="post" class="card"
-      ><WhisperContent :content="post" /><text
+    <text v-if="editing || post || ownerPost" class="title">{{
+      (editing ? editor.record.value?.title : (post?.title ?? ownerPost?.title)) || '未命名悄悄话'
+    }}</text>
+    <view v-if="editing" class="edit-section">
+      <button
+        :disabled="editor.locked.value"
+        :loading="isPageActionPending('whisper-own-edit-cancel')"
+        @click="runPageAction(cancelEdit, 'whisper-own-edit-cancel')"
+      >
+        取消编辑
+      </button>
+      <WhisperPostEditor :editor="editor" />
+    </view>
+    <view v-else-if="!post && ownerPost" class="card">
+      <text>{{ whisperStates[ownerPost.status] }}</text>
+      <text v-if="ownerPost.body" class="whitespace-pre-wrap">{{ ownerPost.body }}</text>
+      <text v-if="ownerPost.review_result?.reason" class="notice">{{
+        ownerPost.review_result.reason
+      }}</text>
+      <text v-if="ownerPost.review_result?.revision_suggestion" class="notice">{{
+        ownerPost.review_result.revision_suggestion
+      }}</text>
+    </view>
+    <view v-if="post && !editing" class="card"
+      ><WhisperContent :content="post" hide-title /><text
         >暖评 {{ post.comment_count }} · 抱抱 {{ post.hug_count }}</text
       >
       <navigator
@@ -174,49 +233,68 @@ onShow(() => {
       >
         {{ post.my_hug.active ? '取消抱抱' : '抱抱' }}
       </button>
-      <navigator
-        v-if="post.viewer_is_author"
-        :url="`/pages/whispers/editor?id=${encodeURIComponent(post.id)}`"
-        >管理我的帖子</navigator
-      >
-      <navigator
-        v-if="canWhisperAction('PublicPost', post, 'whisperReportCreate')"
-        :url="`/pages/whispers/report?kind=whisper_post&id=${encodeURIComponent(post.id)}`"
-        >举报此内容</navigator
-      >
-      <button
-        v-if="
-          !post.viewer_is_author &&
-          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
-        "
-        :disabled="busy || writing || retryReady"
-        :loading="isPageActionPending('pages-whispers-detail-button-3')"
-        @click="runPageAction(() => block(), 'pages-whispers-detail-button-3')"
-      >
-        屏蔽此内容的发布者
-      </button>
+      <view class="moderation-actions">
+        <navigator
+          v-if="
+            !post.viewer_is_author && canWhisperAction('PublicPost', post, 'whisperReportCreate')
+          "
+          class="moderation-link"
+          :url="`/pages/whispers/report?kind=whisper_post&id=${encodeURIComponent(post.id)}`"
+          >举报</navigator
+        >
+        <button
+          v-if="
+            !post.viewer_is_author &&
+            canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+          "
+          class="moderation-link"
+          :disabled="busy || writing || retryReady"
+          :loading="isPageActionPending('pages-whispers-detail-button-3')"
+          @click="runPageAction(() => block(), 'pages-whispers-detail-button-3')"
+        >
+          屏蔽发布者
+        </button>
+      </view>
       <text v-if="!post.comments_open">评论已关闭，已公开合规评论仅供阅读。</text>
     </view>
-    <view v-for="comment in comments" :key="comment.id" class="card"
-      ><WhisperContent :content="comment" /><navigator
-        v-if="canWhisperAction('PublicComment', comment, 'whisperReportCreate')"
-        :url="`/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`"
-        >举报此暖评</navigator
-      ><button
-        v-if="
-          !comment.viewer_is_author &&
-          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
-        "
-        :disabled="busy || writing || retryReady"
-        :loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
-        @click="
-          runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
-        "
-      >
-        屏蔽此暖评的发布者
-      </button></view
+    <button
+      v-if="!editing && (ownerPost?.allowed_actions.length || post?.viewer_is_author)"
+      :disabled="busy || writing || retryReady || editor.locked.value"
+      :loading="isPageActionPending('whisper-own-edit')"
+      @click="runPageAction(edit, 'whisper-own-edit')"
     >
-    <text v-if="post && !comments.length && !busy && !commentsError">当前页暂无公开暖评。</text>
+      {{
+        post?.viewer_is_author || ownerPost?.allowed_actions.includes('whisperPostUpdate')
+          ? '编辑'
+          : '管理帖子'
+      }}
+    </button>
+    <view v-for="comment in editing ? [] : comments" :key="comment.id" class="card"
+      ><WhisperContent :content="comment" /><view class="moderation-actions"
+        ><navigator
+          v-if="canWhisperAction('PublicComment', comment, 'whisperReportCreate')"
+          class="moderation-link"
+          :url="`/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`"
+          >举报</navigator
+        ><button
+          v-if="
+            !comment.viewer_is_author &&
+            canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+          "
+          class="moderation-link"
+          :disabled="busy || writing || retryReady"
+          :loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
+          @click="
+            runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
+          "
+        >
+          屏蔽发布者
+        </button></view
+      ></view
+    >
+    <text v-if="!editing && post && !comments.length && !busy && !commentsError"
+      >当前页暂无公开暖评。</text
+    >
     <button
       v-if="cursor"
       :disabled="busy || writing || retryReady"
@@ -236,3 +314,17 @@ onShow(() => {
     ><text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+<style scoped>
+.moderation-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24rpx;
+  margin-top: 28rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid var(--theme-line);
+}
+.edit-section {
+  margin-top: 24rpx;
+}
+</style>

@@ -74,7 +74,7 @@ function pick(field: keyof WhisperTagsDraft, event: { detail: { value: string | 
       {{ mode === 'named' ? '已选：树洞昵称' : '树洞昵称' }}
     </button>
     <text v-if="!nickname?.active">仅已审昵称可用，待审候选不能用于发布。</text>
-    <navigator url="/pages/whispers/nickname">管理树洞昵称（离开会清空未保存正文）</navigator>
+    <text v-if="!nickname?.active">可以到个人中心的悄悄话设置中管理昵称。</text>
     <view v-if="mode === 'semi' && semi">
       <text>标签全部由本人选择，不从学生认证资料推断。</text>
       <picker

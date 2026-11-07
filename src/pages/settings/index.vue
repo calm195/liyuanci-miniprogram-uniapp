@@ -1,35 +1,36 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
+import ProfileAvatar from '@/components/ProfileAvatar.vue'
+import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 import { RequestError } from '@/utils/request'
-import { canWhisperAction, createWhisperScope, whisperKey } from '@/utils/whispers'
-import type { Workspace } from '@/types/whispers'
-import { updateProfile, listBlocks, getBlockWorkspace } from '@/api/settings'
-import { getPublicProfile } from '@/api/applications'
-import { getWish } from '@/api/wishes'
-import { getStory } from '@/api/stories'
+import { whisperKey } from '@/utils/whispers'
+import { updateProfile } from '@/api/settings'
 import type { UserInfo } from '@/types/api'
-import type { BlockEntry } from '@/types/settings'
+import { campuses, genders } from '@/types/wish'
+import type { IdentityTags } from '@/types/wish'
 const user = useUserStore()
 const me = ref<UserInfo | null>(null)
-const workspace = ref<Workspace | null>(null)
-const retryReady = ref(false)
-let scope: ReturnType<typeof createWhisperScope> | null = null
 const nickname = ref('')
+const avatarDraft = ref('')
+const selectingAvatar = ref(false)
+let avatarPickerHid = false
+const avatarError = ref('')
+const avatarPending = ref<{ path: string; version: number; key: string } | null>(null)
+const identityCampus = ref<IdentityTags['campus']>('any')
+const identityGrade = ref('')
+const gradeOptions = computed(() => [
+  { code: '', label: '未填写' },
+  ...(currentMe.value?.grade_options ?? []),
+])
+const identityGender = ref<IdentityTags['gender']>('undisclosed')
 // 字段缺省时保持未知，禁止把省略擅自解释成公开或隐藏。
 const hidden = ref<boolean | null>(null)
-const blocks = ref<BlockEntry[]>([])
-const cursor = ref<string | null>(null)
-const blocksReady = ref(false)
-const targetId = ref('')
-const sourceId = ref('')
-const sourceKind = ref('')
-const targetName = ref('')
 const busy = ref(false)
 const writing = ref(false)
 const error = ref('')
@@ -37,13 +38,11 @@ const notice = ref('')
 const readEpoch = ref(-1)
 let visible = false
 let generation = 0
-const seen = new Set<string>()
 const currentMe = computed(() =>
   user.validated && readEpoch.value === session.getEpoch() && me.value?.id === user.user?.id
     ? me.value
     : null,
 )
-const rows = computed(() => (currentMe.value && blocksReady.value ? blocks.value : []))
 function allowed(action: string) {
   return !!(
     !config.useMock &&
@@ -55,123 +54,64 @@ function allowed(action: string) {
     readEpoch.value === session.getEpoch()
   )
 }
-function blockAllowed() {
-  return (
-    !!currentMe.value && canWhisperAction('Workspace', workspace.value, 'interactionBlockCreate')
-  )
-}
-function unblockAllowed(entry: BlockEntry) {
-  return !!currentMe.value && canWhisperAction('BlockEntry', entry, 'interactionBlockDelete')
+function selectTag(
+  kind: 'campus' | 'gender' | 'grade',
+  event: { detail: { value: string | number } },
+) {
+  if (busy.value || writing.value || !allowed('putMeProfile')) return
+  const index = Number(event.detail.value)
+  if (kind === 'campus') identityCampus.value = campuses[index]?.value || 'any'
+  else if (kind === 'grade')
+    identityGrade.value = gradeOptions.value[index]?.code ?? identityGrade.value
+  else identityGender.value = genders[index]?.value || 'undisclosed'
 }
 function clear() {
-  workspace.value = null
   me.value = null
   nickname.value = ''
+  avatarDraft.value = ''
+  selectingAvatar.value = false
+  avatarPickerHid = false
+  avatarError.value = ''
+  avatarPending.value = null
+  identityCampus.value = 'any'
+  identityGrade.value = ''
+  identityGender.value = 'undisclosed'
   hidden.value = null
-  blocks.value = []
-  cursor.value = null
-  blocksReady.value = false
-  targetName.value = ''
   readEpoch.value = -1
-  seen.clear()
 }
-async function load(more = false) {
-  if (busy.value || writing.value || (more && (!currentMe.value || !cursor.value))) return
+async function load() {
+  if (busy.value || writing.value || selectingAvatar.value) return
   const current = ++generation
   const epoch = session.getEpoch()
   const owner = user.user?.id
   const active = () =>
     visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
-  const next = more ? cursor.value! : undefined
-  if (!more) clear()
   error.value = ''
   if (config.useMock || !session.getToken() || !owner) {
+    clear()
     error.value = config.useMock ? '个人设置需连接真实服务。' : '请登录后管理个人资料。'
     return
   }
-  if (!scope) scope = createWhisperScope()
   busy.value = true
   try {
-    if (!more) {
-      await user.refresh(false)
-      if (!active()) return
-      const result = user.user
-      if (
-        !user.validated ||
-        !result ||
-        result.id !== owner ||
-        !Number.isInteger(result.version) ||
-        result.version < 1
-      )
-        throw new Error('本人资料无效')
-      me.value = { ...result, allowed_actions: [...result.allowed_actions] }
-      nickname.value = result.nickname ?? ''
-      hidden.value =
-        typeof result.hide_identity_tags === 'boolean' ? result.hide_identity_tags : null
-      readEpoch.value = epoch
-    }
-    {
-      try {
-        if (!more) {
-          const result = await getBlockWorkspace()
-          if (!active()) return
-          workspace.value = result
-        }
-        const page = await listBlocks(next)
-        if (!active()) return
-        if (
-          !Array.isArray(page.items) ||
-          page.items.some(
-            (item) => !item.block_id || !Number.isInteger(item.version) || item.version < 1,
-          ) ||
-          !(
-            page.next_cursor === null ||
-            (typeof page.next_cursor === 'string' && page.next_cursor.length > 0)
-          ) ||
-          (page.next_cursor && (page.next_cursor === next || seen.has(page.next_cursor)))
-        )
-          throw new Error('黑名单列表无效')
-        if (next) seen.add(next)
-        const merged = new Map((more ? blocks.value : []).map((item) => [item.block_id, item]))
-        for (const item of page.items) merged.set(item.block_id, item)
-        blocks.value = [...merged.values()]
-        cursor.value = page.next_cursor
-        blocksReady.value = true
-      } catch (failure) {
-        if (!active()) return
-        workspace.value = null
-        blocks.value = []
-        cursor.value = null
-        blocksReady.value = false
-        error.value =
-          failure instanceof RequestError && failure.error_code === 'CLIENT_UPGRADE_REQUIRED'
-            ? '当前客户端需要更新，请升级后管理黑名单。'
-            : '黑名单暂不可读取，请刷新后重试。'
-      }
-    }
-    if (!more && targetId.value && targetId.value !== owner && blockAllowed()) {
-      try {
-        let profile
-        // 从当前公开投影核对作者，禁止用路由昵称或历史正文确认拉黑对象。
-        if (sourceId.value && sourceKind.value === 'wish') {
-          const result = await getWish(sourceId.value)
-          if (
-            result.id === sourceId.value &&
-            result.current_state === 'published' &&
-            !result.privacy_review_required
-          )
-            profile = result.public?.author
-        } else if (sourceId.value && sourceKind.value === 'story') {
-          const result = await getStory(sourceId.value)
-          if (result.id === sourceId.value) profile = result.author
-        } else {
-          profile = (await getPublicProfile(targetId.value)).profile
-        }
-        if (active() && profile?.id === targetId.value) targetName.value = profile.nickname
-      } catch {
-        if (active()) error.value = '目标主页暂不可读取，不能确认拉黑对象。'
-      }
-    }
+    await user.refresh(false, true)
+    if (!active()) return
+    const result = user.user
+    if (
+      !user.validated ||
+      !result ||
+      result.id !== owner ||
+      !Number.isInteger(result.version) ||
+      result.version < 1
+    )
+      throw new Error('本人资料无效')
+    me.value = { ...result, allowed_actions: [...result.allowed_actions] }
+    nickname.value = result.nickname ?? ''
+    identityCampus.value = result.identity_tags?.campus || 'any'
+    identityGrade.value = result.identity_tags?.grade ?? ''
+    identityGender.value = result.identity_tags?.gender || 'undisclosed'
+    hidden.value = typeof result.hide_identity_tags === 'boolean' ? result.hide_identity_tags : null
+    readEpoch.value = epoch
   } catch {
     if (active()) {
       clear()
@@ -191,26 +131,141 @@ function confirm(title: string, content: string): Promise<boolean> {
     }),
   )
 }
-async function act(action: 'profile' | 'block' | 'unblock', entry?: BlockEntry) {
-  if (busy.value || writing.value || retryReady.value || !currentMe.value) return
-  const permitted = () =>
-    action === 'profile'
-      ? allowed('putMeProfile')
-      : action === 'block'
-        ? blockAllowed() && !!targetName.value && targetId.value !== currentMe.value?.id
-        : unblockAllowed(entry!) && !!entry && rows.value.includes(entry)
-  if (!permitted()) return
-  if (action === 'profile' && (!nickname.value.trim() || typeof hidden.value !== 'boolean')) {
+async function chooseAvatar() {
+  if (busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile')) return
+  const current = generation
+  const epoch = session.getEpoch()
+  const active = () => visible && current === generation && epoch === session.getEpoch()
+  selectingAvatar.value = true
+  avatarError.value = ''
+  try {
+    const image = await new Promise<{ tempFilePath: string; size: number } | undefined>(
+      (resolve, reject) => {
+        uni.chooseMedia({
+          count: 1,
+          mediaType: ['image'],
+          sourceType: ['album', 'camera'],
+          sizeType: ['compressed'],
+          success: (result) => resolve(result.tempFiles[0]),
+          fail: (failure) => {
+            if (failure.errMsg?.includes('cancel')) resolve(undefined)
+            else reject(new Error('无法打开相册或相机，请检查权限后重试。'))
+          },
+        })
+      },
+    )
+    if (!active() || !image?.tempFilePath) return
+    if (!Number.isSafeInteger(image.size) || image.size < 1 || image.size > maxAvatarBytes)
+      throw new Error('请选择不超过 2 MiB 的图片。')
+    const result = await uni.getImageInfo({ src: image.tempFilePath })
+    if (!active()) return
+    if (!['jpeg', 'jpg', 'png'].includes((result.type || '').toLowerCase()))
+      throw new Error('请选择 JPG 或 PNG 格式的头像。')
+    avatarDraft.value = image.tempFilePath
+    avatarPending.value = null
+  } catch (failure) {
+    if (active())
+      avatarError.value = failure instanceof Error ? failure.message : '图片无法读取，请重新选择。'
+  } finally {
+    if (active()) selectingAvatar.value = false
+  }
+}
+async function changeAvatar(remove = false) {
+  const snapshot = currentMe.value
+  if (!snapshot || busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile'))
+    return
+  const path = remove ? '' : avatarDraft.value
+  if (remove ? !snapshot.avatar_id && !snapshot.avatar_url : !path) return
+  const current = generation
+  const epoch = session.getEpoch()
+  const active = () =>
+    visible &&
+    current === generation &&
+    epoch === session.getEpoch() &&
+    snapshot.id === user.user?.id
+  const pending = avatarPending.value?.path === path ? avatarPending.value : null
+  writing.value = true
+  avatarError.value = ''
+  notice.value = ''
+  let reload = false
+  try {
+    if (remove && !pending && !(await confirm('恢复默认头像', '确定使用默认头像？'))) return
+    if (!active() || !allowed('putMeProfile')) return
+    const command = pending ?? { path, version: snapshot.version, key: whisperKey() }
+    avatarPending.value = command
+    const result = path
+      ? await uploadAvatar(path, command.version, command.key)
+      : await deleteAvatar(command.version, command.key)
+    if (!active()) return
+    const expectedReceiptVersion = command.version + 1
+    if (
+      result?.id !== snapshot.id ||
+      !Number.isSafeInteger(result.version) ||
+      result.version < expectedReceiptVersion ||
+      !Array.isArray(result.allowed_actions) ||
+      (result.version === expectedReceiptVersion &&
+        (path ? !result.avatar_id : !!(result.avatar_id || result.avatar_url)))
+    )
+      throw new Error('头像操作结果尚未确认，请使用原请求重试。')
+    const updated = user.acceptAvatarProfile(result, epoch)
+    if (!updated) return
+    me.value = { ...updated, allowed_actions: [...updated.allowed_actions] }
+    avatarPending.value = null
+    avatarDraft.value = ''
+    if (updated.version > expectedReceiptVersion) notice.value = '已同步当前头像。'
+    else if (path && !updated.avatar_url)
+      notice.value = '头像已更新，图片暂不可读取，可下拉重试加载。'
+    else notice.value = path ? '头像已更新。' : '已恢复默认头像。'
+  } catch (failure) {
+    if (!active()) return
+    if (failure instanceof RequestError && failure.statusCode === 409) {
+      avatarPending.value = null
+      avatarError.value = '个人资料已变化，刷新后可以重新提交头像。'
+      reload = true
+    } else if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      failure.statusCode !== 429
+    ) {
+      avatarPending.value = null
+      avatarError.value =
+        failure.statusCode === 413
+          ? '请选择不超过 2 MiB 的图片。'
+          : '头像未保存，请检查图片格式和当前账号权限后重试。'
+    } else {
+      avatarError.value =
+        failure instanceof Error && !(failure instanceof RequestError)
+          ? failure.message
+          : '头像操作结果尚未确认，可以使用原请求重试。'
+    }
+  } finally {
+    if (active()) {
+      writing.value = false
+      if (reload) await refreshProfileDraft()
+    }
+  }
+}
+async function act() {
+  const snapshot = currentMe.value
+  if (!snapshot || busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile'))
+    return
+  if (!nickname.value.trim() || typeof hidden.value !== 'boolean') {
     error.value = '请填写非空白昵称，并明确选择身份标签是否隐藏。'
     return
   }
-  const snapshot = currentMe.value
   const input = {
     nickname: nickname.value,
+    identity_tags: {
+      campus: identityCampus.value,
+      gender: identityGender.value,
+      ...(identityGrade.value !== (snapshot.identity_tags?.grade ?? '')
+        ? { grade: identityGrade.value }
+        : {}),
+    },
     hide_identity_tags: hidden.value as boolean,
     expected_version: snapshot.version,
   }
-  const target = targetId.value
   const current = generation
   const epoch = session.getEpoch()
   const active = () =>
@@ -223,51 +278,23 @@ async function act(action: 'profile' | 'block' | 'unblock', entry?: BlockEntry) 
   notice.value = ''
   let refresh = false
   try {
-    const content =
-      action === 'profile'
-        ? '将保存昵称与身份标签显示设置。是否继续？'
-        : action === 'block'
-          ? `拉黑“${targetName.value}”后，双方不能新增申请、私聊、暖评或抱抱，旧的未匹配申请和待审消息会失效；现有匹配需另行退出。是否继续？`
-          : '解除后不会恢复旧申请、旧消息或已解除的匹配。是否继续？'
     if (
-      !(await confirm(
-        action === 'profile' ? '保存资料' : action === 'block' ? '确认拉黑' : '解除拉黑',
-        content,
-      )) ||
+      !(await confirm('保存资料', '将保存昵称与身份标签显示设置。是否继续？')) ||
       !active() ||
-      !permitted() ||
+      !allowed('putMeProfile') ||
       currentMe.value !== snapshot
     )
       return
     refresh = true
-    const key = whisperKey()
-    if (action === 'profile') {
-      const result = await updateProfile(input, key)
-      if (result.id !== snapshot.id) throw new Error('资料目标不匹配')
-    } else if (action === 'block') {
-      await scope!.send('interactionBlockCreate', {
-        data: { source: { kind: 'public_profile', id: target } },
-        key,
-      })
-    } else
-      await scope!.send('interactionBlockDelete', {
-        path: { block_id: entry!.block_id },
-        data: { expected_version: entry!.version },
-        key,
-      })
+    const result = await updateProfile(input, whisperKey())
+    if (result.id !== snapshot.id) throw new Error('资料目标不匹配')
     if (active()) notice.value = '操作已受理，已重新读取当前设置。'
   } catch (failure) {
     if (active()) {
-      retryReady.value = !!scope?.pending.value
-      refresh = !retryReady.value
       notice.value =
-        failure instanceof RequestError && failure.error_code === 'CLIENT_UPGRADE_REQUIRED'
-          ? '当前客户端需要更新，请升级后管理黑名单。'
-          : failure instanceof RequestError && failure.statusCode === 409
-            ? '版本或状态已变化，已重新读取；请核对后手动操作。'
-            : retryReady.value
-              ? '操作结果尚未确认，可使用原请求重试；离开页面将清理待确认请求。'
-              : '操作结果尚未确认，请核对重新读取的设置；不会自动重发。'
+        failure instanceof RequestError && failure.statusCode === 409
+          ? '版本或状态已变化，已重新读取；请核对后手动操作。'
+          : '操作结果尚未确认，请核对重新读取的设置；不会自动重发。'
     }
   } finally {
     if (active()) {
@@ -276,41 +303,7 @@ async function act(action: 'profile' | 'block' | 'unblock', entry?: BlockEntry) 
     }
   }
 }
-async function retryWrite() {
-  if (!retryReady.value || writing.value || !scope || !currentMe.value) return
-  const current = generation
-  const epoch = session.getEpoch()
-  writing.value = true
-  try {
-    await scope.retry()
-    if (visible && current === generation && epoch === session.getEpoch()) {
-      retryReady.value = false
-      notice.value = '操作已受理，已重新读取当前设置。'
-    }
-  } catch (failure) {
-    if (visible && current === generation && epoch === session.getEpoch()) {
-      retryReady.value = !!scope.pending.value
-      notice.value =
-        failure instanceof RequestError && failure.error_code === 'CLIENT_UPGRADE_REQUIRED'
-          ? '当前客户端需要更新，请升级后管理黑名单。'
-          : retryReady.value
-            ? '操作结果仍未确认，可继续原请求重试。'
-            : '状态已变化，请刷新核对后重新操作。'
-    }
-  } finally {
-    if (visible && current === generation && epoch === session.getEpoch()) {
-      writing.value = false
-      if (!retryReady.value) await load()
-    }
-  }
-}
-function closeScope() {
-  scope?.close()
-  scope = null
-  retryReady.value = false
-}
 function leave() {
-  closeScope()
   visible = false
   generation++
   clear()
@@ -322,7 +315,6 @@ function leave() {
 watch(
   [() => user.user?.id, () => session.getEpoch()],
   () => {
-    closeScope()
     generation++
     clear()
     busy.value = false
@@ -330,34 +322,83 @@ watch(
   },
   { flush: 'sync' },
 )
-onLoad((query) => {
-  targetId.value = typeof query?.targetId === 'string' ? query.targetId : ''
-  sourceId.value = typeof query?.sourceId === 'string' ? query.sourceId : ''
-  sourceKind.value = typeof query?.sourceKind === 'string' ? query.sourceKind : ''
-})
 onShow(() => {
-  closeScope()
-  scope = createWhisperScope()
   visible = true
+  if (avatarPickerHid || selectingAvatar.value) {
+    avatarPickerHid = false
+    return
+  }
   void load()
 })
-onHide(leave)
+onHide(() => {
+  // 微信原生相册或相机临时遮住页面，返回后仍需预览刚选中的图片。
+  if (selectingAvatar.value) avatarPickerHid = true
+  else leave()
+})
 onUnload(leave)
+async function refreshProfileDraft() {
+  if (selectingAvatar.value) return
+  const draft = {
+    nickname: nickname.value,
+    hidden: hidden.value,
+    campus: identityCampus.value,
+    gender: identityGender.value,
+    grade: identityGrade.value,
+  }
+  const epoch = session.getEpoch()
+  await load()
+  if (epoch === session.getEpoch() && currentMe.value) {
+    nickname.value = draft.nickname
+    hidden.value = draft.hidden
+    identityCampus.value = draft.campus
+    identityGender.value = draft.gender
+    identityGrade.value = draft.grade
+  }
+}
+onPullDownRefresh(async () => {
+  try {
+    await refreshProfileDraft()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
-    <ThemeSwitcher />
-    <navigator url="/pages/deletion/index">账号注销与删除进度</navigator>
     <text class="title">个人资料与隐私</text>
-    <button
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-settings-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-settings-index-button-1')"
-    >
-      刷新设置（清空未保存修改）
-    </button>
+
     <text v-if="busy">加载中…</text>
     <view v-if="currentMe" class="card">
+      <view class="avatar-settings">
+        <ProfileAvatar :src="avatarDraft || currentMe.avatar_url" class="profile-avatar" />
+        <view v-if="allowed('putMeProfile')" class="avatar-actions">
+          <button
+            :disabled="busy || writing || selectingAvatar"
+            :loading="selectingAvatar"
+            @click="chooseAvatar"
+          >
+            {{ avatarDraft ? '重新选图' : '选择头像' }}
+          </button>
+          <button
+            v-if="avatarDraft"
+            :disabled="busy || writing || selectingAvatar"
+            :loading="isPageActionPending('settings-save-avatar')"
+            @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
+          >
+            {{ avatarPending?.path && !writing ? '重试上传' : '上传头像' }}
+          </button>
+          <button
+            v-else-if="currentMe.avatar_id || currentMe.avatar_url"
+            :disabled="busy || writing || selectingAvatar"
+            :loading="isPageActionPending('settings-remove-avatar')"
+            @click="runPageAction(() => changeAvatar(true), 'settings-remove-avatar')"
+          >
+            {{ avatarPending && !writing ? '重试恢复默认头像' : '恢复默认头像' }}
+          </button>
+        </view>
+      </view>
+      <text v-if="avatarDraft" class="notice">当前为头像预览，上传后生效。</text>
+      <text v-if="avatarError" class="error">{{ avatarError }}</text>
       <text>昵称</text>
       <input
         v-model="nickname"
@@ -366,6 +407,41 @@ onUnload(leave)
         :disabled="busy || writing || !allowed('putMeProfile')"
         placeholder="填写昵称"
       />
+      <picker
+        :range="campuses.map((item) => item.label)"
+        :value="campuses.findIndex((item) => item.value === identityCampus)"
+        :disabled="busy || writing"
+        @change="runPageAction(() => selectTag('campus', $event))"
+        ><view
+          >校区标签 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
+        ></picker
+      >
+      <picker
+        :range="genders.map((item) => item.label)"
+        :value="genders.findIndex((item) => item.value === identityGender)"
+        :disabled="busy || writing"
+        @change="runPageAction(() => selectTag('gender', $event))"
+        ><view
+          >性别标签 {{ genders.find((item) => item.value === identityGender)?.label }}</view
+        ></picker
+      >
+      <picker
+        :range="gradeOptions"
+        range-key="label"
+        :value="
+          Math.max(
+            0,
+            gradeOptions.findIndex((item) => item.code === identityGrade),
+          )
+        "
+        :disabled="busy || writing || !allowed('putMeProfile') || gradeOptions.length < 2"
+        @change="runPageAction(() => selectTag('grade', $event))"
+      >
+        <view
+          >年级标签
+          {{ gradeOptions.find((item) => item.code === identityGrade)?.label || '暂不可选' }}</view
+        >
+      </picker>
       <text>身份标签显示</text>
       <text>隐藏后，公开内容与公开主页不展示身份标签；学生认证信息不在这里编辑。</text>
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
@@ -387,62 +463,32 @@ onUnload(leave)
         v-if="allowed('putMeProfile')"
         :disabled="busy || writing"
         :loading="isPageActionPending('pages-settings-index-button-4')"
-        @click="runPageAction(() => act('profile'), 'pages-settings-index-button-4')"
+        @click="runPageAction(act, 'pages-settings-index-button-4')"
       >
         保存资料与隐私设置
       </button>
       <text v-else>当前账号没有修改资料的权限。</text>
     </view>
-    <view v-if="currentMe" class="card">
-      <text>黑名单</text>
-      <text
-        >可从他人公开主页进入拉黑。列表不展示账号或内容来源。解除拉黑不会恢复旧申请、旧消息或已取消暖评。</text
-      >
-      <view v-if="targetName && blockAllowed()">
-        <text>当前选择：{{ targetName }}</text>
-        <button
-          :disabled="busy || writing || retryReady"
-          :loading="isPageActionPending('pages-settings-index-button-5')"
-          @click="runPageAction(() => act('block'), 'pages-settings-index-button-5')"
-        >
-          拉黑此用户
-        </button>
-      </view>
-      <view v-for="(entry, index) in rows" :key="entry.block_id" class="mt-3">
-        <text>{{ entry.label }} {{ index + 1 }}</text>
-        <button
-          v-if="unblockAllowed(entry)"
-          :disabled="busy || writing"
-          :loading="isPageActionPending('pages-settings-index-button-6' + ':' + entry.block_id)"
-          @click="
-            runPageAction(
-              () => act('unblock', entry),
-              'pages-settings-index-button-6' + ':' + entry.block_id,
-            )
-          "
-        >
-          解除拉黑
-        </button>
-      </view>
-      <text v-if="blocksReady && !rows.length">暂无拉黑记录</text>
-      <button
-        v-if="cursor && blocksReady"
-        :disabled="busy || writing"
-        :loading="isPageActionPending('pages-settings-index-button-7')"
-        @click="runPageAction(() => load(true), 'pages-settings-index-button-7')"
-      >
-        加载下一页
-      </button>
-    </view>
-    <button
-      v-if="retryReady"
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-settings-index-button-8')"
-      @click="runPageAction(retryWrite, 'pages-settings-index-button-8')"
-    >
-      使用原请求重试
-    </button>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
+    <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>
   </AppPage>
 </template>
+
+<style scoped>
+.avatar-settings {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-bottom: 24rpx;
+}
+.avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.avatar-actions button {
+  margin: 0;
+  font-size: 24rpx;
+}
+</style>

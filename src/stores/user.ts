@@ -52,6 +52,17 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  function acceptAvatarProfile(me: UserInfo, epoch: number) {
+    const current = user.value
+    if (!validated.value || epoch !== session.getEpoch() || !current || current.id !== me.id)
+      return null
+    if (me.version < current.version) return current
+    // 写入回执比并发的旧资料读取更新，防止旧头像在个人中心重新出现。
+    refreshGeneration++
+    user.value = me
+    return me
+  }
+
   async function login() {
     if (busy.value) return
     busy.value = true
@@ -112,6 +123,7 @@ export const useUserStore = defineStore('user', () => {
     login,
     logout,
     refresh,
+    acceptAvatarProfile,
     simulate,
     clearSession: clear,
   }

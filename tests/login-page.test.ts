@@ -8,6 +8,7 @@ async function setup() {
   let resolve!: () => void
   let calls = 0
   let navigations = 0
+  const entry = reactive({ loginVisible: true, clear() {}, async showGuide() {} })
   const user = reactive({
     busy: false,
     isLoggedIn: false,
@@ -24,10 +25,11 @@ async function setup() {
   })
   Object.assign(globalThis, { uni: { reLaunch: () => navigations++ } })
   const page = await loadRuntime(
-    pageScript(new URL('../src/pages/login/index.vue', import.meta.url)) +
-      '\nexport { login, error };',
+    pageScript(new URL('../src/components/EntryPrompts.vue', import.meta.url)) +
+      '\nexport { login, loginError };',
     {
       config: { useMock: false },
+      useEntryStore: () => entry,
       useUserStore: () => user,
       onShow: (fn: () => void) => (hooks.show = fn),
       onHide: (fn: () => void) => (hooks.hide = fn),
@@ -37,6 +39,7 @@ async function setup() {
   hooks.show?.()
   return {
     page,
+    entry,
     hooks,
     user,
     resolve: () => resolve(),
@@ -45,7 +48,7 @@ async function setup() {
   }
 }
 
-test('REQ-002/018：登录重复点击不能在登录完成前跳转', async () => {
+test('登录弹窗重复点击串行，完成后保留当前深链页面', async () => {
   const s = await setup()
   const pending = s.page.login()
   await s.page.login()
@@ -53,7 +56,8 @@ test('REQ-002/018：登录重复点击不能在登录完成前跳转', async () 
   assert.equal(s.navigations(), 0)
   s.resolve()
   await pending
-  assert.equal(s.navigations(), 1)
+  assert.equal(s.navigations(), 0)
+  assert.equal(s.entry.loginVisible, false)
 })
 
 test('REQ-002/018：登录中离开再返回，旧响应不能导航或恢复旧错误', async () => {
@@ -64,5 +68,5 @@ test('REQ-002/018：登录中离开再返回，旧响应不能导航或恢复旧
   s.resolve()
   await pending
   assert.equal(s.navigations(), 0)
-  assert.equal(s.page.error.value, '')
+  assert.equal(s.page.loginError.value, '')
 })

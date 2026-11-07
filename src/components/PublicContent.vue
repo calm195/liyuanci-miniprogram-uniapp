@@ -1,26 +1,20 @@
 <script setup lang="ts">
 import type { WishPublicContent } from '@/types/wish'
 import { campuses, genders } from '@/types/wish'
-defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story' }>()
+defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story'; compact?: boolean }>()
 </script>
 <template>
   <view class="content">
-    <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
-    <text v-if="content.school_related">未经证实</text>
-    <text v-if="content.notice_text">{{ content.notice_text }}</text>
-    <navigator
-      v-if="kind"
-      :url="`/pages/report/index?kind=${kind}&id=${encodeURIComponent(content.id)}`"
-      >举报此内容</navigator
-    >
-    <template v-if="content.author">
-      <navigator :url="`/pages/public-profile/index?id=${encodeURIComponent(content.author.id)}`">{{
-        content.author.nickname || '查看公开主页'
-      }}</navigator>
+    <text class="content-body" :class="{ 'content-preview': compact }">{{ content.body }}</text>
+    <view v-if="content.school_related || content.notice_text" class="content-notices">
+      <text v-if="content.school_related">未经证实</text>
+      <text v-if="content.notice_text">{{ content.notice_text }}</text>
+    </view>
+    <view v-if="content.author" class="content-meta">
       <navigator
-        v-if="kind"
-        :url="`/pages/settings/index?targetId=${encodeURIComponent(content.author.id)}&sourceId=${encodeURIComponent(content.id)}&sourceKind=${kind}`"
-        >拉黑与隐私设置</navigator
+        class="content-author"
+        :url="`/pages/public-profile/index?id=${encodeURIComponent(content.author.id)}`"
+        >{{ content.author.nickname || '查看公开主页' }}</navigator
       >
       <text v-if="content.author.identity_tags?.campus"
         >校区：{{
@@ -35,6 +29,52 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story' }>()
       <text v-if="content.author.identity_tags?.grade"
         >年级：{{ content.author.identity_tags.grade }}</text
       >
-    </template>
+    </view>
+    <view v-if="kind" class="content-actions">
+      <navigator
+        class="moderation-link"
+        :url="`/pages/report/index?kind=${kind}&id=${encodeURIComponent(content.id)}`"
+        >举报此内容</navigator
+      >
+      <navigator
+        v-if="content.author"
+        class="moderation-link"
+        :url="`/pages/blacklist/index?targetId=${encodeURIComponent(content.author.id)}&sourceId=${encodeURIComponent(content.id)}&sourceKind=${kind}`"
+        >屏蔽发布者</navigator
+      >
+      <slot name="actions" />
+    </view>
   </view>
 </template>
+
+<style scoped>
+.content-body {
+  display: block;
+  color: var(--theme-ink);
+  font-size: 28rpx;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.content-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.content-notices,
+.content-meta,
+.content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx 20rpx;
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: var(--theme-muted);
+}
+.content-author {
+  color: var(--theme-teal);
+  font-weight: 600;
+}
+</style>

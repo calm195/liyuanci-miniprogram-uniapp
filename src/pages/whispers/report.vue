@@ -106,6 +106,7 @@ onLoad((query) => {
   kind.value = typeof query?.kind === 'string' ? query.kind : ''
   postId.value = typeof query?.postId === 'string' ? query.postId : ''
 })
+page.onRefresh(() => load())
 onShow(() => {
   void load()
 })

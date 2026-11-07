@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -280,20 +281,20 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await refresh(true)
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
     <text class="title">匿名聊天</text>
-    <navigator url="/pages/inbox/index">聊天与通知</navigator>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
     <text v-if="currentConversation">{{ canSend ? '当前可发送消息' : '当前会话只读' }}</text>
-    <button
-      :disabled="reading || sending"
-      :loading="isPageActionPending('pages-chat-index-button-1')"
-      @click="runPageAction(() => refresh(), 'pages-chat-index-button-1')"
-    >
-      刷新聊天
-    </button>
+
     <scroll-view
       class="chat-timeline"
       scroll-y
@@ -315,6 +316,7 @@ onUnload(leave)
         }}</text>
         <text class="whitespace-pre-wrap break-words">{{ message.body }}</text>
         <navigator
+          class="moderation-link"
           :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
           >举报此消息</navigator
         >

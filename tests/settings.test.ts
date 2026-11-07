@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive } from 'vue'
+import type { UserInfo } from '../src/types/api.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { session as realSession } from '../src/utils/session.ts'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
@@ -18,15 +19,28 @@ type Input = {
   method?: string
   data?: Record<string, unknown>
   header?: Record<string, string>
+  uploadFormData?: Record<string, string>
+  filePath?: string
 }
-async function setup(query: Record<string, string> = {}, useRealSession = false) {
+const settingsPage = new URL('../src/pages/settings/index.vue', import.meta.url)
+const blacklistPage = new URL('../src/pages/blacklist/index.vue', import.meta.url)
+
+async function setup(
+  query: Record<string, string> = {},
+  useRealSession = false,
+  page = settingsPage,
+) {
   if (useRealSession) realSession.setToken('synthetic-settings-token')
   let epoch = 1
   let token = 'synthetic-token'
   const user = reactive({
-    user: structuredClone(actor) as typeof actor | null,
+    user: structuredClone(actor) as UserInfo | null,
     validated: true,
     refresh: async () => {},
+    acceptAvatarProfile(result: UserInfo) {
+      this.user = result
+      return result
+    },
   })
   const hooks: Record<string, (query?: Record<string, string>) => unknown> = {}
   const calls: Input[] = []
@@ -78,19 +92,39 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
       },
     },
   )
+  const avatarApi = await loadRuntime(
+    readFileSync(new URL('../src/api/avatar.ts', import.meta.url), 'utf8'),
+    {
+      request: async (input: Input) => {
+        calls.push(input)
+        return transport(input)
+      },
+    },
+  )
+  type PickedImage = { tempFilePath: string; size: number }
+  let choose:
+    | {
+        success: (result: { tempFiles: PickedImage[] }) => void
+        fail: (failure: { errMsg: string }) => void
+      }
+    | undefined
+  let imageType = 'png'
   let confirmed = true
   let delayed = false
   let modal: (() => void) | undefined
   const prompts: string[] = []
   const config = { useMock: false }
   const runtime = await loadRuntime(
-    pageScript(new URL('../src/pages/settings/index.vue', import.meta.url)) +
-      '\nexport { me,currentMe,nickname,hidden,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,allowed,retryWrite,retryReady,workspace }',
+    pageScript(page) +
+      (page === blacklistPage
+        ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
       ...api,
+      ...avatarApi,
       ...helpers,
       RequestError,
       getWish: (id: string) => {
@@ -109,6 +143,10 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
         return transport(input)
       },
       uni: {
+        chooseMedia: (options: typeof choose) => {
+          choose = options
+        },
+        getImageInfo: async () => ({ type: imageType }),
         showModal: (options: {
           content: string
           success: (result: { confirm: boolean }) => void
@@ -132,7 +170,7 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
       },
     },
   )
-  hooks.load(query)
+  hooks.load?.(query)
   hooks.show()
   await settle()
   return {
@@ -143,6 +181,11 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
     prompts,
     config,
     workspace,
+    chooseImage: (image: PickedImage, type = 'png') => {
+      imageType = type
+      choose?.success({ tempFiles: [image] })
+    },
+    cancelImage: () => choose?.fail({ errMsg: 'chooseMedia:fail cancel' }),
     transport: (fn: typeof transport) => {
       transport = fn
     },
@@ -161,6 +204,10 @@ async function setup(query: Record<string, string> = {}, useRealSession = false)
     confirm: () => modal!(),
   }
 }
+function setupBlacklist(query: Record<string, string> = {}, useRealSession = false) {
+  return setup(query, useRealSession, blacklistPage)
+}
+
 test('REQ-002/014：资料按本人版本提交，显式发送 false，成功从共享状态重新读取', async () => {
   const s = await setup()
   const r = s.runtime
@@ -170,10 +217,11 @@ test('REQ-002/014：资料按本人版本提交，显式发送 false，成功从
   }
   r.nickname.value = '新昵称'
   r.hidden.value = false
-  await r.act('profile')
+  await r.act()
   const input = s.calls.find((x) => x.method === 'PUT')!
   assert.deepEqual(input.data, {
     nickname: '新昵称',
+    identity_tags: { campus: 'any', gender: 'undisclosed' },
     hide_identity_tags: false,
     expected_version: 19,
   })
@@ -190,14 +238,14 @@ test('REQ-014/018：隐藏字段缺省不擅自填充，空白昵称拒绝，无
   }
   await r.load()
   assert.equal(r.hidden.value, null)
-  await r.act('profile')
+  await r.act()
   assert.equal(
     s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   r.hidden.value = true
   r.nickname.value = ' \n '
-  await r.act('profile')
+  await r.act()
   assert.equal(
     s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
@@ -206,7 +254,7 @@ test('REQ-014/018：隐藏字段缺省不擅自填充，空白昵称拒绝，无
   assert.doesNotMatch(source, /setStorage|localStorage|student_number|asset_id/)
 })
 test('REQ-014：解除使用本人黑名单条目版本，204 后重读，旧申请消息不会自动恢复', async () => {
-  const s = await setup()
+  const s = await setupBlacklist()
   const r = s.runtime
   const entry = r.rows.value[0]
   await r.act('unblock', entry)
@@ -218,7 +266,10 @@ test('REQ-014：解除使用本人黑名单条目版本，204 后重读，旧申
   assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
 test('REQ-014：拉黑只取已重验公开主页的目标，不接受路由昵称，禁止拉黑自己', async () => {
-  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002', nickname: '伪造昵称' })
+  const s = await setupBlacklist({
+    targetId: '6c500000-0000-4000-8000-000000000002',
+    nickname: '伪造昵称',
+  })
   const r = s.runtime
   assert.equal(r.targetName.value, '合成对方')
   await r.act('block')
@@ -227,7 +278,7 @@ test('REQ-014：拉黑只取已重验公开主页的目标，不接受路由昵�
   })
   assert.match(s.prompts[0]!, /合成对方/)
   assert.match(s.prompts[0]!, /现有匹配需另行退出/)
-  const own = await setup({ targetId: actor.id })
+  const own = await setupBlacklist({ targetId: actor.id })
   await own.runtime.act('block')
   assert.equal(
     own.calls.some((x) => x.method && x.method !== 'GET'),
@@ -235,7 +286,7 @@ test('REQ-014：拉黑只取已重验公开主页的目标，不接受路由昵�
   )
 })
 test('REQ-014：公开主页失效或错目标时拒绝拉黑', async () => {
-  const s = await setup({ targetId: 'synthetic-missing' })
+  const s = await setupBlacklist({ targetId: 'synthetic-missing' })
   const r = s.runtime
   assert.equal(r.targetName.value, '')
   await r.act('block')
@@ -255,7 +306,7 @@ test('REQ-014：公开主页失效或错目标时拒绝拉黑', async () => {
   )
 })
 test('REQ-014：分页游标编码、按目标去重更新版本、循环或读取失败清空旧黑名单', async () => {
-  const s = await setup()
+  const s = await setupBlacklist()
   const r = s.runtime
   let page = 0
   s.transport(async () =>
@@ -302,10 +353,10 @@ test('REQ-014：分页游标编码、按目标去重更新版本、循环或读�
   assert.equal(r.currentMe.value.id, actor.id) // 列表失败不阻止独立的资料设置。
 })
 test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作，不使用旧Me动作', async () => {
-  const s = await setup()
+  const s = await setupBlacklist()
   const r = s.runtime
   s.user.validated = false
-  await r.act('profile')
+  await r.act('unblock', r.rows.value[0])
   assert.equal(
     s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
@@ -313,7 +364,6 @@ test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作
   s.user.validated = true
   s.user.user!.allowed_actions = []
   r.rows.value[0].allowed_actions = []
-  await r.act('profile')
   await r.act('unblock', r.rows.value[0])
   assert.equal(
     s.calls.some((x) => x.method && x.method !== 'GET'),
@@ -327,15 +377,15 @@ test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作
 test('REQ-014：取消、离页后的确认、重复点击均不产生额外写入', async () => {
   const cancelled = await setup()
   cancelled.cancel()
-  await cancelled.runtime.act('profile')
+  await cancelled.runtime.act()
   assert.equal(
     cancelled.calls.some((x) => x.method && x.method !== 'GET'),
     false,
   )
   const s = await setup()
   s.delay()
-  const pending = s.runtime.act('profile')
-  await s.runtime.act('profile')
+  const pending = s.runtime.act()
+  await s.runtime.act()
   s.hooks.hide()
   s.confirm()
   await pending
@@ -344,7 +394,6 @@ test('REQ-014：取消、离页后的确认、重复点击均不产生额外写�
     false,
   )
   assert.equal(s.runtime.nickname.value, '')
-  assert.deepEqual(s.runtime.rows.value, [])
 })
 test('REQ-014/018：409 和不确定结果只重读不重发，后续人工操作使用新幂等键', async () => {
   const s = await setup()
@@ -354,21 +403,21 @@ test('REQ-014/018：409 和不确定结果只重读不重发，后续人工操�
       throw new RequestError('合成冲突', 409, 'VERSION_CONFLICT', '', 409)
     return { items: [], next_cursor: null }
   })
-  await r.act('profile')
+  await r.act()
   assert.match(r.notice.value, /版本或状态已变化/)
   assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
   s.transport(async (input) => {
     if (input.method && input.method !== 'GET') throw new Error('合成网络超时')
     return { items: [], next_cursor: null }
   })
-  await r.act('profile')
+  await r.act()
   assert.match(r.notice.value, /结果尚未确认/)
   const writes = s.calls.filter((x) => x.method && x.method !== 'GET')
   assert.equal(writes.length, 2)
   assert.notEqual(writes[0].header!['Idempotency-Key'], writes[1].header!['Idempotency-Key'])
 })
-test('REQ-018：账号变化及晚到响应清理旧昵称、目标、黑名单与写权限', async () => {
-  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002' })
+test('REQ-018：账号变化及晚到响应清理旧昵称与写权限', async () => {
+  const s = await setup()
   const r = s.runtime
   let resolve: (value: unknown) => void = () => {}
   s.transport(
@@ -377,18 +426,16 @@ test('REQ-018：账号变化及晚到响应清理旧昵称、目标、黑名单�
         resolve = done
       }),
   )
-  const pending = r.act('profile')
+  const pending = r.act()
   await settle()
   s.user.user = { ...actor, id: 'synthetic-new' }
   resolve(actor)
   await pending
   assert.equal(r.currentMe.value, null)
   assert.equal(r.nickname.value, '')
-  assert.equal(r.targetName.value, '')
-  assert.deepEqual(r.rows.value, [])
   assert.equal(r.allowed('putMeProfile'), false)
   s.epoch()
-  await r.act('profile')
+  await r.act()
   assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
 test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送写入', async () => {
@@ -399,7 +446,7 @@ test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送
   assert.equal(r.currentMe.value, null)
   s.config.useMock = true
   await r.load()
-  await r.act('profile')
+  await r.act()
   assert.equal(
     s.calls.some((x) => x.method && x.method !== 'GET'),
     false,
@@ -414,7 +461,7 @@ test('REQ-018：未登录、Mock、本人读取失败均不保留设置或发送
 })
 test('REQ-014/018：公开心愿和故事可独立确认拉黑对象，隐私屏障或作者变化禁止沿用旧目标', async () => {
   for (const kind of ['wish', 'story']) {
-    const s = await setup({
+    const s = await setupBlacklist({
       targetId: '6c500000-0000-4000-8000-000000000002',
       sourceId: 'synthetic-content',
       sourceKind: kind,
@@ -464,19 +511,18 @@ test('REQ-018：同账号令牌更换后已缓存的本人投影立即失效', a
   assert.equal(s.runtime.currentMe.value.id, actor.id)
   realSession.setToken('synthetic-replaced-token')
   assert.equal(s.runtime.currentMe.value, null)
-  assert.deepEqual(s.runtime.rows.value, [])
   realSession.clear()
 })
 
 test('REQ-014：旧动作不启用新拉黑，条目不再提供账号主页或来源映射', async () => {
-  const s = await setup({ targetId: '6c500000-0000-4000-8000-000000000002' })
+  const s = await setupBlacklist({ targetId: '6c500000-0000-4000-8000-000000000002' })
   s.workspace.allowed_actions = []
   s.user.user!.allowed_actions = ['putMeProfile', 'postMeBlocks', 'deleteMeBlocks']
   await s.runtime.load()
   await s.runtime.act('block')
   assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
   assert.equal(s.runtime.targetName.value, '')
-  const source = readFileSync(new URL('../src/pages/settings/index.vue', import.meta.url), 'utf8')
+  const source = readFileSync(blacklistPage, 'utf8')
   assert.doesNotMatch(
     source,
     /entry\.target_user_id|entry\.block_id.*public-profile|postMeBlocks|deleteMeBlocks/,
@@ -484,7 +530,7 @@ test('REQ-014：旧动作不启用新拉黑，条目不再提供账号主页或�
   assert.ok(s.calls.every((x) => !x.url.startsWith('/me/blocks')))
 })
 test('REQ-014/018：升级响应与账号字段泄漏均清掉黑名单，不回退旧接口', async () => {
-  const s = await setup()
+  const s = await setupBlacklist()
   s.transport(async () => {
     throw new RequestError('需升级', 409, 'CLIENT_UPGRADE_REQUIRED', '', 409)
   })
@@ -510,7 +556,7 @@ test('REQ-014/018：升级响应与账号字段泄漏均清掉黑名单，不回
   assert.ok(s.calls.every((x) => !x.url.startsWith('/me/blocks')))
 })
 test('REQ-014/018：解除超时禁止新写，原键原体重试，离页清掉待确认操作', async () => {
-  const s = await setup()
+  const s = await setupBlacklist()
   let unknown = true
   s.transport(async (input) => {
     if (input.method === 'DELETE') {
@@ -531,4 +577,166 @@ test('REQ-014/018：解除超时禁止新写，原键原体重试，离页清掉
   s.hooks.hide()
   await s.runtime.retryWrite()
   assert.equal(s.calls.filter((x) => x.method === 'DELETE').length, 2)
+})
+
+test('头像原生选图返回保留草稿，上传按本人版本发送并采用服务器回执', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.nickname.value = '未保存昵称'
+  const picking = r.chooseAvatar()
+  s.hooks.hide!()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+  await picking
+  s.hooks.show!()
+  await settle()
+  assert.equal(r.avatarDraft.value, 'synthetic-avatar-local')
+  assert.equal(r.nickname.value, '未保存昵称')
+  assert.equal(
+    s.calls.some((call) => call.url === '/me/avatar'),
+    false,
+  )
+  s.transport(async (input) =>
+    input.url === '/me/avatar'
+      ? {
+          ...actor,
+          version: 20,
+          avatar_id: 'synthetic-id',
+          avatar_url: 'https://synthetic.invalid/avatar',
+        }
+      : undefined,
+  )
+  await r.changeAvatar()
+  const sent = s.calls.find((call) => call.url === '/me/avatar')!
+  assert.equal(sent.method, 'POST')
+  assert.equal(sent.filePath, 'synthetic-avatar-local')
+  assert.deepEqual(sent.uploadFormData, { expected_version: '19' })
+  assert.ok(sent.header?.['Idempotency-Key'])
+  assert.equal(r.avatarDraft.value, '')
+  assert.equal(r.currentMe.value.version, 20)
+  assert.equal(s.user.user?.avatar_id, 'synthetic-id')
+  assert.equal(r.nickname.value, '未保存昵称')
+})
+
+test('头像失败用原文件、版本与请求标识重试，恢复默认使用当前版本', async () => {
+  const s = await setup()
+  const r = s.runtime
+  const pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+  await pick
+  let attempt = 0
+  s.transport(async (input) => {
+    if (input.url !== '/me/avatar') return
+    if (input.method === 'DELETE') return { ...actor, version: 21 }
+    if (++attempt === 1) throw new RequestError('合成超时', -1)
+    return {
+      ...actor,
+      version: 20,
+      avatar_id: 'synthetic-id',
+      avatar_url: 'https://synthetic.invalid/avatar',
+    }
+  })
+  await r.changeAvatar()
+  assert.match(r.avatarError.value, /原请求重试/)
+  await r.changeAvatar()
+  const uploads = s.calls.filter((call) => call.url === '/me/avatar' && call.method === 'POST')
+  assert.equal(uploads.length, 2)
+  assert.deepEqual(uploads[0], uploads[1])
+  await r.changeAvatar(true)
+  assert.deepEqual(s.calls.find((call) => call.method === 'DELETE')?.data, { expected_version: 20 })
+  assert.equal(r.currentMe.value.avatar_id, undefined)
+  assert.equal(s.user.user?.avatar_url, undefined)
+})
+
+test('头像拒绝超限及非 JPG/PNG，取消保留预览，换号和离页丢弃迟到结果', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-too-large', size: 2 * 1024 * 1024 + 1 })
+  await pick
+  assert.match(r.avatarError.value, /2 MiB/)
+  assert.equal(r.avatarDraft.value, '')
+  pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-gif', size: 50 }, 'gif')
+  await pick
+  assert.match(r.avatarError.value, /JPG 或 PNG/)
+  pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-ok', size: 50 })
+  await pick
+  pick = r.chooseAvatar()
+  s.cancelImage()
+  await pick
+  assert.equal(r.avatarDraft.value, 'synthetic-avatar-ok')
+  assert.equal(r.avatarError.value, '')
+  let finish!: (result: UserInfo) => void
+  s.transport(
+    async () =>
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+  )
+  const save = r.changeAvatar()
+  await settle()
+  s.user.user = { ...actor, id: 'synthetic-other' }
+  finish({
+    ...actor,
+    version: 20,
+    avatar_id: 'synthetic-id',
+    avatar_url: 'https://synthetic.invalid/avatar',
+  })
+  await save
+  assert.equal(r.avatarDraft.value, '')
+  assert.equal(r.avatarPending.value, null)
+  assert.equal(s.user.user.id, 'synthetic-other')
+  assert.equal(s.user.user.avatar_url, undefined)
+  s.hooks.show!()
+  // 本人资料刷新需要完成才能再次调用选图。
+  s.hooks.unload!()
+  assert.equal(r.currentMe.value, null)
+})
+
+test('头像重试接受后续变更的最新本人投影，签名缺省时保存成功并显示默认图', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+  await pick
+  let attempt = 0
+  s.transport(async () => {
+    if (++attempt === 1) throw new RequestError('合成超时', -1)
+    return { ...actor, version: 21 }
+  })
+  await r.changeAvatar()
+  await r.changeAvatar()
+  assert.equal(r.currentMe.value.version, 21)
+  assert.equal(r.avatarPending.value, null)
+  assert.match(r.notice.value, /同步当前头像/)
+  pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local-2', size: 256 })
+  await pick
+  s.transport(async () => ({ ...actor, version: 22, avatar_id: 'synthetic-avatar-id' }))
+  await r.changeAvatar()
+  assert.equal(r.avatarPending.value, null)
+  assert.equal(r.currentMe.value.avatar_id, 'synthetic-avatar-id')
+  assert.match(r.notice.value, /图片暂不可读取/)
+})
+
+test('黑名单从个人中心独立进入，资料页不读取黑名单接口', async () => {
+  const s = await setup()
+  assert.deepEqual(s.calls, [])
+  const profile = readFileSync(new URL('../src/pages/profile/index.vue', import.meta.url), 'utf8')
+  assert.match(profile, /label: '黑名单'[^\n]*url: '\/pages\/blacklist\/index'/)
+  assert.doesNotMatch(readFileSync(settingsPage, 'utf8'), /黑名单|listBlocks|interactionBlock/)
+})
+
+test('黑名单在更换会话时丢弃旧名单和目标', async () => {
+  const s = await setupBlacklist({ targetId: '6c500000-0000-4000-8000-000000000002' }, true)
+  try {
+    assert.equal(s.runtime.rows.value.length, 1)
+    assert.equal(s.runtime.targetName.value, '合成对方')
+    realSession.setToken('synthetic-replaced-token')
+    assert.deepEqual(s.runtime.rows.value, [])
+    assert.equal(s.runtime.targetName.value, '')
+  } finally {
+    realSession.clear()
+  }
 })

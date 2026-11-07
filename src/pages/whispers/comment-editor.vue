@@ -55,7 +55,15 @@ function accept(result: OwnerComment) {
   if (result.identity_input?.mode === 'semi') tags.value = { ...result.identity_input.tags }
   notice.value = `请求已受理：${whisperStates[result.status]}；是否公开以当前审核结果为准。`
 }
-async function load() {
+async function load(preserveDraft = false) {
+  const draft = preserveDraft
+    ? {
+        body: body.value,
+        mode: mode.value,
+        tags: { ...tags.value },
+        version: record.value?.version,
+      }
+    : null
   await page.read(async (active) => {
     if (!session.getToken()) throw new Error('请登录后填写暖评，无需学生认证。')
     await module.refresh(false)
@@ -67,11 +75,26 @@ async function load() {
       if (own.id !== id.value) throw new Error('本人暖评目标不匹配。')
       record.value = own
       // 已删父帖不采用路由里的替代ID；安全候选只能另选帖子重新填写新评论。
-      if (!own.post_id) return
+      if (!own.post_id) {
+        post.value = null
+        body.value = ''
+        nickname.value = null
+        return
+      }
       postId.value = own.post_id
       body.value = own.body ?? ''
       mode.value = own.identity_input?.mode ?? 'anonymous'
       if (own.identity_input?.mode === 'semi') tags.value = { ...own.identity_input.tags }
+      if (
+        draft &&
+        own.body !== null &&
+        canWhisperAction('OwnerComment', own, 'whisperCommentUpdate')
+      ) {
+        body.value = draft.body
+        mode.value = draft.mode
+        tags.value = draft.tags
+        if (draft.version !== undefined) record.value = { ...own, version: draft.version }
+      }
     }
     const parent = await callWhisper('whisperPostGet', { path: { post_id: postId.value } })
     if (!active()) return
@@ -124,6 +147,7 @@ onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
   postId.value = typeof query?.postId === 'string' ? query.postId : ''
 })
+page.onRefresh(() => load(true))
 onShow(() => {
   void load()
 })
@@ -131,15 +155,7 @@ onShow(() => {
 <template>
   <AppPage>
     <text class="title">{{ id ? '修改我的暖评' : '写一条暖评' }}</text>
-    <navigator url="/pages/whispers/help">解忧与公共援助（离开会清空未提交文字）</navigator>
-    <navigator url="/pages/whispers/mine">我的记录</navigator>
-    <button
-      :disabled="locked"
-      :loading="isPageActionPending('pages-whispers-comment-editor-button-1')"
-      @click="runPageAction(load, 'pages-whispers-comment-editor-button-1')"
-    >
-      刷新上下文（清空未提交修改）
-    </button>
+
     <view v-if="post" class="card"><text>当前父帖</text><WhisperContent :content="post" /></view>
     <text v-if="record">{{ whisperStates[record.status] }}</text>
     <text v-if="record?.review_result?.reason">原因：{{ record.review_result.reason }}</text>
@@ -165,7 +181,7 @@ onShow(() => {
         v-model="body"
         :maxlength="-1"
         :disabled="locked"
-        placeholder="单层暖评，不支持回复树或@，最多500个Unicode码点"
+        placeholder="单层暖评，不支持回复树或@，最多500个字"
         placeholder-class="field-placeholder"
       />
       <text>{{ Array.from(body).length }} / 500</text>

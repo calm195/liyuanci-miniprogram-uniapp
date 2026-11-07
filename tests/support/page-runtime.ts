@@ -3,6 +3,7 @@ import ts from 'typescript'
 
 // 执行实际页面脚本及API适配器，仅替换平台、会话与传输边界。
 export async function loadRuntime(source: string, context: Record<string, unknown>) {
+  context = { onPullDownRefresh: () => {}, onLoad: () => {}, ...context }
   const key = `runtime_${Math.random().toString(36).slice(2)}`
   Object.assign(globalThis, { [key]: context })
   const body = source.replace(/^import\s[\s\S]*?from\s+'([^']+)'\n/gm, (_all, name) =>

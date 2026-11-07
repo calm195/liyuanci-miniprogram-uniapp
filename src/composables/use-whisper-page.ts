@@ -1,5 +1,5 @@
 import { ref, watch } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
@@ -25,7 +25,7 @@ export function whisperFailure(failure: unknown): string {
   return '操作结果尚未确认，请核对或使用原请求重试。'
 }
 
-// 页面保留在导航栈中时也必须清稿，异步结果只回填当前可见页面和当前会话。
+// 离页和换会话时清稿，当前页刷新保留同会话内容，异步结果仅回填当前可见页面。
 export function useWhisperPage(clear: () => void) {
   const user = useUserStore()
   const busy = ref(false)
@@ -60,7 +60,7 @@ export function useWhisperPage(clear: () => void) {
     if (!visible || busy.value || writing.value || retryReady.value) return
     generation++
     const active = ticket()
-    if (!more) clear()
+    if (!more) notice.value = ''
     error.value = ''
     busy.value = true
     try {
@@ -68,7 +68,14 @@ export function useWhisperPage(clear: () => void) {
       await task(active)
     } catch (failure) {
       if (active()) {
-        clear()
+        // 传输失败保留当前输入；权威拒绝、状态冲突或结构异常立即撤销旧投影。
+        if (
+          !(failure instanceof RequestError) ||
+          [401, 403, 404, 409].includes(failure.statusCode) ||
+          failure.code === -2 ||
+          failure.code === -3
+        )
+          clear()
         error.value = whisperFailure(failure)
       }
     } finally {
@@ -149,6 +156,15 @@ export function useWhisperPage(clear: () => void) {
       return
     await execute(() => scope!.retry(), acceptRetry, reloadRetry)
   }
+  function onRefresh(reload: () => Promise<void>) {
+    onPullDownRefresh(async () => {
+      try {
+        await reload()
+      } finally {
+        uni.stopPullDownRefresh()
+      }
+    })
+  }
   onShow(() => {
     reset()
     visible = true
@@ -161,5 +177,5 @@ export function useWhisperPage(clear: () => void) {
   onHide(leave)
   onUnload(leave)
   watch([() => session.getEpoch(), () => user.user?.id], reset, { flush: 'sync' })
-  return { busy, writing, error, notice, retryReady, read, write, retry, reset }
+  return { busy, writing, error, notice, retryReady, read, write, retry, reset, onRefresh }
 }

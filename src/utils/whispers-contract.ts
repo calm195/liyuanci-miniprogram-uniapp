@@ -1,4 +1,4 @@
-// 从固定 whispers/1.0.0 契约生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。
+// 从悄悄鲤契约 whispers-v1-r2 生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。
 import type { Schema, OperationSpec } from './whispers-schema.ts'
 export const whisperSchemas: Record<string, Schema> = {
   BlockAck: {
@@ -297,6 +297,17 @@ export const whisperSchemas: Record<string, Schema> = {
         },
         uniqueItems: true,
       },
+      preview: {
+        oneOf: [
+          {
+            type: 'string',
+            maxLength: 3,
+          },
+          {
+            type: 'null',
+          },
+        ],
+      },
     },
     required: [
       'id',
@@ -308,8 +319,29 @@ export const whisperSchemas: Record<string, Schema> = {
       'body',
       'review_result',
       'allowed_actions',
+      'preview',
     ],
     additionalProperties: false,
+    allOf: [
+      {
+        if: {
+          properties: {
+            status: {
+              not: {
+                const: 'unlocked',
+              },
+            },
+          },
+        },
+        then: {
+          properties: {
+            preview: {
+              type: 'null',
+            },
+          },
+        },
+      },
+    ],
   },
   CommentCreate: {
     type: 'object',
@@ -1173,6 +1205,18 @@ export const whisperSchemas: Record<string, Schema> = {
         type: 'integer',
         minimum: 1,
       },
+      title: {
+        oneOf: [
+          {
+            type: 'string',
+            minLength: 1,
+            maxLength: 40,
+          },
+          {
+            type: 'null',
+          },
+        ],
+      },
     },
     required: [
       'id',
@@ -1188,6 +1232,7 @@ export const whisperSchemas: Record<string, Schema> = {
       'allowed_actions',
       'comments_open',
       'comments_epoch',
+      'title',
     ],
     additionalProperties: false,
     allOf: [
@@ -1205,6 +1250,9 @@ export const whisperSchemas: Record<string, Schema> = {
               type: 'null',
             },
             identity_input: {
+              type: 'null',
+            },
+            title: {
               type: 'null',
             },
           },
@@ -1250,6 +1298,11 @@ export const whisperSchemas: Record<string, Schema> = {
       identity: {
         $ref: '#/components/schemas/IdentityInput',
       },
+      title: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 40,
+      },
     },
     required: ['body', 'identity'],
     additionalProperties: false,
@@ -1269,6 +1322,11 @@ export const whisperSchemas: Record<string, Schema> = {
       },
       identity: {
         $ref: '#/components/schemas/IdentityInput',
+      },
+      title: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 40,
       },
     },
     required: ['expected_version', 'body', 'identity'],
@@ -1566,6 +1624,11 @@ export const whisperSchemas: Record<string, Schema> = {
           },
         ],
       },
+      title: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 40,
+      },
     },
     required: [
       'id',
@@ -1584,6 +1647,7 @@ export const whisperSchemas: Record<string, Schema> = {
       'comment_count',
       'hug_count',
       'my_hug',
+      'title',
     ],
     additionalProperties: false,
     allOf: [
@@ -1688,6 +1752,10 @@ export const whisperSchemas: Record<string, Schema> = {
         type: 'string',
         minLength: 1,
         maxLength: 32,
+      },
+      description: {
+        type: 'string',
+        maxLength: 500,
       },
     },
     required: ['source', 'type_code'],

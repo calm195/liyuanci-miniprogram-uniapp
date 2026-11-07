@@ -1,4 +1,5 @@
 export interface Conversation {
+  wish_title?: string
   id: string
   version: number
   can_write: boolean
@@ -53,6 +54,9 @@ export interface MessageStatus {
   }
 }
 export interface AppNotification {
+  created_at?: string
+  target_kind?: 'post' | 'capsule'
+  comment_id?: string
   id: string
   version: number
   kind: string

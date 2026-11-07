@@ -4,7 +4,8 @@
       "path": "pages/index/index",
       "style": {
         "navigationBarTitleText": "鲤愿池",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -16,185 +17,229 @@
     {
       "path": "pages/verification/index",
       "style": {
-        "navigationBarTitleText": "学生认证"
+        "navigationBarTitleText": "学生认证",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/wish-detail/index",
       "style": {
-        "navigationBarTitleText": "心愿详情"
+        "navigationBarTitleText": "心愿详情",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/wishes/index",
       "style": {
         "navigationBarTitleText": "心愿池",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/applications/index",
       "style": {
-        "navigationBarTitleText": "应愿申请"
+        "navigationBarTitleText": "应愿申请",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/public-profile/index",
       "style": {
-        "navigationBarTitleText": "公开主页"
+        "navigationBarTitleText": "公开主页",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/inbox/index",
       "style": {
-        "navigationBarTitleText": "聊天与通知"
+        "navigationBarTitleText": "通知中心",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/chat/index",
       "style": {
-        "navigationBarTitleText": "匿名聊天"
+        "navigationBarTitleText": "匿名聊天",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/stories/index",
       "style": {
-        "navigationBarTitleText": "还愿故事"
+        "navigationBarTitleText": "还愿故事",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/story-editor/index",
       "style": {
-        "navigationBarTitleText": "我的还愿故事"
+        "navigationBarTitleText": "我的还愿故事",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/share/index",
       "style": {
-        "navigationBarTitleText": "分享"
+        "navigationBarTitleText": "分享",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/settings/index",
       "style": {
-        "navigationBarTitleText": "个人资料与隐私"
+        "navigationBarTitleText": "个人资料与隐私",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/blacklist/index",
+      "style": {
+        "navigationBarTitleText": "黑名单",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/report/index",
       "style": {
-        "navigationBarTitleText": "举报内容"
+        "navigationBarTitleText": "举报内容",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/safety/index",
       "style": {
-        "navigationBarTitleText": "警告与申诉"
+        "navigationBarTitleText": "警告与申诉",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/care/index",
       "style": {
-        "navigationBarTitleText": "关怀与援助"
+        "navigationBarTitleText": "关怀与援助",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/deletion/index",
       "style": {
-        "navigationBarTitleText": "账号注销"
+        "navigationBarTitleText": "账号注销",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/index",
       "style": {
         "navigationBarTitleText": "悄悄话",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/detail",
       "style": {
-        "navigationBarTitleText": "树洞详情"
+        "navigationBarTitleText": "树洞详情",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/editor",
       "style": {
-        "navigationBarTitleText": "我的树洞"
+        "navigationBarTitleText": "我的树洞",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/mine",
       "style": {
-        "navigationBarTitleText": "我的树洞记录"
+        "navigationBarTitleText": "我的树洞记录",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/nickname",
       "style": {
-        "navigationBarTitleText": "树洞昵称"
+        "navigationBarTitleText": "树洞昵称",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/help",
       "style": {
-        "navigationBarTitleText": "解忧与公共援助"
+        "navigationBarTitleText": "解忧与公共援助",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/report",
       "style": {
-        "navigationBarTitleText": "举报树洞内容"
+        "navigationBarTitleText": "举报树洞内容",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/comment-editor",
       "style": {
-        "navigationBarTitleText": "暖评"
+        "navigationBarTitleText": "暖评",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/notifications",
       "style": {
-        "navigationBarTitleText": "悄悄鲤通知"
+        "navigationBarTitleText": "悄悄鲤通知",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/capsules/index",
       "style": {
-        "navigationBarTitleText": "我的时光胶囊"
+        "navigationBarTitleText": "我的时光胶囊",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/capsules/create",
       "style": {
-        "navigationBarTitleText": "写给未来的自己"
+        "navigationBarTitleText": "写给未来的自己",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/capsules/detail",
       "style": {
-        "navigationBarTitleText": "本人胶囊详情"
+        "navigationBarTitleText": "本人胶囊详情",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/resources/index",
       "style": {
         "navigationBarTitleText": "资料广场",
-        "navigationStyle": "custom"
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/resources/detail",
       "style": {
-        "navigationBarTitleText": "资料详情"
+        "navigationBarTitleText": "资料详情",
+        "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/profile/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "我的"
+        "navigationBarTitleText": "我的",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/whispers/settings",
+      "style": {
+        "navigationBarTitleText": "悄悄话设置",
+        "enablePullDownRefresh": true
       }
     }
   ],

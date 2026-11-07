@@ -1,4 +1,4 @@
-// 从固定 whispers/1.0.0 契约生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。
+// 从悄悄鲤契约 whispers-v1-r2 生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。
 export type BlockAck = { accepted: true }
 export type BlockCreate = { source: SourceRef }
 export type BlockEntry = {
@@ -47,6 +47,7 @@ export type CapsuleSummary = {
   body: null
   review_result: ReviewResult | null
   allowed_actions: ('whisperCapsuleCancel' | 'whisperCapsuleDelete')[]
+  preview: string | null
 }
 export type CommentCreate = {
   expected_post_version: number
@@ -180,10 +181,16 @@ export type OwnerPost = {
   )[]
   comments_open: boolean
   comments_epoch: number
+  title: string | null
 }
 export type OwnerPostPage = { items: OwnerPost[]; next_cursor: string | null }
-export type PostCreate = { body: string; identity: IdentityInput }
-export type PostUpdate = { expected_version: number; body: string; identity: IdentityInput }
+export type PostCreate = { body: string; identity: IdentityInput; title?: string }
+export type PostUpdate = {
+  expected_version: number
+  body: string
+  identity: IdentityInput
+  title?: string
+}
 export type PublicComment = {
   id: string
   version: number
@@ -225,6 +232,7 @@ export type PublicPost = {
   comment_count: number
   hug_count: number
   my_hug: HugState | null
+  title: string
 }
 export type PublicPostPage = { items: PublicPost[]; next_cursor: string | null }
 export type ReportAck = { id: string; status: 'pending' }

@@ -32,7 +32,8 @@ export function useHomeWishes() {
     error.value = ''
   }
   async function load() {
-    clear()
+    generation++
+    error.value = ''
     if (config.useMock || !visible) return
     const current = generation
     const started = session.getEpoch()
@@ -45,7 +46,10 @@ export function useHomeWishes() {
       items.value = page.items.filter((wish) => publicWishBody(wish)).slice(0, 2)
       epoch.value = started
     } catch {
-      if (active()) error.value = '心愿暂时没有捞上来，请稍后再试。'
+      if (active()) {
+        items.value = []
+        error.value = '心愿暂时没有捞上来，请稍后再试。'
+      }
     } finally {
       if (active()) busy.value = false
     }

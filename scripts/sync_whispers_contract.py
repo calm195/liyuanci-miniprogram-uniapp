@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parents[1]
 source = Path(sys.argv[1])
 manifest = json.loads((source / 'manifest.json').read_text())
 for name in ('openapi.json', 'actions.json'):
-    expected = manifest['files']['contracts/whispers-v1/' + name]
+    expected = manifest['files']['contracts/' + source.name + '/' + name]
     if hashlib.sha256((source / name).read_bytes()).hexdigest() != expected:
         raise ValueError('契约指纹不一致')
 doc = json.loads((source / 'openapi.json').read_text())
@@ -31,7 +31,16 @@ def collect(value):
 
 def clean(value):
     if isinstance(value, dict):
-        return {k: clean(v) for k, v in value.items() if k not in ('description', 'default', 'title')}
+        result = {}
+        for key, child in value.items():
+            if key in ('description', 'default', 'title'):
+                continue
+            # properties里的title是业务字段，不能按schema说明标题删除。
+            if key == 'properties':
+                result[key] = {name: clean(part) for name, part in child.items()}
+            else:
+                result[key] = clean(child)
+        return result
     if isinstance(value, list):
         return [clean(v) for v in value]
     return value
@@ -90,7 +99,7 @@ for path, methods in doc['paths'].items():
         outputs[key] = ts(data_schema) if data_schema else 'void'
         operations[key] = {'path': path, 'method': method.upper(), 'private': bool(op.get('security')) and not any(s == {} for s in op['security']), 'input': clean(input_schema), 'output': clean(data_schema)}
 actions = [a for a in json.loads((source / 'actions.json').read_text())['writes'] if a['auth_scope'] == 'student']
-header = '// 从固定 whispers/1.0.0 契约生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。\n'
+header = '// 从悄悄鲤契约 ' + source.name + ' 生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。\n'
 types = header + '\n'.join('export type ' + name + ' = ' + ts(schemas[name]) for name in sorted(used))
 types += '\nexport interface WhisperInputs {\n' + '\n'.join(k + ': ' + v for k, v in inputs.items()) + '\n}\n'
 types += 'export interface WhisperOutputs {\n' + '\n'.join(k + ': ' + v for k, v in outputs.items()) + '\n}\n'

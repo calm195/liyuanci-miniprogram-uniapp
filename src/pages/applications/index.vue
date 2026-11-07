@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -93,7 +94,7 @@ async function load(more = false) {
   }
   busy.value = true
   try {
-    await user.refresh(false)
+    await user.refresh(false, true)
     if (!isCurrent()) return
     const target = wishId.value ? await getWish(wishId.value) : null
     if (!isCurrent()) return
@@ -272,6 +273,13 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
@@ -285,13 +293,7 @@ onUnload(leave)
     >
       <view>状态：{{ status ? applicationStatusLabels[status] : '全部' }}</view>
     </picker>
-    <button
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-applications-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-applications-index-button-1')"
-    >
-      刷新
-    </button>
+
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(currentWish.id)}`"
@@ -330,6 +332,7 @@ onUnload(leave)
       >
       <template v-if="ownerMode && application.status === 'active'">
         <navigator
+          class="moderation-link"
           :url="`/pages/report/index?kind=application&id=${encodeURIComponent(application.id)}&contextId=${encodeURIComponent(wishId)}`"
           >举报此申请留言</navigator
         >
@@ -384,7 +387,6 @@ onUnload(leave)
     >
       加载下一页
     </button>
-    <navigator url="/pages/inbox/index">前往聊天与通知</navigator>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </AppPage>

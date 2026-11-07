@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import WishPreview from '@/components/WishPreview.vue'
+import StoryWall from '@/components/StoryWall.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -17,13 +19,17 @@ import {
   deleteWishDraft,
   submitWishReview,
   publishWish,
+  getWish,
 } from '@/api/wishes'
-import { categories, campuses, rewards, genders } from '@/types/wish'
+import { categories, campuses, rewards } from '@/types/wish'
 import type { WishInput, WishResult, WishState } from '@/types/wish'
 import { emptyWish, validateWish, wishStateLabels, publicWishBody } from '@/utils/wish'
 const user = useUserStore()
 const store = useWishStore()
 const own = ref(false)
+const wall = ref(false)
+const storyWall = ref<{ refresh: () => Promise<void> } | null>(null)
+const requestedEdit = ref('')
 const category = ref<WishInput['category'] | ''>('')
 const campus = ref<WishInput['campus'] | ''>('')
 const state = ref<WishState | ''>('')
@@ -76,10 +82,7 @@ async function load(more = false) {
   const current = ++generation
   const epoch = session.getEpoch()
   error.value = ''
-  if (!more) {
-    items.value = []
-    cursor.value = null
-  }
+  if (!more) cursor.value = null
   if (config.useMock) return
   if (own.value && !user.isLoggedIn) {
     error.value = '请先登录'
@@ -114,6 +117,8 @@ async function load(more = false) {
 function tab(value: boolean) {
   if (writing.value) return
   own.value = value
+  wall.value = false
+  items.value = []
   state.value = ''
   return load()
 }
@@ -133,9 +138,6 @@ async function save() {
       if (!config.wishWritesReady || writing.value) return
       const wish = editingWish.value
       if (wish ? !allowed(wish, 'putWishesIdContent') : !canCreate.value) return
-      // 标签更新的省略与清除尚未冻结，只编排明确无标签的改版。
-      if (wish && (wish.own_content?.identity_tags || form.value.identity_tags))
-        throw new Error('身份标签更新规则尚未就绪，暂不能改版')
       await write(async (key) => {
         if (wish) await updateWish(wish, form.value, false, key)
         else await createWish(form.value, key)
@@ -209,26 +211,6 @@ async function write(command: (key: string) => Promise<unknown>) {
     if (writeId === writeGeneration) writing.value = false
   }
 }
-function selectGender(event: { detail: { value: string | number } }) {
-  if (editingId.value) return
-  const gender = genders[Number(event.detail.value) - 1]?.value
-  form.value = { ...form.value }
-  const tags = { ...form.value.identity_tags }
-  if (gender) tags.gender = gender
-  else delete tags.gender
-  if (Object.keys(tags).length) form.value.identity_tags = tags
-  else delete form.value.identity_tags
-}
-function selectIdentityCampus(event: { detail: { value: string | number } }) {
-  if (editingId.value) return
-  const campus = campuses[Number(event.detail.value) - 1]?.value
-  const tags = { ...form.value.identity_tags }
-  if (campus) tags.campus = campus
-  else delete tags.campus
-  form.value = { ...form.value }
-  if (Object.keys(tags).length) form.value.identity_tags = tags
-  else delete form.value.identity_tags
-}
 function selectFormOption(
   kind: 'category' | 'campus' | 'reward_method',
   event: { detail: { value: string | number } },
@@ -236,7 +218,10 @@ function selectFormOption(
   const index = Number(event.detail.value)
   if (kind === 'category' && categories[index]) form.value.category = categories[index].value
   if (kind === 'campus' && campuses[index]) form.value.campus = campuses[index].value
-  if (kind === 'reward_method' && rewards[index]) form.value.reward_method = rewards[index].value
+  if (kind === 'reward_method' && rewards[index]) {
+    form.value.reward_method = rewards[index].value
+    if (form.value.reward_method !== 'custom') delete form.value.reward_text
+  }
 }
 function cancelEdit() {
   editing.value = false
@@ -253,6 +238,7 @@ function selectFilter(
   if (kind === 'category') category.value = categories[index]?.value || ''
   if (kind === 'campus') campus.value = campuses[index]?.value || ''
   if (kind === 'state') state.value = (Object.keys(wishStateLabels)[index] as WishState) || ''
+  items.value = []
   return load()
 }
 function clearProjection() {
@@ -288,21 +274,47 @@ onLoad((query) => {
       ? (selectedState as WishState)
       : ''
   composeRequested = query?.compose === '1'
+  requestedEdit.value = typeof query?.edit === 'string' ? query.edit : ''
 })
 onShow(async () => {
   visible = true
   const entry = ++entryGeneration
   const compose = composeRequested
   composeRequested = false
-  if (!config.useMock) await user.refresh().catch(() => {})
+  if (!config.useMock) await user.refresh(false, true).catch(() => {})
   if (!visible || entry !== entryGeneration) return
   await load()
-  if (!visible || entry !== entryGeneration || !compose) return
+  if (!visible || entry !== entryGeneration) return
+  if (requestedEdit.value) {
+    const editId = requestedEdit.value
+    requestedEdit.value = ''
+    try {
+      const target = await getWish(editId)
+      if (!visible || entry !== entryGeneration) return
+      if (!items.value.some((item) => item.id === target.id)) items.value.unshift(target)
+      edit(target)
+    } catch {
+      error.value = '当前心愿不可编辑，请下拉更新状态。'
+    }
+    return
+  }
+  if (!compose) return
   if (config.useMock || (config.wishWritesReady && canCreate.value)) edit()
   else error.value = '登录并通过学生认证后，才可以许愿。若已认证，请刷新资格后重试。'
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    if (wall.value) await storyWall.value?.refresh()
+    else if (editing.value) {
+      // 编辑期间保留当前目标与草稿，保存仍由原始对象版本保护并发更新。
+      if (!config.useMock) await user.refresh(false, true)
+    } else await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage tab="pond" title="心愿池">
@@ -314,16 +326,26 @@ onUnload(leave)
     <text v-if="config.useMock" class="notice">合成演示 · 仅填写虚构内容，不发送 API</text>
     <view v-if="!editing" class="segment-tabs">
       <button
-        :class="{ selected: !own }"
+        :class="{ selected: !own && !wall }"
         :disabled="writing"
         :loading="isPageActionPending('pages-wishes-index-button-1')"
         @click="runPageAction(() => tab(false), 'pages-wishes-index-button-1')"
       >
         心愿广场
       </button>
-      <navigator url="/pages/stories/index">还愿墙</navigator>
       <button
-        :class="{ selected: own }"
+        :class="{ selected: wall }"
+        :loading="isPageActionPending('src-pages-wishes-index.vue-action-2')"
+        @click="
+          runPageAction(() => {
+            wall = true
+          }, 'src-pages-wishes-index.vue-action-2')
+        "
+      >
+        还愿墙
+      </button>
+      <button
+        :class="{ selected: own && !wall }"
         :disabled="writing"
         :loading="isPageActionPending('pages-wishes-index-button-2')"
         @click="runPageAction(() => tab(true), 'pages-wishes-index-button-2')"
@@ -331,16 +353,19 @@ onUnload(leave)
         我的心愿
       </button>
     </view>
-    <view v-if="error" class="notice"
+    <StoryWall v-if="wall" ref="storyWall" />
+    <view v-if="error && !wall" class="notice"
       ><text>{{ error }}</text
       ><navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator
       ><navigator v-else-if="!canCreate" url="/pages/verification/index"
         >查看学生认证</navigator
       ></view
     >
-    <view v-if="editing" class="card">
+    <view v-if="editing && !wall" class="card">
+      <input v-model="form.title" placeholder="给心愿起个标题（最多40个字）" :maxlength="40" />
       <picker
         :range="categories.map((item) => item.label)"
+        :value="categories.findIndex((item) => item.value === form.category)"
         @change="runPageAction(() => selectFormOption('category', $event))"
         ><view
           >分类：{{ categories.find((item) => item.value === form.category)?.label }}</view
@@ -348,6 +373,7 @@ onUnload(leave)
       >
       <picker
         :range="campuses.map((item) => item.label)"
+        :value="campuses.findIndex((item) => item.value === form.campus)"
         @change="runPageAction(() => selectFormOption('campus', $event))"
         ><view>校区：{{ campuses.find((item) => item.value === form.campus)?.label }}</view></picker
       >
@@ -360,40 +386,24 @@ onUnload(leave)
       <text>{{ Array.from(form.body).length }}/500</text>
       <picker
         :range="rewards.map((item) => item.label)"
+        :value="rewards.findIndex((item) => item.value === form.reward_method)"
         @change="runPageAction(() => selectFormOption('reward_method', $event))"
         ><view
           >报答：{{ rewards.find((item) => item.value === form.reward_method)?.label }}</view
         ></picker
       >
+      <input
+        v-if="form.reward_method === 'custom'"
+        v-model="form.reward_text"
+        :maxlength="100"
+        placeholder="想怎样表达感谢？"
+      />
       <text>有效期（1 至 30 天，默认 7 天）</text
       ><input
         v-model.number="form.duration_days"
         placeholder-class="field-placeholder"
         type="number"
       />
-      <picker
-        v-if="!editingId"
-        :range="['未填写', ...genders.map((item) => item.label)]"
-        @change="runPageAction(() => selectGender($event))"
-      >
-        <view
-          >性别标签（可选）：{{
-            genders.find((item) => item.value === form.identity_tags?.gender)?.label || '未填写'
-          }}</view
-        >
-      </picker>
-      <picker
-        v-if="!editingId"
-        :range="['未填写', ...campuses.map((item) => item.label)]"
-        @change="runPageAction(() => selectIdentityCampus($event))"
-      >
-        <view
-          >身份校区标签（可选）：{{
-            campuses.find((item) => item.value === form.identity_tags?.campus)?.label || '未填写'
-          }}</view
-        >
-      </picker>
-      <text>身份标签可不填写。</text>
       <button
         :disabled="writing || (!config.useMock && !config.wishWritesReady)"
         :loading="isPageActionPending('pages-wishes-index-button-3')"
@@ -409,7 +419,7 @@ onUnload(leave)
       </button>
     </view>
 
-    <view v-else>
+    <view v-else-if="!wall">
       <scroll-view class="chip-scroll" scroll-x :show-scrollbar="false">
         <button
           class="filter-chip"
@@ -445,6 +455,7 @@ onUnload(leave)
       <view class="filter-row">
         <picker
           :range="['全部校区', ...campuses.map((item) => item.label)]"
+          :value="campuses.findIndex((item) => item.value === campus) + 1"
           :disabled="writing"
           @change="runPageAction(() => selectFilter('campus', $event))"
           ><view
@@ -454,18 +465,11 @@ onUnload(leave)
         <picker
           v-if="own"
           :range="['全部状态', ...Object.values(wishStateLabels)]"
+          :value="Object.keys(wishStateLabels).indexOf(state) + 1"
           :disabled="writing"
           @change="runPageAction(() => selectFilter('state', $event))"
           ><view>{{ state ? wishStateLabels[state] : '全部状态' }} ▾</view></picker
         >
-        <button
-          class="small-link"
-          :disabled="busy || writing"
-          :loading="isPageActionPending('pages-wishes-index-button-7')"
-          @click="runPageAction(() => load(), 'pages-wishes-index-button-7')"
-        >
-          {{ busy ? '加载中…' : '刷新心愿' }}
-        </button>
       </view>
       <view v-if="!busy && !error && !rows.length" class="empty-state"
         ><text>暂时没有符合条件的心愿</text><text>换个分类看看，或写下自己的期待。</text></view
@@ -478,16 +482,10 @@ onUnload(leave)
         <text v-if="own && wish.review_result?.revision_suggestion"
           >修改建议：{{ wish.review_result.revision_suggestion }}</text
         >
-        <view v-if="!config.useMock && own">
+        <view v-if="!config.useMock && own" class="wish-actions">
           <button
-            :disabled="!config.wishWritesReady || writing || !allowed(wish, 'putWishesIdContent')"
-            :loading="isPageActionPending('pages-wishes-index-button-8' + ':' + wish.id)"
-            @click="runPageAction(() => edit(wish), 'pages-wishes-index-button-8' + ':' + wish.id)"
-          >
-            编辑
-          </button>
-          <button
-            :disabled="!config.wishWritesReady || writing || !allowed(wish, 'deleteWishesIdDraft')"
+            v-if="allowed(wish, 'deleteWishesIdDraft')"
+            :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-9' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -499,9 +497,8 @@ onUnload(leave)
             删除草稿
           </button>
           <button
-            :disabled="
-              !config.wishWritesReady || writing || !allowed(wish, 'postWishesIdSubmitReview')
-            "
+            v-if="allowed(wish, 'postWishesIdSubmitReview')"
+            :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-10' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -513,7 +510,8 @@ onUnload(leave)
             提交审核
           </button>
           <button
-            :disabled="!config.wishWritesReady || writing || !allowed(wish, 'postWishesIdPublish')"
+            v-if="allowed(wish, 'postWishesIdPublish')"
+            :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-11' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -525,14 +523,7 @@ onUnload(leave)
             上架
           </button>
         </view>
-        <view v-if="config.useMock && own">
-          <button
-            v-if="['draft', 'rejected'].includes(wish.current_state)"
-            :loading="isPageActionPending('pages-wishes-index-button-12' + ':' + wish.id)"
-            @click="runPageAction(() => edit(wish), 'pages-wishes-index-button-12' + ':' + wish.id)"
-          >
-            编辑
-          </button>
+        <view v-if="config.useMock && own" class="wish-actions">
           <button
             v-if="['draft', 'rejected'].includes(wish.current_state)"
             :loading="isPageActionPending('pages-wishes-index-button-13' + ':' + wish.id)"
@@ -622,3 +613,16 @@ onUnload(leave)
     </view>
   </AppPage>
 </template>
+
+<style scoped>
+.wish-actions {
+  display: flex;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+.wish-actions button {
+  flex: 1;
+  margin: 0;
+  font-size: 26rpx;
+}
+</style>

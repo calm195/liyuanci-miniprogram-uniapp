@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
@@ -45,8 +46,13 @@ async function load() {
       catalog = mergeResourcePage(catalog, result, next, catalogSeen)
       next = result.next_cursor ?? undefined
     } while (next)
-    const result = await listResources({ limit: 20 })
+    const result = await listResources({
+      limit: 20,
+      ...(category.value ? { category_id: category.value } : {}),
+      ...(submittedKeyword.value ? { q: submittedKeyword.value } : {}),
+    })
     if (!active()) return
+    seen.clear()
     categories.value = catalog
     items.value = mergeResourcePage([], result, undefined, seen)
     cursor.value = result.next_cursor
@@ -111,6 +117,13 @@ function openContribution() {
 onShow(() => {
   void load()
 })
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage tab="resources" title="资料广场">
@@ -126,14 +139,6 @@ onShow(() => {
     </view>
     <view v-if="error" class="card">
       <text>{{ error }}</text>
-      <button
-        :disabled="busy"
-        :loading="isPageActionPending('pages-resources-index-button-1')"
-        @click="runPageAction(() => load(), 'pages-resources-index-button-1')"
-      >
-        刷新重试
-      </button>
-      <navigator url="/pages/safety/index">警告与申诉</navigator>
     </view>
     <text v-if="busy" class="page-footnote">正在加载资料…</text
     ><text v-if="notice" class="notice">{{ notice }}</text>

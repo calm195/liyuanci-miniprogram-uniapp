@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -14,6 +15,7 @@ import { canApplyToWish } from '@/utils/application'
 import { RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
 import { wishStateLabels } from '@/utils/wish'
+import { displayTime } from '@/utils/time'
 
 const user = useUserStore()
 const demo = useWishStore()
@@ -79,7 +81,6 @@ async function load() {
   const current = ++generation
   const epoch = session.getEpoch()
   const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
-  clearProjection()
   error.value = ''
   if (!id.value) {
     error.value = '心愿链接无效，请从广场或我的心愿重新进入。'
@@ -87,7 +88,7 @@ async function load() {
   }
   busy.value = true
   try {
-    if (!config.useMock && session.getToken()) await user.refresh(false)
+    if (!config.useMock && session.getToken()) await user.refresh(false, true)
     if (!isCurrent()) return
     const result = config.useMock
       ? demo.demoWishes.find((item) => item.id === id.value)
@@ -214,34 +215,40 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 
 <template>
   <AppPage>
-    <text class="title">心愿详情</text>
+    <text class="title">{{ content?.title || '未命名心愿' }}</text>
     <text v-if="config.useMock" class="notice">合成演示 · 详情只读，不发送 API</text>
-    <button
-      :disabled="busy || writing"
-      :loading="isPageActionPending('pages-wish-detail-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-wish-detail-index-button-1')"
-    >
-      刷新详情
-    </button>
+
     <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
-      <text>当前状态：{{ wishStateLabels[currentWish.current_state] || '未知状态' }}</text>
+      <view class="detail-tags">
+        <text class="category-pill">{{
+          wishStateLabels[currentWish.current_state] || '未知状态'
+        }}</text>
+        <text v-if="content?.category" class="category-pill">{{
+          categories.find((item) => item.value === content?.category)?.label
+        }}</text>
+        <text v-if="content?.campus" class="category-pill mint">{{
+          campuses.find((item) => item.value === content?.campus)?.label
+        }}</text>
+        <text v-if="content?.reward_method" class="category-pill">{{
+          content.reward_text ||
+          rewards.find((item) => item.value === content?.reward_method)?.label
+        }}</text>
+      </view>
       <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
       <template v-else-if="content">
         <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
-        <text v-if="content.category"
-          >分类：{{ categories.find((item) => item.value === content?.category)?.label }}</text
-        >
-        <text v-if="content.campus"
-          >校区：{{ campuses.find((item) => item.value === content?.campus)?.label }}</text
-        >
-        <text v-if="content.reward_method"
-          >报答：{{ rewards.find((item) => item.value === content?.reward_method)?.label }}</text
-        >
         <text v-if="publicContent?.school_related">未经证实</text>
         <navigator
           v-if="publicContent?.author"
@@ -251,13 +258,13 @@ onUnload(leave)
         </navigator>
         <navigator
           v-if="publicContent?.author && currentWish.current_state === 'published'"
-          :url="`/pages/settings/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
-          >拉黑与隐私设置</navigator
+          class="moderation-link"
+          :url="`/pages/blacklist/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
+          >屏蔽发布者</navigator
         >
-        <navigator :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(id)}`"
-          >举报此心愿</navigator
+        <text v-if="currentWish.expires_at" class="subtitle"
+          >截止时间（北京时间）{{ displayTime(currentWish.expires_at) }}</text
         >
-        <text v-if="currentWish.expires_at">截止时间：{{ currentWish.expires_at }}</text>
       </template>
       <text v-else>当前没有可展示的正文。</text>
       <template v-if="!currentWish.privacy_review_required && currentWish.own_content">
@@ -269,7 +276,12 @@ onUnload(leave)
         >
       </template>
     </view>
-    <view v-if="currentWish && !config.useMock" class="card">
+    <view v-if="currentWish && !config.useMock" class="card detail-actions">
+      <navigator
+        v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
+        :url="`/pages/wishes/index?own=1&edit=${encodeURIComponent(id)}`"
+        >编辑心愿</navigator
+      >
       <navigator
         v-if="!writing && !busy && canApplyToWish(user.user, user.validated, currentWish)"
         :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
@@ -280,7 +292,6 @@ onUnload(leave)
         :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
         >查看应愿申请</navigator
       >
-      <text>可用操作以当前账号、心愿状态和服务端授权为准。</text>
       <button
         v-if="allowed('withdraw')"
         :disabled="writing || busy"
@@ -341,7 +352,7 @@ onUnload(leave)
       v-if="
         currentWish && ['matching', 'realized', 'fulfilled'].includes(currentWish.current_state)
       "
-      url="/pages/inbox/index"
+      url="/pages/inbox/index?view=conversations"
       >查看聊天会话</navigator
     >
     <navigator
@@ -354,16 +365,52 @@ onUnload(leave)
       :url="`/pages/story-editor/index?wishId=${encodeURIComponent(currentWish.id)}`"
       >管理我的还愿故事</navigator
     >
-    <navigator
-      v-if="
-        currentWish?.current_state === 'published' &&
-        !currentWish.privacy_review_required &&
-        !config.useMock
-      "
-      :url="`/pages/share/index?kind=wish&id=${encodeURIComponent(currentWish.id)}`"
-      >分享当前公开心愿</navigator
+    <view
+      v-if="publicContent && currentWish && !currentWish.privacy_review_required"
+      class="detail-footer"
     >
+      <navigator
+        v-if="!currentWish.own_content"
+        class="moderation-link"
+        :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(id)}`"
+        >举报此心愿</navigator
+      >
+      <navigator
+        v-if="currentWish.current_state === 'published' && !config.useMock"
+        :url="`/pages/share/index?kind=wish&id=${encodeURIComponent(id)}`"
+        class="share-link"
+        >分享心愿</navigator
+      >
+    </view>
     <text v-if="notice" class="notice">{{ notice }}</text>
     <text v-if="error" class="error">{{ error }}</text>
   </AppPage>
 </template>
+
+<style scoped>
+.detail-tags,
+.detail-actions,
+.detail-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20rpx;
+}
+.detail-footer {
+  justify-content: space-between;
+  margin-top: 32rpx;
+}
+.share-link {
+  margin-left: auto;
+}
+.detail-actions button {
+  margin: 0;
+  flex: 1;
+}
+.whitespace-pre-wrap {
+  display: block;
+  font-size: 32rpx;
+  line-height: 1.8;
+  margin: 32rpx 0;
+}
+</style>

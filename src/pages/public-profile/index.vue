@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -98,24 +99,26 @@ onShow(() => {
 })
 onHide(leave)
 onUnload(leave)
+onPullDownRefresh(async () => {
+  try {
+    await load()
+  } finally {
+    uni.stopPullDownRefresh()
+  }
+})
 </script>
 <template>
   <AppPage>
     <text class="title">公开主页</text>
-    <button
-      :disabled="busy"
-      :loading="isPageActionPending('pages-public-profile-index-button-1')"
-      @click="runPageAction(() => load(), 'pages-public-profile-index-button-1')"
-    >
-      刷新
-    </button>
+
     <text v-if="busy">加载中…</text>
     <view v-if="currentProfile" class="card">
       <text>{{ currentProfile.nickname }}</text>
       <navigator
         v-if="user.user && currentProfile.id !== user.user.id"
-        :url="`/pages/settings/index?targetId=${encodeURIComponent(currentProfile.id)}`"
-        >拉黑与隐私设置</navigator
+        class="moderation-link"
+        :url="`/pages/blacklist/index?targetId=${encodeURIComponent(currentProfile.id)}`"
+        >屏蔽此用户</navigator
       >
       <text v-if="currentProfile.identity_tags?.campus"
         >校区：{{
@@ -135,6 +138,7 @@ onUnload(leave)
       <text>{{ item.kind === 'wish' ? '公开心愿' : '还愿故事' }}</text>
       <text>{{ item.content.body }}</text>
       <navigator
+        class="moderation-link"
         :url="`/pages/report/index?kind=${item.kind}&id=${encodeURIComponent(item.content.id)}`"
         >举报此内容</navigator
       >
