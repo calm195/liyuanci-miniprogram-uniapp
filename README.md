@@ -10,7 +10,7 @@
 
 技术选型为 uni-app + Vue3 + TypeScript、Pinia、SCSS 与 Tailwind CSS；使用 ESLint、Prettier、vue-tsc 和 Node 单元测试检查代码。
 
-Tailwind CSS 4 由现有 `weapp-tailwindcss` Vite 插件适配小程序，入口 `src/styles/tailwind.css` 保持纯 CSS；公共外观通过 `@apply` 与主题语义色复用，页面使用 `AppPage` 容器继承主题变量。首页与个人设置提供亮色／暗色切换，默认亮色，选择仅保存到本机；新页面显示时同步原生导航栏与背景。新增页面需使用该容器，颜色使用语义色工具类，避免硬编码亮色。 页面隐藏时容器退出点击区域；按钮和选择器事件通过 `runPageAction` 执行，按页面实例核对可见状态与栈顶归属，避免旧页面响应跳转后的事件。
+Tailwind CSS 4 由现有 `weapp-tailwindcss` Vite 插件适配小程序，入口 `src/styles/tailwind.css` 保持纯 CSS；公共外观通过 `@apply` 与主题语义色复用，页面使用 `AppPage` 容器继承主题变量。首页与个人设置提供亮色／暗色切换，默认亮色，选择仅保存到本机；新页面显示时同步原生导航栏与背景。新增页面需使用该容器，颜色使用语义色工具类，避免硬编码亮色。 主导航使用原生 tab 页面缓存，底栏由 `AppTabBar` 渲染；页面隐藏时保留过渡画面，交互仍按前台归属关闭；按钮和选择器事件通过 `runPageAction` 执行，按页面实例核对可见状态与栈顶归属，避免旧页面响应跳转后的事件。
 
 | 配置项              | 说明                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------- |
@@ -90,7 +90,7 @@ npm run build:mp-weixin
 
 - 使用中文交流，关键逻辑写中文注释；完整协作要求见 [AGENTS.md](AGENTS.md)。
 - 页面放在 `src/pages`，新增页面注册到 `src/pages.json`；复用组件放在 `src/components`。使用 uni-app 组件和生命周期，避免浏览器专用 DOM API。
-- API 放在 `src/api`，统一使用 `src/utils/request.ts`，业务成功码为 `0`。Pinia 管理共享状态，页面不重复实现令牌持久化。当前令牌仅存内存，重启需重新登录，前台恢复刷新本人状态，401 清理会话。
+- API 放在 `src/api`，统一使用 `src/utils/request.ts`，业务成功码为 `0`。Pinia 管理共享状态，页面不重复实现令牌持久化。会话令牌按 API 地址隔离保存在本机，启动时恢复令牌并向服务端校验本人状态；身份和权限不使用持久化缓存。401、注销或退出清除本机会话，网络故障不误删令牌。
 - 微信登录与学生认证分别判断；业务入口还需服务端实时资格、`allowed_actions` 和业务状态授权。认证提交与心愿写入已开放，具体按钮以当前服务端动作授权为准。
 - SCSS 全局变量放在 `src/uni.scss`，模块按需显式导入；Tailwind 入口保持纯 CSS。
 - 业务源码修改后运行 `npm run check`；格式检查失败时运行 `npm run format`，再重跑完整检查。修改页面、样式、依赖或构建配置后还须运行 `npm run build:mp-weixin`。纯文档整理执行格式、链接、固定输入及差异检查。不得关闭规则、忽略源码或删除测试绕过检查。
@@ -105,3 +105,9 @@ npm run build:mp-weixin
 模块 API 使用 `callWhisper(operationId, input)`，配置、本人动作与黑名单消费`whispers-v1-r2` 完整增量契约，模块协商标识沿用 `whispers/1.0.0`。更新派生类型和校验目录时，在本工程运行 `python3 scripts/sync_whispers_contract.py <docs工作树>/contracts/whispers-v1-r2`；脚本校验输入指纹并调用本地 Prettier，不修改契约。契约变更先由 docs 发布新版本，再同步消费者。
 
 共享配置及本人动作由 `useWhispersStore` 管理；编辑页用 `createWhisperScope` 保存短期草稿和结果未知请求，离页调用 `close()`，同账号换会话也会清理。黑名单仅使用 `/me/interaction-blocks`，新接口不可用时显示失败，不回退旧账号字段；真实接入依赖后端完成 opaque 黑名单兼容迁移。
+
+资料托管文件使用刚获取的服务端签名地址下载，不向 COS 发送业务令牌；需要在微信后台配置下载合法域名。支持文档打开与文件转发，外链资料仍可复制链接。头像支持 JPG/PNG、2 MiB 内且不超过 4 Mi 像素，宽高须大于20像素。
+
+### 操作提示
+
+操作结果与错误统一使用 `<AppNotice :message="error" kind="error" />` 或普通 `kind="info"`；提示由 `AppPage` 提供独立队列，固定悬浮于页面上方，不占正文空间。普通/成功提示4秒消失，错误6秒消失，可随时点击关闭。关闭只影响展示，不清除错误状态、未确认请求或重试参数。相同动作再次触发相同错误可重新提示，切换到后台的页面不会接收全局提示或返回重放旧提示。API等非组件代码使用 `uni.$emit('app:notice', { message, kind })`，不要调用无法手动关闭的原生 `uni.showToast`。字段说明、资格状态、审核理由及空列表仍保留在对应内容区域。
