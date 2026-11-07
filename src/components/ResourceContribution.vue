@@ -27,9 +27,9 @@ function retry() {
       <text>添加资料负责人微信，备注“资料投稿”</text>
       <text v-if="!resourceContributionImage">投稿二维码暂未配置</text>
       <template v-else>
-        <text v-if="failed">二维码加载失败，请重试。</text>
+        <AppNotice :message="failed ? '二维码加载失败，请重试。' : ''" kind="error" />
         <image
-          v-else
+          v-if="!failed"
           :key="attempt"
           :src="resourceContributionImage"
           class="contribution-image"

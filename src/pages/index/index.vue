@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import AppIcon from '@/components/AppIcon.vue'
@@ -51,6 +52,7 @@ onPullDownRefresh(async () => {
       >
       <navigator
         :url="user.isLoggedIn ? '/pages/profile/index' : '/pages/login/index'"
+        :open-type="user.isLoggedIn ? 'switchTab' : 'navigate'"
         class="small-link"
         >{{ user.isLoggedIn ? '我的主页 ›' : '登录 ›' }}</navigator
       >
@@ -60,13 +62,22 @@ onPullDownRefresh(async () => {
       <view class="hero-copy">
         <text class="hero-title">{{ '把小小心愿\n交给大大的善意' }}</text>
         <text class="hero-subtitle">总有一条锦鲤，为你而来。</text>
-        <navigator url="/pages/wishes/index?compose=1" class="hero-button"
-          >许个心愿 <text class="ui-text">→</text></navigator
+        <view
+          role="button"
+          class="hero-button"
+          @click="runPageAction(() => openMainPage('/pages/wishes/index?compose=1'))"
+          >许个心愿 <text class="ui-text">→</text></view
         >
       </view>
     </view>
     <view class="quick-grid">
-      <navigator v-for="entry in shortcuts" :key="entry.label" :url="entry.url" class="quick-entry">
+      <view
+        v-for="entry in shortcuts"
+        :key="entry.label"
+        role="button"
+        class="quick-entry"
+        @click="runPageAction(() => openMainPage(entry.url))"
+      >
         <image
           v-if="entry.art"
           :src="`/static/illustrations/${entry.art}.png`"
@@ -76,25 +87,38 @@ onPullDownRefresh(async () => {
         <view v-else class="quick-symbol"><AppIcon name="book" :size="52" /></view>
         <text class="ui-text">{{ entry.label }}</text
         ><text class="entry-caption">{{ entry.caption }}</text>
-      </navigator>
+      </view>
     </view>
-    <navigator url="/pages/wishes/index" class="kindness-strip"
+    <view
+      role="button"
+      class="kindness-strip"
+      @click="runPageAction(() => openMainPage('/pages/wishes/index'))"
       ><AppIcon name="notice" :size="32" /><text class="ui-text"
         >今日锦鲤 · 你也可以成为别人的锦鲤</text
-      ></navigator
+      ></view
     >
     <view class="section-heading"
       ><text class="section-title">新鲜心愿</text
-      ><navigator url="/pages/wishes/index" class="small-link">去捞一捞 ›</navigator></view
+      ><view
+        role="button"
+        class="small-link"
+        @click="runPageAction(() => openMainPage('/pages/wishes/index'))"
+        >去捞一捞 ›</view
+      ></view
     >
     <WishPreview v-for="wish in rows" :key="wish.id" :wish="wish" compact />
     <view v-if="!rows.length" class="empty-state">
       <AppIcon name="fish" :size="52" />
-      <text>{{ busy ? '正在捞起新鲜心愿…' : error || '心愿池静静的，等你投下第一份期待。' }}</text>
+      <text>{{ busy ? '正在捞起新鲜心愿…' : '心愿池静静的，等你投下第一份期待。' }}</text>
     </view>
     <view class="section-heading"
       ><text class="section-title">悄悄话</text
-      ><navigator url="/pages/whispers/index" class="small-link">去听一听 ›</navigator></view
+      ><view
+        role="button"
+        class="small-link"
+        @click="runPageAction(() => openMainPage('/pages/whispers/index'))"
+        >去听一听 ›</view
+      ></view
     >
     <navigator
       v-for="item in latestWhispers"
@@ -113,10 +137,13 @@ onPullDownRefresh(async () => {
       <text>{{
         whispersBusy
           ? '正在听见你的心事…'
-          : whispersError ||
-            (whispersReady ? '有些话，轻轻说就好。这里有人愿意听。' : '心事也值得被温柔以待。')
+          : whispersReady
+            ? '有些话，轻轻说就好。这里有人愿意听。'
+            : '心事也值得被温柔以待。'
       }}</text>
     </view>
+    <AppNotice :message="error" kind="error" />
+    <AppNotice :message="whispersError" kind="error" />
     <text class="page-footnote">许愿有人应，心事有人听。</text>
   </AppPage>
 </template>

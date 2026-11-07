@@ -247,5 +247,33 @@
     "navigationBarTextStyle": "black",
     "navigationBarBackgroundColor": "#fcfaf7",
     "backgroundColor": "#fcfaf7"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#617184",
+    "selectedColor": "#ff4c3e",
+    "backgroundColor": "#fcfaf7",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/wishes/index",
+        "text": "心愿池"
+      },
+      {
+        "pagePath": "pages/whispers/index",
+        "text": "悄悄话"
+      },
+      {
+        "pagePath": "pages/resources/index",
+        "text": "资料"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
+    ]
   }
 }

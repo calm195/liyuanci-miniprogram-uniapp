@@ -116,8 +116,10 @@ import { whisperStates } from '@/utils/whisper-content'
     >
       使用原请求重试
     </button>
-    <text v-if="busy">加载中…</text><text v-if="notice" class="notice">{{ notice }}</text
-    ><text v-if="error" class="error">{{ error }}</text>
+    <text v-if="busy">加载中…</text><AppNotice :message="notice" kind="info" /><AppNotice
+      :message="error"
+      kind="error"
+    />
   </view>
 </template>
 <style scoped>

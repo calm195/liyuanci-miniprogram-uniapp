@@ -248,7 +248,7 @@ onPullDownRefresh(async () => {
       </button>
     </view>
     <text v-if="uncertain">离开页面将清除本次未确认内容，请避免另行重复提交。</text>
-    <text v-if="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

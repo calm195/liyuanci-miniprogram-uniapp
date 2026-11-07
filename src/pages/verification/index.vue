@@ -341,7 +341,7 @@ onPullDownRefresh(async () => {
         v-model="studentNumber"
         placeholder-class="field-placeholder"
         :maxlength="-1"
-        placeholder="学号（演示时填写虚构学号）"
+        placeholder="学号：4位年份＋8位数字"
         :disabled="
           (!config.useMock && !config.verificationWritesReady) ||
           busy ||
@@ -403,7 +403,7 @@ onPullDownRefresh(async () => {
       >
         {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
       </button>
-      <text v-if="error">{{ error }}</text>
+      <AppNotice :message="error" kind="error" />
       <text v-if="demoMessage">{{ demoMessage }}</text>
       <view v-if="config.useMock && demoStatus === 'pending'">
         <button

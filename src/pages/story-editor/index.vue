@@ -243,7 +243,7 @@ onPullDownRefresh(async () => {
         撤回故事
       </button>
     </view>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

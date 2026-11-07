@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
@@ -277,10 +278,15 @@ onPullDownRefresh(async () => {
       </template>
     </view>
     <view v-if="currentWish && !config.useMock" class="card detail-actions">
-      <navigator
+      <view
         v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
-        :url="`/pages/wishes/index?own=1&edit=${encodeURIComponent(id)}`"
-        >编辑心愿</navigator
+        role="button"
+        @click="
+          runPageAction(() =>
+            openMainPage(`/pages/wishes/index?own=1&edit=${encodeURIComponent(id)}`),
+          )
+        "
+        >编辑心愿</view
       >
       <navigator
         v-if="!writing && !busy && canApplyToWish(user.user, user.validated, currentWish)"
@@ -382,8 +388,8 @@ onPullDownRefresh(async () => {
         >分享心愿</navigator
       >
     </view>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
 

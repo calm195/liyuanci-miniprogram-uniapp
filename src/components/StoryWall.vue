@@ -144,7 +144,7 @@ defineExpose({ refresh: load })
     >
       加载下一页
     </button>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="error" kind="error" />
   </view>
 </template>
 

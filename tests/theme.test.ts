@@ -17,7 +17,7 @@ test('主题在跨页和重启后保持一致，坏缓存与存储失败可恢�
       setNavigationBarColor: (value: Record<string, unknown>) => navigation.push(value),
       setBackgroundColor: (value: Record<string, unknown>) => backgrounds.push(value),
       setBackgroundTextStyle: () => {},
-      showToast: (value: Record<string, unknown>) => hints.push(value),
+      $emit: (_event: string, value: Record<string, unknown>) => hints.push(value),
     },
   })
   const { useThemeStore } = await loadRuntime(source, {

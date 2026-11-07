@@ -228,7 +228,7 @@ onPullDownRefresh(async () => {
       </button>
     </view>
     <text v-if="deletion.reading">正在读取进度…</text>
-    <text v-if="notice">{{ notice }}</text>
-    <text v-if="deletion.error" class="error">{{ deletion.error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="deletion.error" kind="error" />
   </AppPage>
 </template>

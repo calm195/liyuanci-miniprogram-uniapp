@@ -65,7 +65,7 @@ export const useThemeStore = defineStore('theme', () => {
     try {
       storage.set('theme', value)
     } catch {
-      uni.showToast({ title: '外观已切换，但未能保存到本机', icon: 'none' })
+      uni.$emit?.('app:notice', { message: '外观已切换，但未能保存到本机', kind: 'error' })
     }
     syncNative()
   }

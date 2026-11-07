@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { takeMainQuery } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import WishPreview from '@/components/WishPreview.vue'
@@ -261,7 +262,7 @@ function leave() {
   clearProjection()
 }
 watch(() => user.user?.id, clearProjection, { flush: 'sync' })
-onLoad((query) => {
+function applyNavigationQuery(query: Record<string, string | undefined> | undefined) {
   // 导航参数仅选择视图，发布资格仍由最新账号动作判定。
   own.value = query?.own === '1'
   const selected = categories.find((item) => item.value === query?.category)
@@ -275,8 +276,11 @@ onLoad((query) => {
       : ''
   composeRequested = query?.compose === '1'
   requestedEdit.value = typeof query?.edit === 'string' ? query.edit : ''
-})
+}
+onLoad(applyNavigationQuery)
 onShow(async () => {
+  const query = takeMainQuery()
+  if (query) applyNavigationQuery(query)
   visible = true
   const entry = ++entryGeneration
   const compose = composeRequested
@@ -354,13 +358,11 @@ onPullDownRefresh(async () => {
       </button>
     </view>
     <StoryWall v-if="wall" ref="storyWall" />
-    <view v-if="error && !wall" class="notice"
-      ><text>{{ error }}</text
-      ><navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator
-      ><navigator v-else-if="!canCreate" url="/pages/verification/index"
-        >查看学生认证</navigator
-      ></view
-    >
+    <AppNotice :message="!wall ? error : ''" kind="error" />
+    <view v-if="!wall && (!user.isLoggedIn || !canCreate)" class="qualification-links">
+      <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
+      <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
+    </view>
     <view v-if="editing && !wall" class="card">
       <input v-model="form.title" placeholder="给心愿起个标题（最多40个字）" :maxlength="40" />
       <picker

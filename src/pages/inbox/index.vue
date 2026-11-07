@@ -289,7 +289,7 @@ onPullDownRefresh(async () => {
     >
       加载下一页
     </button>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

@@ -369,7 +369,7 @@ onPullDownRefresh(async () => {
         发送
       </button>
       <template v-else>
-        <text>发送结果未确认，请重试或先核对聊天记录。</text>
+        <AppNotice message="发送结果未确认，请重试或先核对聊天记录。" kind="info" />
         <button
           :disabled="!canSend || reading || sending"
           :loading="isPageActionPending('pages-chat-index-button-5')"
@@ -386,8 +386,8 @@ onPullDownRefresh(async () => {
         </button>
       </template>
     </view>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
 

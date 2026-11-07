@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { openMainPage } from '@/utils/navigation'
+function openOwnWishes() {
+  if (user.isLoggedIn) return openMainPage('/pages/wishes/index?own=1')
+  uni.navigateTo({ url: '/pages/login/index' })
+}
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
@@ -110,9 +115,9 @@ onPullDownRefresh(async () => {
           ? '每一个认真回应，都会让心愿更近一点。'
           : '登录后，记录属于你的心愿与回响。'
       }}</text>
-      <navigator :url="user.isLoggedIn ? '/pages/wishes/index?own=1' : '/pages/login/index'">{{
+      <view role="button" @click="runPageAction(() => openOwnWishes())">{{
         user.isLoggedIn ? '看看我的心愿 →' : '微信登录 →'
-      }}</navigator>
+      }}</view>
     </view>
     <view
       v-if="
@@ -135,16 +140,24 @@ onPullDownRefresh(async () => {
     <view class="menu-panel">
       <view class="section-heading"
         ><text class="section-title">我的心愿</text
-        ><navigator url="/pages/wishes/index?own=1" class="small-link">查看全部 ›</navigator></view
+        ><view
+          role="button"
+          class="small-link"
+          @click="runPageAction(() => openMainPage('/pages/wishes/index?own=1'))"
+          >查看全部 ›</view
+        ></view
       >
       <view class="status-grid">
-        <navigator
+        <view
           v-for="item in wishStates"
           :key="item.state"
-          :url="`/pages/wishes/index?own=1&state=${item.state}`"
+          role="button"
+          @click="
+            runPageAction(() => openMainPage(`/pages/wishes/index?own=1&state=${item.state}`))
+          "
           ><AppIcon :name="item.icon" :size="46" /><text class="ui-text">{{
             item.label
-          }}</text></navigator
+          }}</text></view
         >
       </view>
     </view>

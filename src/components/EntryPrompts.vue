@@ -28,7 +28,10 @@ watch(
 watch(
   () => [user.validated, user.user?.verification],
   () => {
-    if (!config.useMock && user.validated) void entry.showGuide()
+    if (!config.useMock && user.validated) {
+      entry.loginVisible = false
+      void entry.showGuide()
+    }
   },
   { immediate: true },
 )
@@ -54,7 +57,7 @@ async function login() {
     <view class="prompt-card" role="dialog" aria-label="微信登录">
       <text class="title">欢迎来到鲤愿池</text>
       <text>微信登录后可管理心愿与心事，发布和互动需完成学生认证。</text>
-      <text v-if="loginError" class="error">{{ loginError }}</text>
+      <AppNotice :message="loginError" kind="error" />
       <button
         :disabled="user.busy"
         :loading="isPageActionPending('src-components-EntryPrompts.vue-action-1')"
@@ -84,7 +87,7 @@ async function login() {
           <text class="guide-body">{{ item.body }}</text>
         </view>
       </scroll-view>
-      <text v-if="entry.error" class="error">{{ entry.error }}</text>
+      <AppNotice :message="entry.error" kind="error" />
       <button
         :disabled="entry.busy"
         :loading="isPageActionPending('src-components-EntryPrompts.vue-action-3')"

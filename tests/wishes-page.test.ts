@@ -95,6 +95,7 @@ async function setup() {
   Object.assign(globalThis, {
     __wishPage: {
       ...api,
+      takeMainQuery: () => null,
       config,
       useUserStore: () => user,
       useWishStore: () => ({}),
@@ -132,7 +133,7 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const names =
-    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onPullDownRefresh, onLoad, onShow, onHide, onUnload'
+    'takeMainQuery, listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onPullDownRefresh, onLoad, onShow, onHide, onUnload'
   const page = await moduleFrom(
     `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state };`,
   )

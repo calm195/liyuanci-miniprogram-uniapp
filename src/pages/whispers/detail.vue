@@ -302,7 +302,7 @@ onShow(() => {
       @click="runPageAction(() => load(true), 'pages-whispers-detail-button-5')"
     >
       加载下一页暖评</button
-    ><text v-if="commentsError" class="error">{{ commentsError }}</text>
+    ><AppNotice :message="commentsError" kind="error" />
     <button
       v-if="retryReady"
       :disabled="writing"
@@ -310,8 +310,7 @@ onShow(() => {
       @click="runPageAction(page.retry, 'pages-whispers-detail-button-6')"
     >
       使用原请求重试</button
-    ><text v-if="notice" class="notice">{{ notice }}</text
-    ><text v-if="error" class="error">{{ error }}</text>
+    ><AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
 <style scoped>

@@ -75,7 +75,7 @@ onShow(() => {
     >
       加载下一页
     </button>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="error" kind="error" />
     <navigator url="/pages/whispers/editor" class="floating-compose">＋ 说说心事</navigator>
   </AppPage>
 </template>

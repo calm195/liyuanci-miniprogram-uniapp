@@ -109,6 +109,8 @@ async function setup(
       }
     | undefined
   let imageType = 'png'
+  let imageWidth = 256
+  let imageHeight = 256
   let confirmed = true
   let delayed = false
   let modal: (() => void) | undefined
@@ -146,7 +148,7 @@ async function setup(
         chooseMedia: (options: typeof choose) => {
           choose = options
         },
-        getImageInfo: async () => ({ type: imageType }),
+        getImageInfo: async () => ({ type: imageType, width: imageWidth, height: imageHeight }),
         showModal: (options: {
           content: string
           success: (result: { confirm: boolean }) => void
@@ -181,7 +183,9 @@ async function setup(
     prompts,
     config,
     workspace,
-    chooseImage: (image: PickedImage, type = 'png') => {
+    chooseImage: (image: PickedImage, type = 'png', width = 256, height = 256) => {
+      imageWidth = width
+      imageHeight = height
       imageType = type
       choose?.success({ tempFiles: [image] })
     },
@@ -739,4 +743,21 @@ test('黑名单在更换会话时丢弃旧名单和目标', async () => {
   } finally {
     realSession.clear()
   }
+})
+
+test('头像对审核不支持的小尺寸和超过像素预算的素材提前提示，不发上传', async () => {
+  const s = await setup()
+  const r = s.runtime
+  for (const [width, height, message] of [
+    [16, 16, /20像素/],
+    [20, 256, /20像素/],
+    [4096, 4096, /像素过大/],
+  ] as const) {
+    const picking = r.chooseAvatar()
+    s.chooseImage({ tempFilePath: 'synthetic-image', size: 256 }, 'png', width, height)
+    await picking
+    assert.match(r.avatarError.value, message)
+    assert.equal(r.avatarDraft.value, '')
+  }
+  assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
 })

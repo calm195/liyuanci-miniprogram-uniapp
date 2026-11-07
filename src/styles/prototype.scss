@@ -112,8 +112,7 @@
   align-items: center;
   gap: 10rpx;
 }
-.page navigator.small-link,
-.page button.small-link {
+.page .small-link {
   margin: 0;
   padding: 0;
   border: 0;
@@ -153,7 +152,7 @@
   font-size: 25rpx;
   color: #344b5b;
 }
-.page navigator.hero-button {
+.page .hero-button {
   display: inline-flex;
   align-items: center;
   gap: 16rpx;
@@ -171,7 +170,7 @@
   gap: 8rpx;
   padding: 28rpx 0;
 }
-.page navigator.quick-entry {
+.page .quick-entry {
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -201,7 +200,7 @@
   font-size: 20rpx;
   font-weight: 400;
 }
-.page navigator.kindness-strip {
+.page .kindness-strip {
   display: flex;
   align-items: center;
   gap: 12rpx;
@@ -504,7 +503,8 @@
 .page .profile-banner text {
   margin: 0 0 12rpx;
 }
-.page .profile-banner navigator {
+.page .profile-banner navigator,
+.page .profile-banner view[role='button'] {
   display: inline-block;
   margin: 8rpx 0 0;
   padding: 8rpx 22rpx;
@@ -543,7 +543,8 @@
   gap: 8rpx;
   padding-bottom: 26rpx;
 }
-.page .status-grid navigator {
+.page .status-grid navigator,
+.page .status-grid view[role='button'] {
   display: flex;
   align-items: center;
   flex-direction: column;

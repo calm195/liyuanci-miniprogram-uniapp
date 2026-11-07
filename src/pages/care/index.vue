@@ -187,6 +187,6 @@ onPullDownRefresh(async () => {
         继续读取通知
       </button>
     </template>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

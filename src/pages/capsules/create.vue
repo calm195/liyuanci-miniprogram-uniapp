@@ -136,8 +136,7 @@ onShow(() => {
     >
       使用原请求重试
     </button>
-    <text v-if="notice" class="notice">{{ notice }}</text
-    ><text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
 

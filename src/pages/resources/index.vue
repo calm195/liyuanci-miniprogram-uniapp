@@ -7,7 +7,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import ResourceContribution from '@/components/ResourceContribution.vue'
 import { listResourceCategories, listResources } from '@/api/resources'
 import { useResourcePage, resourceFailure } from '@/composables/use-resource-page'
-import { mergeResourcePage } from '@/utils/resources'
+import { mergeResourcePage, resourceFeedbackChoices } from '@/utils/resources'
 import { normalizeResourceText } from '@/utils/resource-schema'
 import type { ResourceCategory, ResourceSummary } from '@/types/resource'
 const items = ref<ResourceSummary[]>([])
@@ -137,11 +137,9 @@ onPullDownRefresh(async () => {
       <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
       <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
     </view>
-    <view v-if="error" class="card">
-      <text>{{ error }}</text>
-    </view>
+    <AppNotice :message="error" kind="error" />
     <text v-if="busy" class="page-footnote">正在加载资料…</text
-    ><text v-if="notice" class="notice">{{ notice }}</text>
+    ><AppNotice :message="notice" kind="info" />
     <template v-if="visible">
       <view class="card">
         <view class="section-heading"
@@ -192,6 +190,11 @@ onPullDownRefresh(async () => {
       >
         <text class="category-pill mint">{{ item.category.name }}</text>
         <text class="resource-title">{{ item.title }}</text>
+        <view v-if="item.feedback_summary" class="feedback-summary">
+          <text v-for="feedback in resourceFeedbackChoices" :key="feedback.kind"
+            >{{ feedback.label }} {{ item.feedback_summary[feedback.kind] }}</text
+          >
+        </view>
         <text class="resource-text">{{ item.description_excerpt || '暂无简介' }}</text
         ><view class="card-footer"
           ><text class="ui-text">查看介绍与下载信息</text><AppIcon name="arrow" :size="30"
@@ -210,6 +213,13 @@ onPullDownRefresh(async () => {
   </AppPage>
 </template>
 <style scoped>
+.feedback-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+}
 .resource-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

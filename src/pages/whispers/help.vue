@@ -36,7 +36,6 @@ onShow(() => {
     >
     <text v-if="directory?.status === 'unavailable'">核验后的援助目录尚未配置，当前不可用。</text>
     <navigator url="/pages/care/index">查看本人关怀卡（需要本人登录）</navigator
-    ><text>公共援助目录与本人关怀卡分别授权。</text
-    ><text v-if="error" class="error">{{ error }}</text>
+    ><text>公共援助目录与本人关怀卡分别授权。</text><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

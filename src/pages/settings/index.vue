@@ -161,6 +161,15 @@ async function chooseAvatar() {
     if (!active()) return
     if (!['jpeg', 'jpg', 'png'].includes((result.type || '').toLowerCase()))
       throw new Error('请选择 JPG 或 PNG 格式的头像。')
+    if (
+      !Number.isSafeInteger(result.width) ||
+      !Number.isSafeInteger(result.height) ||
+      result.width <= 20 ||
+      result.height <= 20
+    )
+      throw new Error('头像宽高须大于20像素，建议选择256像素以上的清晰图片。')
+    if (result.width * result.height > 4 * 1024 * 1024)
+      throw new Error('头像像素过大，请裁剪或降低分辨率后重试。')
     avatarDraft.value = image.tempFilePath
     avatarPending.value = null
   } catch (failure) {
@@ -232,12 +241,14 @@ async function changeAvatar(remove = false) {
       avatarError.value =
         failure.statusCode === 413
           ? '请选择不超过 2 MiB 的图片。'
-          : '头像未保存，请检查图片格式和当前账号权限后重试。'
+          : '头像未保存，请检查图片格式、尺寸和当前账号权限后重试。'
     } else {
       avatarError.value =
         failure instanceof Error && !(failure instanceof RequestError)
           ? failure.message
-          : '头像操作结果尚未确认，可以使用原请求重试。'
+          : failure instanceof RequestError && failure.statusCode === 503
+            ? '头像上传服务暂不可用，请稍后使用原请求重试确认。'
+            : '网络中断，头像结果尚未确认，可以使用原请求重试。'
     }
   } finally {
     if (active()) {
@@ -398,7 +409,7 @@ onPullDownRefresh(async () => {
         </view>
       </view>
       <text v-if="avatarDraft" class="notice">当前为头像预览，上传后生效。</text>
-      <text v-if="avatarError" class="error">{{ avatarError }}</text>
+      <AppNotice :message="avatarError" kind="error" />
       <text>昵称</text>
       <input
         v-model="nickname"
@@ -469,8 +480,8 @@ onPullDownRefresh(async () => {
       </button>
       <text v-else>当前账号没有修改资料的权限。</text>
     </view>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
     <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>
   </AppPage>
 </template>

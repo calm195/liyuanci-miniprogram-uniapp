@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { downloadResourceFile, openResourceFile, shareResourceFile } from '@/api/resource-file'
 import { beijingTime } from '@/utils/capsules'
 import AppPage from '@/components/AppPage.vue'
 import { getResource, getResourceDownload, putResourceFeedback } from '@/api/resources'
@@ -11,10 +12,17 @@ import { resourceCommandKey, resourceFeedbackChoices } from '@/utils/resources'
 import type { ResourceDetail, ResourceFeedbackInput, ResourceFeedbackKind } from '@/types/resource'
 const id = ref('')
 const detail = ref<ResourceDetail | null>(null)
+const downloadProgress = ref(0)
+const downloaded = ref<{ path: string; name: string } | null>(null)
+let cancelDownload: (() => void) | undefined
 const choice = ref<ResourceFeedbackKind | ''>('')
 const writing = ref(false)
 const pending = ref<{ id: string; input: ResourceFeedbackInput; key: string } | null>(null)
 function clear() {
+  cancelDownload?.()
+  cancelDownload = undefined
+  downloadProgress.value = 0
+  downloaded.value = null
   detail.value = null
   choice.value = ''
   writing.value = false
@@ -83,6 +91,58 @@ async function copy(linkOnly: boolean) {
     }
   }
 }
+async function downloadFile() {
+  const resource = detail.value
+  if (
+    !visible.value ||
+    !resource?.file ||
+    busy.value ||
+    writing.value ||
+    pending.value ||
+    !resource.allowed_actions.includes('copy_download')
+  )
+    return
+  const active = page.ticket()
+  writing.value = true
+  downloadProgress.value = 0
+  error.value = ''
+  notice.value = ''
+  downloaded.value = null
+  try {
+    const value = await getResourceDownload(resource.id, resource.version)
+    if (!active()) return
+    const transfer = downloadResourceFile(value, (percent) => {
+      if (active()) downloadProgress.value = percent
+    })
+    cancelDownload = transfer.cancel
+    const path = await transfer.promise
+    cancelDownload = undefined
+    if (!active() || !value.file) return
+    downloaded.value = { path, name: value.file.name }
+    notice.value = '下载完成，可打开或转发文件。'
+  } catch (failure) {
+    if (active()) page.fail(failure)
+  } finally {
+    if (active()) writing.value = false
+  }
+}
+async function openDownloaded() {
+  const file = downloaded.value
+  if (!file) return
+  const opened = await openResourceFile(file.path, file.name)
+  if (!opened) notice.value = '文件已下载，该格式暂不能预览，可转发文件后使用相应应用打开。'
+}
+async function shareDownloaded() {
+  const file = downloaded.value
+  if (!file) return
+  try {
+    await shareResourceFile(file.path, file.name)
+  } catch (failure) {
+    page.fail(failure)
+  }
+}
+onHide(() => cancelDownload?.())
+onUnload(() => cancelDownload?.())
 function select(kind: ResourceFeedbackKind) {
   if (canFeedback.value && !writing.value && !pending.value) choice.value = kind
 }
@@ -117,6 +177,15 @@ async function submit(retry = false) {
       detail.value.content_version !== result.content_version
     )
       return
+    const summary = detail.value.feedback_summary
+    const previous = detail.value.my_feedback?.kind
+    if (summary && previous !== result.kind) {
+      const next = { ...summary }
+      if (previous) next[previous] = Math.max(0, next[previous] - 1)
+      else next.total++
+      next[result.kind]++
+      detail.value = { ...detail.value, feedback_summary: next }
+    }
     detail.value = { ...detail.value, my_feedback: result }
     choice.value = result.kind
     pending.value = null
@@ -162,10 +231,8 @@ onPullDownRefresh(async () => {
       <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
       <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
     </view>
-    <view v-if="error" class="card"
-      ><text>{{ error }}</text></view
-    >
-    <text v-if="busy">正在加载资料…</text><text v-if="notice">{{ notice }}</text>
+    <AppNotice :message="error" kind="error" />
+    <text v-if="busy">正在加载资料…</text><AppNotice :message="notice" kind="info" />
 
     <template v-if="visible && detail">
       <view class="card">
@@ -173,6 +240,35 @@ onPullDownRefresh(async () => {
         ><text>{{ detail.category.name }}</text>
         <text class="resource-text">{{ detail.description || '暂无简介' }}</text>
         <text>更新时间：{{ beijingTime(detail.updated_at) }}（北京时间）</text>
+        <template v-if="detail.file">
+          <text
+            >文件：{{ detail.file.name }}（{{
+              (detail.file.size / 1024 / 1024).toFixed(2)
+            }}
+            MiB）</text
+          >
+          <button
+            :disabled="writing || !!pending || busy"
+            :loading="isPageActionPending('resource-download')"
+            @click="runPageAction(() => downloadFile(), 'resource-download')"
+          >
+            {{ writing ? `正在下载 ${downloadProgress}%` : '下载资料文件' }}
+          </button>
+          <template v-if="downloaded">
+            <button
+              :loading="isPageActionPending('resource-open')"
+              @click="runPageAction(() => openDownloaded(), 'resource-open')"
+            >
+              打开文件
+            </button>
+            <button
+              :loading="isPageActionPending('resource-share')"
+              @click="runPageAction(() => shareDownloaded(), 'resource-share')"
+            >
+              转发文件
+            </button>
+          </template>
+        </template>
         <text class="resource-text">下载链接：{{ detail.download_url }}</text>
         <text>提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
         <button
@@ -207,6 +303,7 @@ onPullDownRefresh(async () => {
           "
         >
           {{ choice === option.kind ? '已选择：' : '' }}{{ option.label }}
+          {{ detail.feedback_summary?.[option.kind] ?? '' }}
         </button>
         <text v-if="detail.my_feedback"
           >已保存：{{

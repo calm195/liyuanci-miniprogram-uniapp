@@ -171,7 +171,9 @@ onShow(() => {
         ><text>受控脱敏后的安全候选：</text
         ><text class="whitespace-pre-wrap">{{ record.recovery_body }}</text></view
       >
-      <navigator url="/pages/whispers/index">另选当前公开帖子，重新填写新暖评</navigator>
+      <navigator url="/pages/whispers/index" open-type="switchTab"
+        >另选当前公开帖子，重新填写新暖评</navigator
+      >
     </view>
     <text v-else-if="post && !post.comments_open"
       >评论已关闭，只能阅读已公开合规暖评；恢复后不会自动补发已取消项。</text
@@ -212,7 +214,6 @@ onShow(() => {
     >
       使用原请求重试
     </button>
-    <text v-if="notice" class="notice">{{ notice }}</text
-    ><text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>

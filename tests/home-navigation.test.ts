@@ -4,7 +4,12 @@ import { test } from 'node:test'
 import { reactive } from 'vue'
 import { loadRuntime, settle } from './support/page-runtime.ts'
 import { publicWishBody } from '../src/utils/wish.ts'
-import { mainNavigation, switchMainTab } from '../src/utils/navigation.ts'
+import {
+  mainNavigation,
+  switchMainTab,
+  openMainPage,
+  takeMainQuery,
+} from '../src/utils/navigation.ts'
 import type { WishResult } from '../src/types/wish.ts'
 
 const sample: WishResult = {
@@ -85,18 +90,45 @@ test('首页隐藏、换账号与乱序响应不会重新显示旧内容', async
   s.hooks.unload!()
   assert.equal(s.feed.rows.value.length, 0)
 })
-test('五个主入口都注册为页面，重复点击当前栏不入栈，换栏重建根页面', () => {
+test('五个主入口都注册为页面，重复点击当前栏不入栈，换栏使用原生缓存页面', async () => {
   const pages = JSON.parse(
     readFileSync(new URL('../src/pages.json', import.meta.url), 'utf8'),
   ).pages.map((p: { path: string }) => '/' + p.path)
   const calls: string[] = []
-  Object.assign(globalThis, { uni: { reLaunch: ({ url }: { url: string }) => calls.push(url) } })
+  Object.assign(globalThis, {
+    uni: {
+      switchTab: ({ url, success }: { url: string; success: () => void }) => {
+        calls.push(url)
+        success()
+      },
+    },
+  })
   for (const item of mainNavigation) {
     assert.ok(pages.includes(item.url))
     switchMainTab(item.key, item.key)
   }
   assert.equal(calls.length, 0)
-  switchMainTab('resources', 'home')
-  switchMainTab('whispers', 'resources')
+  await switchMainTab('resources', 'home')
+  await switchMainTab('whispers', 'resources')
   assert.deepEqual(calls, ['/pages/resources/index', '/pages/whispers/index'])
+})
+
+test('缓存心愿页的编辑与筛选意图只消费一次，切换失败清除意图', async () => {
+  let fail = false
+  Object.assign(globalThis, {
+    uni: {
+      switchTab(options: { success: () => void; fail: () => void }) {
+        if (fail) options.fail()
+        else options.success()
+      },
+    },
+  })
+  await openMainPage('/pages/wishes/index?own=1&edit=synthetic%2Did')
+  assert.deepEqual(takeMainQuery(), { own: '1', edit: 'synthetic-id' })
+  assert.equal(takeMainQuery(), null)
+  await openMainPage('/pages/wishes/index')
+  assert.deepEqual(takeMainQuery(), {})
+  fail = true
+  await assert.rejects(openMainPage('/pages/wishes/index?compose=1'), /切换失败/)
+  assert.equal(takeMainQuery(), null)
 })

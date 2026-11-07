@@ -171,7 +171,7 @@ test('B14 / I1-V01/V02：实际页面构造首次和重提，服务准入关闭�
   hooks.show!()
   await settle()
   page.name.value = '合成姓名'
-  page.studentNumber.value = '合成学号'
+  page.studentNumber.value = '202600001234'
   page.assetEpoch.value = 1
   page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
   await page.submitReal()
@@ -184,7 +184,7 @@ test('B14 / I1-V01/V02：实际页面构造首次和重提，服务准入关闭�
   setRead(async () => ({ version: 7, status: 'rejected' }))
   await page.refreshReview()
   page.name.value = '合成姓名'
-  page.studentNumber.value = '合成学号'
+  page.studentNumber.value = '202600001234'
   page.assetEpoch.value = 1
   page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
   await page.submitReal()
@@ -196,7 +196,7 @@ test('B14 / I1-04：冲突只重读不自动重提，缺失授权拒绝提交', 
   await settle()
   config.verificationWritesReady = true
   page.name.value = '合成姓名'
-  page.studentNumber.value = '合成学号'
+  page.studentNumber.value = '202600001234'
   page.assetEpoch.value = 1
   page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
   let attempts = 0
@@ -251,7 +251,7 @@ test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可�
   await settle()
   config.verificationWritesReady = true
   page.name.value = '合成姓名'
-  page.studentNumber.value = '合成学号'
+  page.studentNumber.value = '202600001234'
   let choose!: (result: { tempFilePaths: string[] }) => void
   Object.assign(globalThis, {
     uni: {
@@ -291,7 +291,7 @@ test('REQ-018：账号变化清空认证姓名、学号、审核记录与学生�
   s.hooks.show!()
   await settle()
   s.page.name.value = '合成姓名'
-  s.page.studentNumber.value = '合成学号'
+  s.page.studentNumber.value = '202600001234'
   s.page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
   s.store.user.id = 'synthetic-other'
   assert.equal(s.page.name.value, '')
@@ -330,7 +330,7 @@ test('认证页每个动作只显示自身进度，并阻止重复上传、查�
     assert.equal(page.busy.value, false)
     await page.queryAsset()
     page.name.value = '合成姓名'
-    page.studentNumber.value = '合成学号'
+    page.studentNumber.value = '202600001234'
     let complete!: (result: unknown) => void
     setSubmit(() => new Promise((resolve) => (complete = resolve)))
     const submit = page.submitReal()

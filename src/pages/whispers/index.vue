@@ -77,8 +77,8 @@ const { items, cursor, ready, busy, writing, retryReady, error, notice, load, hu
     >
       使用原请求重试
     </button>
-    <text v-if="notice" class="notice">{{ notice }}</text>
-    <text v-if="error" class="notice">{{ error }}</text>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="error" kind="error" />
     <navigator url="/pages/whispers/editor" class="floating-compose">＋ 说说心事</navigator>
   </AppPage>
 </template>

@@ -59,7 +59,8 @@
   .field-placeholder {
     @apply text-muted;
   }
-  .page navigator {
+  .page navigator,
+  .page view[role='button'] {
     @apply my-3 block text-brand leading-relaxed;
   }
   .page picker {

@@ -231,7 +231,7 @@ onPullDownRefresh(async () => {
       <button open-type="share" :disabled="busy">分享给微信好友</button>
     </view>
     <text v-if="!reference && (!kind || !id)" class="error">分享链接无效。</text>
-    <text v-if="error" class="error">{{ error }}</text>
+    <AppNotice :message="error" kind="error" />
     <navigator url="/pages/stories/index">前往还愿墙</navigator>
     <canvas
       canvas-id="wish-share-cover"
