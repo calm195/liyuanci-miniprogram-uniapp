@@ -7,6 +7,13 @@ import { config } from '@/config'
 const user = useUserStore()
 const entry = useEntryStore()
 const loginError = ref('')
+const guidePage = ref(0)
+watch(
+  () => [entry.guideVisible, entry.guide],
+  () => {
+    guidePage.value = 0
+  },
+)
 let visible = true
 let generation = 0
 function leave() {
@@ -81,22 +88,41 @@ async function login() {
   <view v-else-if="entry.guideVisible && entry.guide" class="prompt-shade">
     <view class="prompt-card" role="dialog" aria-label="功能使用说明">
       <text class="title">功能使用说明</text>
-      <scroll-view scroll-y class="guide-scroll">
-        <view v-for="item in entry.guide.modules" :key="item.module" class="guide-section">
+      <template v-for="(item, index) in entry.guide.modules" :key="item.module">
+        <scroll-view v-if="guidePage === index" scroll-y class="guide-scroll">
           <text class="section-title">{{ item.title }}</text>
           <text class="guide-body">{{ item.body }}</text>
-        </view>
-      </scroll-view>
+        </scroll-view>
+      </template>
+      <text v-if="entry.guide.modules.length > 1" class="guide-count">
+        {{ guidePage + 1 }} / {{ entry.guide.modules.length }}
+      </text>
       <AppNotice :message="entry.error" kind="error" />
-      <button
-        :disabled="entry.busy"
-        :loading="isPageActionPending('src-components-EntryPrompts.vue-action-3')"
-        @click="
-          runPageAction(() => entry.confirmGuide(), 'src-components-EntryPrompts.vue-action-3')
-        "
-      >
-        我知道了
-      </button>
+      <view class="guide-actions">
+        <button
+          v-if="guidePage > 0"
+          :disabled="entry.busy"
+          @click="guidePage = Math.max(0, guidePage - 1)"
+        >
+          上一页
+        </button>
+        <button
+          v-if="guidePage + 1 < entry.guide.modules.length"
+          @click="guidePage = Math.min(entry.guide.modules.length - 1, guidePage + 1)"
+        >
+          下一页
+        </button>
+        <button
+          v-else
+          :disabled="entry.busy"
+          :loading="isPageActionPending('src-components-EntryPrompts.vue-action-3')"
+          @click="
+            runPageAction(() => entry.confirmGuide(), 'src-components-EntryPrompts.vue-action-3')
+          "
+        >
+          我知道了
+        </button>
+      </view>
     </view>
   </view>
 </template>
@@ -122,10 +148,18 @@ async function login() {
   gap: 24rpx;
 }
 .guide-scroll {
-  max-height: 55vh;
+  height: 45vh;
 }
-.guide-section {
-  margin-bottom: 28rpx;
+.guide-count {
+  text-align: center;
+}
+.guide-actions {
+  display: flex;
+  gap: 16rpx;
+}
+.guide-actions button {
+  flex: 1;
+  min-width: 0;
 }
 .guide-body {
   display: block;
