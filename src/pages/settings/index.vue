@@ -20,6 +20,7 @@ const nickname = ref('')
 const avatarDraft = ref('')
 const selectingAvatar = ref(false)
 let avatarPickerHid = false
+let finishAvatarPicker: (() => void) | undefined
 const avatarError = ref('')
 const avatarPending = ref<{ path: string; version: number; key: string } | null>(null)
 const identityCampus = ref<IdentityTags['campus']>('any')
@@ -71,6 +72,8 @@ function clear() {
   avatarDraft.value = ''
   selectingAvatar.value = false
   avatarPickerHid = false
+  finishAvatarPicker?.()
+  finishAvatarPicker = undefined
   avatarError.value = ''
   avatarPending.value = null
   identityCampus.value = 'any'
@@ -141,16 +144,22 @@ async function chooseAvatar() {
   try {
     const image = await new Promise<{ tempFilePath: string; size: number } | undefined>(
       (resolve, reject) => {
+        const afterShow = (finish: () => void) => {
+          // 原生选图回调可能早于页面恢复，等页面可见再校验、保存和展示结果。
+          if (active() && avatarPickerHid) finishAvatarPicker = finish
+          else finish()
+        }
         uni.chooseMedia({
           count: 1,
           mediaType: ['image'],
           sourceType: ['album', 'camera'],
           sizeType: ['compressed'],
-          success: (result) => resolve(result.tempFiles[0]),
-          fail: (failure) => {
-            if (failure.errMsg?.includes('cancel')) resolve(undefined)
-            else reject(new Error('无法打开相册或相机，请检查权限后重试。'))
-          },
+          success: (result) => afterShow(() => resolve(result.tempFiles[0])),
+          fail: (failure) =>
+            afterShow(() => {
+              if (failure.errMsg?.includes('cancel')) resolve(undefined)
+              else reject(new Error('无法打开相册或相机，请检查权限后重试。'))
+            }),
         })
       },
     )
@@ -175,9 +184,11 @@ async function chooseAvatar() {
   } catch (failure) {
     if (active())
       avatarError.value = failure instanceof Error ? failure.message : '图片无法读取，请重新选择。'
+    return
   } finally {
     if (active()) selectingAvatar.value = false
   }
+  if (active()) await changeAvatar()
 }
 async function changeAvatar(remove = false) {
   const snapshot = currentMe.value
@@ -227,10 +238,12 @@ async function changeAvatar(remove = false) {
     else notice.value = path ? '头像已更新。' : '已恢复默认头像。'
   } catch (failure) {
     if (!active()) return
-    if (failure instanceof RequestError && failure.statusCode === 409) {
+    if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
       avatarPending.value = null
       avatarError.value = '个人资料已变化，刷新后可以重新提交头像。'
       reload = true
+    } else if (failure instanceof RequestError && failure.error_code === 'STATE_CONFLICT') {
+      avatarError.value = '头像操作仍在处理，请稍后使用原请求重试。'
     } else if (
       failure instanceof RequestError &&
       failure.statusCode >= 400 &&
@@ -337,12 +350,14 @@ onShow(() => {
   visible = true
   if (avatarPickerHid || selectingAvatar.value) {
     avatarPickerHid = false
+    finishAvatarPicker?.()
+    finishAvatarPicker = undefined
     return
   }
   void load()
 })
 onHide(() => {
-  // 微信原生相册或相机临时遮住页面，返回后仍需预览刚选中的图片。
+  // 微信原生相册或相机临时遮住页面，选图回调仍需在当前会话校验并提交。
   if (selectingAvatar.value) avatarPickerHid = true
   else leave()
 })
@@ -385,21 +400,21 @@ onPullDownRefresh(async () => {
         <view v-if="allowed('putMeProfile')" class="avatar-actions">
           <button
             :disabled="busy || writing || selectingAvatar"
-            :loading="selectingAvatar"
-            @click="chooseAvatar"
+            :loading="isPageActionPending('settings-select-avatar')"
+            @click="runPageAction(chooseAvatar, 'settings-select-avatar')"
           >
             {{ avatarDraft ? '重新选图' : '选择头像' }}
           </button>
           <button
-            v-if="avatarDraft"
+            v-if="avatarDraft && (!writing || isPageActionPending('settings-save-avatar'))"
             :disabled="busy || writing || selectingAvatar"
             :loading="isPageActionPending('settings-save-avatar')"
             @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
           >
-            {{ avatarPending?.path && !writing ? '重试上传' : '上传头像' }}
+            重试保存头像
           </button>
           <button
-            v-else-if="currentMe.avatar_id || currentMe.avatar_url"
+            v-else-if="!avatarDraft && (currentMe.avatar_id || currentMe.avatar_url)"
             :disabled="busy || writing || selectingAvatar"
             :loading="isPageActionPending('settings-remove-avatar')"
             @click="runPageAction(() => changeAvatar(true), 'settings-remove-avatar')"
@@ -408,7 +423,9 @@ onPullDownRefresh(async () => {
           </button>
         </view>
       </view>
-      <text v-if="avatarDraft" class="notice">当前为头像预览，上传后生效。</text>
+      <text v-if="avatarDraft" class="notice">{{
+        writing ? '正在保存头像…' : '当前为头像预览，保存后生效。'
+      }}</text>
       <AppNotice :message="avatarError" kind="error" />
       <text>昵称</text>
       <input

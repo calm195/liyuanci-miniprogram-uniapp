@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { refreshDictionaries } from '@/features/dictionaries/load'
-import { onShow } from '@dcloudio/uni-app'
+import { onShow, onThemeChange } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useEntryStore } from '@/stores/entry'
 import { useDeletionStore } from '@/stores/deletion'
+import { useThemeStore } from '@/stores/theme'
+const theme = useThemeStore()
+onThemeChange(({ theme: systemMode }) => theme.updateSystemMode(systemMode))
 onShow(() => {
+  theme.updateSystemMode()
   if (!config.useMock)
     void refreshDictionaries().catch(() => {
       /* 保留已验证快照，首次失败显示安全占位。 */

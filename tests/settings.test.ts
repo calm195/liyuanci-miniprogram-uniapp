@@ -583,33 +583,24 @@ test('REQ-014/018：解除超时禁止新写，原键原体重试，离页清掉
   assert.equal(s.calls.filter((x) => x.method === 'DELETE').length, 2)
 })
 
-test('头像原生选图返回保留草稿，上传按本人版本发送并采用服务器回执', async () => {
+test('头像原生选图返回自动保存，采用服务器回执且重新读取后仍生效', async () => {
   const s = await setup()
   const r = s.runtime
   r.nickname.value = '未保存昵称'
+  const persisted = {
+    ...actor,
+    version: 20,
+    avatar_id: 'synthetic-id',
+    avatar_url: 'https://synthetic.invalid/avatar',
+  }
+  s.transport(async (input) => (input.url === '/me/avatar' ? persisted : undefined))
   const picking = r.chooseAvatar()
   s.hooks.hide!()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
-  await picking
-  s.hooks.show!()
   await settle()
-  assert.equal(r.avatarDraft.value, 'synthetic-avatar-local')
-  assert.equal(r.nickname.value, '未保存昵称')
-  assert.equal(
-    s.calls.some((call) => call.url === '/me/avatar'),
-    false,
-  )
-  s.transport(async (input) =>
-    input.url === '/me/avatar'
-      ? {
-          ...actor,
-          version: 20,
-          avatar_id: 'synthetic-id',
-          avatar_url: 'https://synthetic.invalid/avatar',
-        }
-      : undefined,
-  )
-  await r.changeAvatar()
+  assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
+  s.hooks.show!()
+  await picking
   const sent = s.calls.find((call) => call.url === '/me/avatar')!
   assert.equal(sent.method, 'POST')
   assert.equal(sent.filePath, 'synthetic-avatar-local')
@@ -619,19 +610,26 @@ test('头像原生选图返回保留草稿，上传按本人版本发送并采�
   assert.equal(r.currentMe.value.version, 20)
   assert.equal(s.user.user?.avatar_id, 'synthetic-id')
   assert.equal(r.nickname.value, '未保存昵称')
+  assert.equal(r.notice.value, '头像已更新。')
+  assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 1)
+  s.user.refresh = async () => {
+    s.user.user = { ...persisted }
+  }
+  s.hooks.hide!()
+  s.hooks.show!()
+  await settle()
+  assert.equal(r.currentMe.value.avatar_url, persisted.avatar_url)
 })
 
 test('头像失败用原文件、版本与请求标识重试，恢复默认使用当前版本', async () => {
   const s = await setup()
   const r = s.runtime
-  const pick = r.chooseAvatar()
-  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
-  await pick
   let attempt = 0
   s.transport(async (input) => {
     if (input.url !== '/me/avatar') return
     if (input.method === 'DELETE') return { ...actor, version: 21 }
     if (++attempt === 1) throw new RequestError('合成超时', -1)
+    if (attempt === 2) throw new RequestError('合成状态冲突', 409, 'STATE_CONFLICT', '', 409)
     return {
       ...actor,
       version: 20,
@@ -639,12 +637,17 @@ test('头像失败用原文件、版本与请求标识重试，恢复默认使�
       avatar_url: 'https://synthetic.invalid/avatar',
     }
   })
-  await r.changeAvatar()
+  const pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+  await pick
   assert.match(r.avatarError.value, /原请求重试/)
   await r.changeAvatar()
+  assert.match(r.avatarError.value, /仍在处理/)
+  await r.changeAvatar()
   const uploads = s.calls.filter((call) => call.url === '/me/avatar' && call.method === 'POST')
-  assert.equal(uploads.length, 2)
+  assert.equal(uploads.length, 3)
   assert.deepEqual(uploads[0], uploads[1])
+  assert.deepEqual(uploads[1], uploads[2])
   await r.changeAvatar(true)
   assert.deepEqual(s.calls.find((call) => call.method === 'DELETE')?.data, { expected_version: 20 })
   assert.equal(r.currentMe.value.avatar_id, undefined)
@@ -663,6 +666,9 @@ test('头像拒绝超限及非 JPG/PNG，取消保留预览，换号和离页丢
   s.chooseImage({ tempFilePath: 'synthetic-avatar-gif', size: 50 }, 'gif')
   await pick
   assert.match(r.avatarError.value, /JPG 或 PNG/)
+  s.transport(async () => {
+    throw new RequestError('合成超时', -1)
+  })
   pick = r.chooseAvatar()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-ok', size: 50 })
   await pick
@@ -701,24 +707,22 @@ test('头像拒绝超限及非 JPG/PNG，取消保留预览，换号和离页丢
 test('头像重试接受后续变更的最新本人投影，签名缺省时保存成功并显示默认图', async () => {
   const s = await setup()
   const r = s.runtime
-  let pick = r.chooseAvatar()
-  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
-  await pick
   let attempt = 0
   s.transport(async () => {
     if (++attempt === 1) throw new RequestError('合成超时', -1)
     return { ...actor, version: 21 }
   })
-  await r.changeAvatar()
+  let pick = r.chooseAvatar()
+  s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+  await pick
   await r.changeAvatar()
   assert.equal(r.currentMe.value.version, 21)
   assert.equal(r.avatarPending.value, null)
   assert.match(r.notice.value, /同步当前头像/)
+  s.transport(async () => ({ ...actor, version: 22, avatar_id: 'synthetic-avatar-id' }))
   pick = r.chooseAvatar()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local-2', size: 256 })
   await pick
-  s.transport(async () => ({ ...actor, version: 22, avatar_id: 'synthetic-avatar-id' }))
-  await r.changeAvatar()
   assert.equal(r.avatarPending.value, null)
   assert.equal(r.currentMe.value.avatar_id, 'synthetic-avatar-id')
   assert.match(r.notice.value, /图片暂不可读取/)

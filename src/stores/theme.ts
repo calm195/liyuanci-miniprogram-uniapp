@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import { storage } from '@/utils/storage'
 
 export type ThemeMode = 'light' | 'dark'
+export type ThemePreference = ThemeMode | 'system'
 const palettes = {
   light: {
     canvas: '#fcfaf7',
@@ -36,9 +37,16 @@ const palettes = {
   },
 } as const
 
+function readSystemMode() {
+  return uni.getAppBaseInfo?.().theme ?? uni.getSystemInfoSync?.().theme
+}
+
 export const useThemeStore = defineStore('theme', () => {
-  // 外观属于设备偏好，与账号和登录会话独立；只接受已知值，损坏缓存回退亮色。
-  const mode = ref<ThemeMode>(storage.get<unknown>('theme') === 'dark' ? 'dark' : 'light')
+  // 保留设备上已保存的手动选择，未设置或缓存损坏时跟随系统。
+  const saved = storage.get<unknown>('theme')
+  const preference = ref<ThemePreference>(saved === 'light' || saved === 'dark' ? saved : 'system')
+  const systemMode = ref<ThemeMode>(readSystemMode() === 'dark' ? 'dark' : 'light')
+  const mode = computed(() => (preference.value === 'system' ? systemMode.value : preference.value))
   const palette = computed(() => palettes[mode.value])
   const variables = computed(() =>
     Object.entries(palette.value)
@@ -59,19 +67,20 @@ export const useThemeStore = defineStore('theme', () => {
     })
     uni.setBackgroundTextStyle?.({ textStyle: dark ? 'light' : 'dark' })
   }
-  function setMode(value: ThemeMode) {
-    if (value !== 'light' && value !== 'dark') return
-    mode.value = value
+  function updateSystemMode(value = readSystemMode()) {
+    if (value === 'light' || value === 'dark') systemMode.value = value
+    if (preference.value === 'system') syncNative()
+  }
+  function setMode(value: ThemePreference) {
+    if (value === preference.value) return
+    preference.value = value
+    if (value === 'system') updateSystemMode()
+    else syncNative()
     try {
       storage.set('theme', value)
-      uni.$emit?.('app:notice', {
-        message: value === 'dark' ? '已切换为深色外观' : '已切换为浅色外观',
-        kind: 'success',
-      })
     } catch {
-      uni.$emit?.('app:notice', { message: '外观已切换，但未能保存到本机', kind: 'error' })
+      // 存储失败时保留当前运行期间的外观选择。
     }
-    syncNative()
   }
-  return { mode, variables, setMode, syncNative }
+  return { preference, mode, variables, setMode, syncNative, updateSystemMode }
 })
