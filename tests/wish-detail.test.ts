@@ -33,6 +33,10 @@ const shareRef = '01234567-89ab-cdef-0123-456789abcdef'
 const publicWish = {
   id: sample.id,
   title: '公开标题',
+  category: 'help',
+  campus: 'wushan',
+  reward_method: 'thanks',
+  author: { id: 'synthetic-author', nickname: '公开昵称' },
   body: '公开正文',
   content_version: 1,
   school_related: false,
@@ -70,7 +74,12 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
       return options.method
         ? command()
         : options.auth === false
-          ? { ...row, public: { ...publicWish } }
+          ? {
+              ...row,
+              current_state: 'published',
+              expires_at: '2099-01-01T12:00:00Z',
+              public: { ...publicWish },
+            }
           : structuredClone(row)
     },
   })
@@ -120,7 +129,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, sharedProjection };`,
+    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, allowed };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -210,8 +219,12 @@ test('REQ-004：409仅重读不自动重写；切换账号不保留原正文', a
 test('微信卡片和扫码回流只读取公开投影，非法扫码参数不降级为普通详情', async () => {
   const friend = await setup({ id: sample.id, shared: '1' })
   assert.equal(friend.calls[0]?.auth, false)
-  assert.equal(friend.page.sharedProjection.value.body, '公开正文')
-  assert.equal(friend.page.currentWish.value, null)
+  assert.deepEqual(friend.page.content.value, publicWish)
+  assert.equal(friend.page.currentWish.value.current_state, 'published')
+  assert.equal(friend.page.currentWish.value.expires_at, '2099-01-01T12:00:00Z')
+  assert.equal(friend.page.currentWish.value.own_content, undefined)
+  assert.deepEqual(friend.page.currentWish.value.allowed_actions, [])
+  assert.equal(friend.page.allowed('withdraw'), false)
 
   const scan = await setup({ scene: shareRef.replace(/-/g, ''), id: 'other' })
   assert.deepEqual(
@@ -219,11 +232,11 @@ test('微信卡片和扫码回流只读取公开投影，非法扫码参数不�
     [`/share-links/${shareRef}`, friend.calls[0]?.url],
   )
   assert.deepEqual(scan.calls[1], friend.calls[0])
-  assert.deepEqual(scan.page.sharedProjection.value, friend.page.sharedProjection.value)
+  assert.deepEqual(scan.page.currentWish.value, friend.page.currentWish.value)
   scan.hooks.hide!()
-  assert.equal(scan.page.sharedProjection.value, null)
+  assert.equal(scan.page.currentWish.value, null)
   await scan.page.load()
-  assert.equal(scan.page.sharedProjection.value, null)
+  assert.equal(scan.page.currentWish.value, null)
 
   const invalid = await setup({ scene: 'wrong', id: sample.id })
   assert.equal(invalid.calls.length, 0)

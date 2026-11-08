@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
-import PublicContent from '@/components/PublicContent.vue'
 import ShareActions from '@/components/ShareActions.vue'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
@@ -29,7 +28,6 @@ const demo = useWishStore()
 const id = ref('')
 const reference = ref<string>()
 const sharedEntry = ref(false)
-const sharedProjection = ref<WishPublicContent | null>(null)
 const publicShare = ref<WishPublicContent | null>(null)
 const wish = ref<WishResult | null>(null)
 const busy = ref(false)
@@ -49,7 +47,7 @@ const currentWish = computed(() => {
   if (
     snapshotEpoch.value !== session.getEpoch() ||
     snapshotOwner.value !== (user.user?.id || '') ||
-    (snapshotOwner.value && !user.validated)
+    (!sharedEntry.value && snapshotOwner.value && !user.validated)
   )
     return null
   return wish.value
@@ -79,6 +77,7 @@ const operations = {
 } as const
 function allowed(action: WishLifecycleAction) {
   return (
+    !sharedEntry.value &&
     !config.useMock &&
     config.wishWritesReady &&
     canWishAction(user.user, user.validated, currentWish.value, id.value, operations[action])
@@ -86,7 +85,6 @@ function allowed(action: WishLifecycleAction) {
 }
 function clearProjection() {
   wish.value = null
-  sharedProjection.value = null
   publicShare.value = null
   snapshotEpoch.value = -1
   snapshotOwner.value = ''
@@ -103,7 +101,7 @@ async function load() {
   error.value = ''
   publicShare.value = null
   if (sharedEntry.value) {
-    sharedProjection.value = null
+    clearProjection()
     busy.value = true
     try {
       let targetId = id.value
@@ -121,9 +119,25 @@ async function load() {
       pendingView = false
       const result = await getPublicWish(targetId, trackView)
       if (!isCurrent()) return
-      if (result?.id !== targetId || !result.public || !isPublicContent(result.public))
+      if (
+        result?.id !== targetId ||
+        result.current_state !== 'published' ||
+        result.privacy_review_required ||
+        result.public?.id !== targetId ||
+        !isPublicContent(result.public)
+      )
         throw new Error('分享内容不可用')
-      sharedProjection.value = result.public
+      // 分享入口复用完整详情布局，只接收公开字段。
+      wish.value = {
+        id: result.id,
+        version: result.version,
+        current_state: result.current_state,
+        expires_at: result.expires_at,
+        allowed_actions: [],
+        public: result.public,
+      }
+      snapshotOwner.value = user.user?.id || ''
+      snapshotEpoch.value = epoch
     } catch {
       if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
     } finally {
@@ -292,20 +306,15 @@ onPullDownRefresh(async () => {
 
 <template>
   <AppPage :hide-entry-prompts="sharedEntry">
-    <template v-if="sharedEntry">
-      <text v-if="busy">加载中…</text>
-      <view v-if="sharedProjection" class="card">
-        <text class="title">{{ sharedProjection.title || '公开心愿' }}</text>
-        <PublicContent :content="sharedProjection" read-only />
-      </view>
-      <text v-if="error" class="notice">分享的心愿暂不可查看。</text>
-    </template>
-    <text v-if="!sharedEntry" class="title">{{ content?.title || '未命名心愿' }}</text>
+    <text v-if="!sharedEntry || currentWish" class="title">{{
+      content?.title || (sharedEntry ? '公开心愿' : '未命名心愿')
+    }}</text>
+    <text v-if="sharedEntry && error" class="notice">分享的心愿暂不可查看。</text>
     <text v-if="!sharedEntry && config.useMock" class="notice"
       >合成演示 · 详情只读，不发送 API</text
     >
 
-    <text v-if="!sharedEntry && busy">加载中…</text>
+    <text v-if="busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <view class="detail-tags">
         <text class="category-pill">{{
@@ -333,7 +342,7 @@ onPullDownRefresh(async () => {
           {{ publicContent.author.nickname || '查看公开主页' }}
         </navigator>
         <navigator
-          v-if="publicContent?.author && currentWish.current_state === 'published'"
+          v-if="!sharedEntry && publicContent?.author && currentWish.current_state === 'published'"
           class="moderation-link"
           :url="`/pages/blacklist/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
           >屏蔽发布者</navigator
@@ -352,7 +361,7 @@ onPullDownRefresh(async () => {
         >
       </template>
     </view>
-    <view v-if="currentWish && !config.useMock" class="card detail-actions">
+    <view v-if="!sharedEntry && currentWish && !config.useMock" class="card detail-actions">
       <view
         v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
         role="button"
@@ -447,7 +456,12 @@ onPullDownRefresh(async () => {
       >管理我的还愿故事</navigator
     >
     <view
-      v-if="currentWish && !currentWish.privacy_review_required && (publicContent || shareTarget)"
+      v-if="
+        !sharedEntry &&
+        currentWish &&
+        !currentWish.privacy_review_required &&
+        (publicContent || shareTarget)
+      "
       class="detail-footer"
     >
       <navigator
@@ -459,7 +473,7 @@ onPullDownRefresh(async () => {
       <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
     </view>
     <AppNotice :message="notice" kind="info" />
-    <AppNotice :message="error" kind="error" />
+    <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
   </AppPage>
 </template>
 
