@@ -48,6 +48,18 @@ function responseErrorMessage(
   return '请求未完成，请稍后重试'
 }
 
+function uploadFailure(message: string | undefined) {
+  // 微信原生错误可能包含本地文件路径，只提取固定错误类型。
+  const detail = message ?? ''
+  if (/url not in domain list|domain.*not.*(?:allow|valid)/i.test(detail))
+    return new RequestError('上传地址未通过微信校验', -1, 'UPLOAD_DOMAIN_NOT_ALLOWED')
+  if (/timeout|timed out/i.test(detail))
+    return new RequestError('等待上传结果超时', -1, 'UPLOAD_TIMEOUT')
+  if (/no such file|file not found|file does not exist/i.test(detail))
+    return new RequestError('本地图片无法读取', -1, 'UPLOAD_FILE_UNREADABLE')
+  return new RequestError('未收到上传结果', -1, 'UPLOAD_TRANSPORT_FAILED')
+}
+
 // 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
 function isAllowedApiBaseUrl(value: string): boolean {
   if (/^https:\/\/[^/]+(?:\/[^?#]*)?$/.test(value)) return true
@@ -162,7 +174,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
             }
             transport.success({ statusCode: response.statusCode, data: body })
           },
-          fail: transport.fail,
+          fail: (failure) => reject(uploadFailure(failure.errMsg)),
         })
       } else {
         uni.request(transport)

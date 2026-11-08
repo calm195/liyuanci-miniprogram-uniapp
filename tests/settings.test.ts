@@ -628,7 +628,7 @@ test('头像失败用原文件、版本与请求标识重试，恢复默认使�
   s.transport(async (input) => {
     if (input.url !== '/me/avatar') return
     if (input.method === 'DELETE') return { ...actor, version: 21 }
-    if (++attempt === 1) throw new RequestError('合成超时', -1)
+    if (++attempt === 1) throw new RequestError('合成超时', -1, 'UPLOAD_TIMEOUT')
     if (attempt === 2) throw new RequestError('合成状态冲突', 409, 'STATE_CONFLICT', '', 409)
     return {
       ...actor,
@@ -640,7 +640,7 @@ test('头像失败用原文件、版本与请求标识重试，恢复默认使�
   const pick = r.chooseAvatar()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
   await pick
-  assert.match(r.avatarError.value, /原请求重试/)
+  assert.match(r.avatarError.value, /超时.*原请求重试/)
   await r.changeAvatar()
   assert.match(r.avatarError.value, /仍在处理/)
   await r.changeAvatar()

@@ -238,12 +238,22 @@ async function changeAvatar(remove = false) {
     else notice.value = path ? '头像已更新。' : '已恢复默认头像。'
   } catch (failure) {
     if (!active()) return
-    if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
+    if (failure instanceof RequestError && failure.error_code === 'UPLOAD_DOMAIN_NOT_ALLOWED') {
+      avatarError.value = '微信未授权此头像上传地址，请联系管理员核对上传域名。'
+    } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_FILE_UNREADABLE') {
+      avatarPending.value = null
+      avatarDraft.value = ''
+      avatarError.value = '微信无法读取所选图片，请重新选择头像。'
+    } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_TIMEOUT') {
+      avatarError.value = '等待头像保存结果超时，请使用原请求重试确认。'
+    } else if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
       avatarPending.value = null
       avatarError.value = '个人资料已变化，刷新后可以重新提交头像。'
       reload = true
     } else if (failure instanceof RequestError && failure.error_code === 'STATE_CONFLICT') {
       avatarError.value = '头像操作仍在处理，请稍后使用原请求重试。'
+    } else if (failure instanceof RequestError && failure.statusCode === 429) {
+      avatarError.value = '头像操作过于频繁，请稍后使用原请求重试。'
     } else if (
       failure instanceof RequestError &&
       failure.statusCode >= 400 &&
@@ -259,9 +269,9 @@ async function changeAvatar(remove = false) {
       avatarError.value =
         failure instanceof Error && !(failure instanceof RequestError)
           ? failure.message
-          : failure instanceof RequestError && failure.statusCode === 503
-            ? '头像上传服务暂不可用，请稍后使用原请求重试确认。'
-            : '网络中断，头像结果尚未确认，可以使用原请求重试。'
+          : failure instanceof RequestError && failure.statusCode >= 500
+            ? '头像保存服务暂不可用，请稍后使用原请求重试确认。'
+            : '未收到头像保存回执，请使用原请求重试确认。'
     }
   } finally {
     if (active()) {

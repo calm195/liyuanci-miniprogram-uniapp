@@ -453,3 +453,30 @@ test('头像上传的本人版本作为 multipart 文本字段发送', async () 
     'Idempotency-Key': 'synthetic-avatar-key',
   })
 })
+
+test('头像上传区分微信域名拒绝和超时，且不暴露原生错误中的文件路径', async () => {
+  config.useMock = false
+  config.isDev = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  const failures = [
+    ['createUploadTask:fail url not in domain list', 'UPLOAD_DOMAIN_NOT_ALLOWED'],
+    ['uploadFile:fail timeout', 'UPLOAD_TIMEOUT'],
+    ['uploadFile:fail no such file', 'UPLOAD_FILE_UNREADABLE'],
+    ['uploadFile:fail network disconnected', 'UPLOAD_TRANSPORT_FAILED'],
+  ] as const
+  for (const [reason, errorCode] of failures) {
+    Object.assign(uni, {
+      uploadFile(options: { fail: (failure: { errMsg: string }) => void }) {
+        options.fail({ errMsg: `${reason} wxfile://synthetic-private` })
+      },
+    })
+    await assert.rejects(
+      request({ url: '/me/avatar', method: 'POST', filePath: 'synthetic-local', silent: true }),
+      (failure) =>
+        failure instanceof Error &&
+        'error_code' in failure &&
+        failure.error_code === errorCode &&
+        !failure.message.includes('synthetic-private'),
+    )
+  }
+})
