@@ -61,9 +61,6 @@ test('下载只使用签名地址，显示进度，失败可重试，离开可�
             },
           }
         },
-        openDocument(value: { success: () => void }) {
-          value.success()
-        },
       },
     },
   )
@@ -77,8 +74,6 @@ test('下载只使用签名地址，显示进度，失败可重试，离开可�
   assert.equal(options.header, undefined)
   response?.success({ statusCode: 200, tempFilePath: '/synthetic-file' })
   assert.equal(await transfer.promise, '/synthetic-file')
-  assert.equal(await api.openResourceFile('/synthetic-file', '合成.pdf'), true)
-  assert.equal(await api.openResourceFile('/synthetic-file', '合成.zip'), false)
   const cancelled = api.downloadResourceFile(input, () => {})
   cancelled.cancel()
   await assert.rejects(cancelled.promise, /下载未完成/)
@@ -91,4 +86,41 @@ test('下载只使用签名地址，显示进度，失败可重试，离开可�
       api.downloadResourceFile({ ...input, download_url: 'http://invalid.test/file' }, () => {}),
     /不支持直接下载/,
   )
+})
+
+test('COS 文件写入持久目录，后续可定位，保存失败不返回临时路径', async () => {
+  const localFiles = new Set<string>()
+  const api = await loadRuntime(
+    readFileSync(new URL('../src/api/resource-file.ts', import.meta.url), 'utf8'),
+    {
+      wx: { env: { USER_DATA_PATH: 'wxfile://usr' } },
+      uni: {
+        getFileSystemManager: () => ({
+          access(options: { path: string; success: () => void; fail: () => void }) {
+            if (localFiles.has(options.path)) options.success()
+            else options.fail()
+          },
+          saveFile(options: {
+            tempFilePath: string
+            filePath: string
+            success: (v: { savedFilePath: string }) => void
+            fail: () => void
+          }) {
+            if (options.tempFilePath !== 'wxfile://tmp/file') {
+              options.fail()
+              return
+            }
+            localFiles.add(options.filePath)
+            options.success({ savedFilePath: options.filePath })
+          },
+        }),
+      },
+    },
+  )
+  assert.equal(await api.findSavedResourceFile(file), null)
+  await assert.rejects(api.saveResourceFile('wxfile://tmp/missing', file), /保存失败/)
+  assert.equal(await api.findSavedResourceFile(file), null)
+  const savedPath = await api.saveResourceFile('wxfile://tmp/file', file)
+  assert.equal(savedPath, `wxfile://usr/resource-${file.id}.pdf`)
+  assert.equal(await api.findSavedResourceFile(file), savedPath)
 })

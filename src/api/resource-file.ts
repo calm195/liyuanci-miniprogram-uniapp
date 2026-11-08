@@ -1,4 +1,4 @@
-import type { ResourceDownload } from '@/types/resource'
+import type { ResourceDownload, ResourceFile } from '@/types/resource'
 
 // 下载使用服务端刚签发的地址，不附带业务会话令牌。
 export function downloadResourceFile(
@@ -6,7 +6,7 @@ export function downloadResourceFile(
   progress: (percent: number) => void,
 ): { promise: Promise<string>; cancel: () => void } {
   if (!value.file || !/^https:\/\//i.test(value.download_url))
-    throw new Error('当前资料不支持直接下载，请使用下载链接。')
+    throw new Error('当前资料不支持直接下载。')
   let task: UniApp.DownloadTask | undefined
   const promise = new Promise<string>((resolve, reject) => {
     task = uni.downloadFile({
@@ -25,20 +25,41 @@ export function downloadResourceFile(
   })
   return { promise, cancel: () => task?.abort() }
 }
-export function openResourceFile(path: string, name: string): Promise<boolean> {
-  const extension = name.split('.').pop()?.toLowerCase()
-  if (!extension || !['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension))
-    return Promise.resolve(false)
+declare const wx: { env: { USER_DATA_PATH: string } }
+
+function resourceFilePath(file: ResourceFile): string {
+  // 文件 ID 对应不可变的 COS 对象，重进详情可定位已保存的本地文件。
+  const extension = file.name.match(/\.[a-z0-9]{1,10}$/i)?.[0] ?? ''
+  return `${wx.env.USER_DATA_PATH}/resource-${file.id}${extension}`
+}
+
+export function findSavedResourceFile(file: ResourceFile): Promise<string | null> {
+  if (typeof wx === 'undefined') return Promise.resolve(null)
+  const path = resourceFilePath(file)
   return new Promise((resolve) =>
-    uni.openDocument({
-      filePath: path,
-      fileType: extension,
-      showMenu: true,
-      success: () => resolve(true),
-      fail: () => resolve(false),
+    uni.getFileSystemManager().access({
+      path,
+      success: () => resolve(path),
+      fail: () => resolve(null),
     }),
   )
 }
+
+export function saveResourceFile(tempFilePath: string, file: ResourceFile): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (typeof wx === 'undefined') {
+      reject(new Error('请在微信小程序中保存文件。'))
+      return
+    }
+    uni.getFileSystemManager().saveFile({
+      tempFilePath,
+      filePath: resourceFilePath(file),
+      success: ({ savedFilePath }) => resolve(savedFilePath),
+      fail: () => reject(new Error('文件保存失败，请检查手机存储空间后重试。')),
+    })
+  })
+}
+
 export function shareResourceFile(path: string, name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!uni.shareFileMessage) {

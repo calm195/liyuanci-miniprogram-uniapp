@@ -2,7 +2,12 @@
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
-import { downloadResourceFile, openResourceFile, shareResourceFile } from '@/api/resource-file'
+import {
+  downloadResourceFile,
+  findSavedResourceFile,
+  saveResourceFile,
+  shareResourceFile,
+} from '@/api/resource-file'
 import { beijingTime } from '@/utils/capsules'
 import AppPage from '@/components/AppPage.vue'
 import { getResource, getResourceDownload, putResourceFeedback } from '@/api/resources'
@@ -37,7 +42,11 @@ const canFeedback = computed(
 async function load() {
   await page.enter(async (active) => {
     const result = await getResource(id.value)
+    if (!active()) return
+    const file = result.allowed_actions.includes('copy_download') ? result.file : null
+    const path = file ? await findSavedResourceFile(file) : null
     if (active()) {
+      downloaded.value = file && path ? { path, name: file.name } : null
       detail.value = result
       choice.value = result.my_feedback?.kind ?? ''
     }
@@ -54,6 +63,7 @@ async function copy(linkOnly: boolean) {
   if (
     !visible.value ||
     !resource ||
+    resource.file ||
     busy.value ||
     writing.value ||
     pending.value ||
@@ -67,7 +77,12 @@ async function copy(linkOnly: boolean) {
   let changed = false
   try {
     const download = await getResourceDownload(resource.id, resource.version)
-    if (!active() || detail.value?.id !== resource.id || detail.value.version !== resource.version)
+    if (
+      !active() ||
+      download.file ||
+      detail.value?.id !== resource.id ||
+      detail.value.version !== resource.version
+    )
       return
     // 每次点击都从当前授权响应取值，不从详情缓存兜底。
     await new Promise<void>((resolve, reject) =>
@@ -111,26 +126,26 @@ async function downloadFile() {
   try {
     const value = await getResourceDownload(resource.id, resource.version)
     if (!active()) return
+    if (value.file?.id !== resource.file.id) throw new Error('资料文件已变化，请刷新后重试。')
     const transfer = downloadResourceFile(value, (percent) => {
       if (active()) downloadProgress.value = percent
     })
     cancelDownload = transfer.cancel
-    const path = await transfer.promise
+    const tempPath = await transfer.promise
+    if (!active()) return
     cancelDownload = undefined
-    if (!active() || !value.file) return
+    const path = await saveResourceFile(tempPath, value.file)
+    if (!active()) return
     downloaded.value = { path, name: value.file.name }
-    notice.value = '下载完成，可打开或转发文件。'
+    notice.value = '文件已保存到微信小程序。'
   } catch (failure) {
     if (active()) page.fail(failure)
   } finally {
-    if (active()) writing.value = false
+    if (active()) {
+      cancelDownload = undefined
+      writing.value = false
+    }
   }
-}
-async function openDownloaded() {
-  const file = downloaded.value
-  if (!file) return
-  const opened = await openResourceFile(file.path, file.name)
-  if (!opened) notice.value = '文件已下载，该格式暂不能预览，可转发文件后使用相应应用打开。'
 }
 async function shareDownloaded() {
   const file = downloaded.value
@@ -217,7 +232,7 @@ onShow(() => {
 })
 onPullDownRefresh(async () => {
   try {
-    await load()
+    if (!writing.value) await load()
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -248,19 +263,23 @@ onPullDownRefresh(async () => {
             MiB）</text
           >
           <button
+            v-if="!downloaded && detail.allowed_actions.includes('copy_download')"
             :disabled="writing || !!pending || busy"
             :loading="isPageActionPending('resource-download')"
             @click="runPageAction(() => downloadFile(), 'resource-download')"
           >
-            {{ writing ? `正在下载 ${downloadProgress}%` : '下载资料文件' }}
+            {{
+              isPageActionPending('resource-download')
+                ? downloadProgress === 100
+                  ? '正在保存文件…'
+                  : `正在下载 ${downloadProgress}%`
+                : '下载并保存资料文件'
+            }}
           </button>
           <template v-if="downloaded">
-            <button
-              :loading="isPageActionPending('resource-open')"
-              @click="runPageAction(() => openDownloaded(), 'resource-open')"
-            >
-              打开文件
-            </button>
+            <text>已保存到微信小程序</text>
+            <text class="resource-text" user-select>保存路径：{{ downloaded.path }}</text>
+            <text>此路径仅供微信小程序访问，手机文件管理器无法打开。可将文件转发到微信聊天。</text>
             <button
               :loading="isPageActionPending('resource-share')"
               @click="runPageAction(() => shareDownloaded(), 'resource-share')"
@@ -269,22 +288,24 @@ onPullDownRefresh(async () => {
             </button>
           </template>
         </template>
-        <text class="resource-text">下载链接：{{ detail.download_url }}</text>
-        <text>提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
-        <button
-          :disabled="writing || !!pending || busy"
-          :loading="isPageActionPending('pages-resources-detail-button-2')"
-          @click="runPageAction(() => copy(false), 'pages-resources-detail-button-2')"
-        >
-          复制下载信息
-        </button>
-        <button
-          :disabled="writing || !!pending || busy"
-          :loading="isPageActionPending('pages-resources-detail-button-3')"
-          @click="runPageAction(() => copy(true), 'pages-resources-detail-button-3')"
-        >
-          仅复制链接
-        </button>
+        <template v-else>
+          <text class="resource-text">下载链接：{{ detail.download_url }}</text>
+          <text>提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
+          <button
+            :disabled="writing || !!pending || busy"
+            :loading="isPageActionPending('pages-resources-detail-button-2')"
+            @click="runPageAction(() => copy(false), 'pages-resources-detail-button-2')"
+          >
+            复制下载信息
+          </button>
+          <button
+            :disabled="writing || !!pending || busy"
+            :loading="isPageActionPending('pages-resources-detail-button-3')"
+            @click="runPageAction(() => copy(true), 'pages-resources-detail-button-3')"
+          >
+            仅复制链接
+          </button>
+        </template>
       </view>
       <view class="card">
         <text>资料反馈</text>
