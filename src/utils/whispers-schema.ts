@@ -34,8 +34,6 @@ export interface OperationSpec {
   output: Schema | null
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-export const isWhisperUuid = (value: unknown): value is string =>
-  typeof value === 'string' && uuid.test(value)
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']'
   if (value && typeof value === 'object')

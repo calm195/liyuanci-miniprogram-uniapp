@@ -36,3 +36,25 @@ test('T004 / REQ-018、020：模板缓存过期与命名空间隔离', () => {
   assert.equal(storage.get('user'), null)
   assert.equal(values.get('other-project:user'), 'preserved')
 })
+
+test('存储读取或清理失败时返回未命中，不阻断页面初始化', () => {
+  const previous = uni
+  try {
+    Object.assign(globalThis, {
+      uni: {
+        getStorageSync: () => {
+          throw new Error('存储不可用')
+        },
+        removeStorageSync: () => {
+          throw new Error('清理不可用')
+        },
+      },
+    })
+    assert.equal(storage.get('theme'), null)
+    assert.doesNotThrow(() => storage.remove('theme'))
+    Object.assign(uni, { getStorageSync: () => '{' })
+    assert.equal(storage.get('theme'), null)
+  } finally {
+    Object.assign(globalThis, { uni: previous })
+  }
+})

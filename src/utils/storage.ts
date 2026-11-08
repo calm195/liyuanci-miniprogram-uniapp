@@ -35,6 +35,10 @@ export const storage = {
     }
   },
   remove(key: string): void {
-    uni.removeStorageSync(PREFIX + key)
+    try {
+      uni.removeStorageSync(PREFIX + key)
+    } catch {
+      // 缓存清理失败仍按未命中处理，不能阻断主题初始化或页面启动。
+    }
   },
 }

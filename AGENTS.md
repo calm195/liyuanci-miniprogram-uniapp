@@ -5,7 +5,7 @@
 - 本工程为 uni-app Vue3 TypeScript 微信小程序；中文交流，关键逻辑写中文注释。
 - 非测试代码（含构建脚本与配置）不得出现里程碑、任务或需求编号；追踪仅写测试和 docs 工程。注释说明功能、业务规则与技术原因，日志说明使用中文；接口字段、技术标识和协议值保留原名。
 - 页面放 src/pages，新页面注册 src/pages.json；复用组件放 src/components。API 放 src/api，经 src/utils/request.ts 请求，业务成功码为 0。
-- Pinia 管理共享状态，页面不重复实现令牌持久化；使用 uni-app 组件与生命周期，避免浏览器专用 DOM API。SCSS 全局变量放 src/uni.scss，Tailwind 入口保持纯 CSS。
+- Pinia 管理共享状态，令牌由session按API地址隔离持久化，启动后向服务端复核身份；页面不重复实现令牌持久化，异步响应按会话代次与可见性失效；使用 uni-app 组件与生命周期，避免浏览器专用 DOM API。SCSS 全局变量放 src/uni.scss，Tailwind 入口保持纯 CSS。
 - 不写入密钥、真实密码或真实用户数据；新增环境变量同步 .env.example 和 README。@dcloudio/* 编译相关包版本一致，不单独升级 Vite/Vue 破坏官方组合。
 - 不自动创建远程仓库。保留现有格式和 lint 规则，不关闭规则、忽略源码或删除测试绕过检查。
 

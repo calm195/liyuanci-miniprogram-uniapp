@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { loadRuntime, settle } from './support/page-runtime.ts'
 import { publicWishBody } from '../src/utils/wish.ts'
 import {
@@ -27,7 +27,7 @@ const sample: WishResult = {
   },
 }
 async function setup() {
-  let epoch = 1
+  const epoch = ref(1)
   const hooks: Record<string, () => void> = {}
   const user = reactive({ user: { id: 'synthetic-student-a' } })
   const requests: ((data: unknown) => void)[] = []
@@ -38,7 +38,7 @@ async function setup() {
       useUserStore: () => user,
       useWishStore: () => ({ demoWishes: [] }),
       publicWishBody,
-      session: { getEpoch: () => epoch },
+      session: { getEpoch: () => epoch.value },
       listWishes: () => new Promise((resolve) => requests.push(resolve)),
       onShow: (fn: () => void) => {
         hooks.show = fn
@@ -52,7 +52,7 @@ async function setup() {
     },
   )
   const feed = useHomeWishes()
-  return { hooks, user, feed, requests, changeSession: () => epoch++ }
+  return { hooks, user, feed, requests, changeSession: () => epoch.value++ }
 }
 
 test('首页只展示公开上架投影，不使用草稿或隐私屏障内容补位', async () => {
@@ -154,4 +154,20 @@ test('快速跨栏点击只发起一次原生切换，失败后允许再次切�
   assert.equal(calls[1]!.url, '/pages/whispers/index')
   calls[1]!.success()
   await next
+})
+
+test('同账号会话更新时重载首页，旧请求不能让加载状态卡住', async () => {
+  const s = await setup()
+  s.hooks.show!()
+  assert.equal(s.feed.busy.value, true)
+  s.changeSession()
+  assert.equal(s.requests.length, 2)
+  s.requests[0]!({ items: [sample] })
+  await settle()
+  assert.equal(s.feed.rows.value.length, 0)
+  s.requests[1]!({ items: [{ ...sample, id: 'renewed-session' }] })
+  await settle()
+  assert.equal(s.feed.busy.value, false)
+  assert.equal(s.feed.rows.value[0].id, 'renewed-session')
+  s.hooks.unload!()
 })

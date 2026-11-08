@@ -2,14 +2,12 @@ import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { listWishes } from '@/api/wishes'
 import { config } from '@/config'
-import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
 import { publicWishBody } from '@/utils/wish'
 import { session } from '@/utils/session'
 import type { WishResult } from '@/types/wish'
 
 export function useHomeWishes() {
-  const user = useUserStore()
   const demo = useWishStore()
   const items = ref<WishResult[]>([])
   const busy = ref(false)
@@ -59,7 +57,7 @@ export function useHomeWishes() {
     clear()
   }
   watch(
-    () => user.user?.id,
+    () => session.getEpoch(),
     () => {
       clear()
       if (visible) void load()
