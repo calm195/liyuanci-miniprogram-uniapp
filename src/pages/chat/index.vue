@@ -400,18 +400,19 @@ onPullDownRefresh(async () => {
   margin: 20rpx 100rpx 20rpx 0;
   padding: 24rpx;
   border-radius: 24rpx 24rpx 24rpx 4rpx;
-  background: var(--color-surface, #f1f3f5);
+  background: var(--theme-surface);
+  color: var(--theme-ink);
   overflow-wrap: anywhere;
 }
 .chat-message.outgoing {
   margin: 20rpx 0 20rpx 100rpx;
   border-radius: 24rpx 24rpx 4rpx 24rpx;
-  background: var(--color-primary-soft, #e1f1eb);
+  background: var(--theme-mint);
 }
 .chat-speaker {
   display: block;
   font-size: 24rpx;
-  opacity: 0.65;
+  color: var(--theme-muted);
   margin-bottom: 8rpx;
 }
 </style>
