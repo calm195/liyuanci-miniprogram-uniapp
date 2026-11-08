@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { createPinia, defineStore, setActivePinia } from 'pinia'
-import { loadRuntime } from './support/page-runtime.ts'
+import { reactive } from 'vue'
+import { loadRuntime, pageScript } from './support/page-runtime.ts'
 
 const source = readFileSync(new URL('../src/stores/theme.ts', import.meta.url), 'utf8')
 
@@ -73,4 +74,28 @@ test('主题在跨页和重启后保持一致，坏缓存与存储失败可恢�
   assert.equal(useThemeStore().preference, 'system')
   assert.equal(useThemeStore().mode, 'dark')
   assert.equal(hints.length, 0)
+})
+
+test('个人中心每次点击循环切换外观偏好', async () => {
+  const theme = reactive({
+    preference: 'system',
+    setMode(value: string) {
+      theme.preference = value
+    },
+  })
+  const page = await loadRuntime(
+    pageScript(new URL('../src/pages/profile/index.vue', import.meta.url)) +
+      '\nexport { cycleTheme };',
+    {
+      useUserStore: () => ({}),
+      useThemeStore: () => theme,
+      useEntryStore: () => ({}),
+      onShow: () => {},
+      onPullDownRefresh: () => {},
+    },
+  )
+  for (const expected of ['light', 'dark', 'system']) {
+    page.cycleTheme()
+    assert.equal(theme.preference, expected)
+  }
 })

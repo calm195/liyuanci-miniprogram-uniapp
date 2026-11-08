@@ -24,9 +24,9 @@ const themeOptions: { value: ThemePreference; label: string }[] = [
   { value: 'dark', label: '深色' },
 ]
 const themeIndex = computed(() => themeOptions.findIndex(({ value }) => value === theme.preference))
-function selectTheme(event: { detail: { value: string | number } }) {
-  const option = themeOptions[Number(event.detail.value)]
-  if (option) theme.setMode(option.value)
+function cycleTheme() {
+  const next = themeOptions[(themeIndex.value + 1) % themeOptions.length]!
+  theme.setMode(next.value)
 }
 const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
@@ -108,17 +108,10 @@ onPullDownRefresh(async () => {
       >
         功能使用说明
       </button>
-      <picker
-        :range="themeOptions"
-        range-key="label"
-        :value="themeIndex"
-        @change="runPageAction(() => selectTheme($event))"
-      >
-        <button>
-          <AppIcon name="sun" :size="34" />
-          外观 · {{ themeOptions[themeIndex]?.label }}
-        </button>
-      </picker>
+      <button class="theme-toggle" @click="cycleTheme">
+        <AppIcon name="sun" :size="34" />
+        {{ themeOptions[themeIndex]?.label }}
+      </button>
     </view>
     <view class="profile-banner">
       <text class="section-title">把善意，攒成好运</text>
@@ -219,5 +212,10 @@ onPullDownRefresh(async () => {
   background: transparent;
   color: var(--theme-teal);
   font-size: 26rpx;
+}
+.profile-tools .theme-toggle,
+.profile-tools .theme-toggle::after {
+  border: 0;
+  border-radius: 0;
 }
 </style>
