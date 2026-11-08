@@ -299,7 +299,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     settings:
       'tab,state,label,canSave,comments,cursor,ready,load,switchTab,withdraw,openComment,save,page',
     detail:
-      'post,ownerPost,comments,cursor,commentsError,load,block,hug,edit,cancelEdit,editing,editor,page',
+      'post,ownerPost,comments,cursor,commentsError,load,block,hug,hugCelebrating,edit,cancelEdit,editing,editor,page',
     'comment-editor': 'id,postId,record,post,body,mode,tags,nickname,canSubmit,load,submit,page',
     notifications: 'items,cursor,ready,capsule,capsuleNotice,unread,load,markRead,open,page',
     help: 'directory,load,page',

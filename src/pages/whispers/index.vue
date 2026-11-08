@@ -60,12 +60,12 @@ const {
               canWhisperAction('PublicPost', item, 'whisperHugSet')
             "
             class="hug-button"
-            :class="{ hugged: item.my_hug.active }"
+            :aria-label="item.my_hug.active ? '取消抱抱' : '抱抱'"
             :disabled="busy || writing || retryReady"
             :loading="isPageActionPending('whisper-feed-hug:' + item.id)"
             @click="runPageAction(() => hug(item), 'whisper-feed-hug:' + item.id)"
           >
-            <AppIcon name="heart" :size="28" />{{ item.my_hug.active ? '已抱抱' : '抱抱' }}
+            <AppIcon name="heart" :active="item.my_hug.active" :size="32" />
             {{ item.hug_count }}
           </button>
           <text v-else>{{ item.hug_count }} 个抱抱</text
@@ -107,19 +107,18 @@ const {
 </template>
 
 <style scoped>
-.hug-button {
+.meta-item button.hug-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8rpx;
   margin: 0;
-  padding: 0 18rpx;
+  min-width: 56rpx;
+  min-height: 56rpx;
+  padding: 0 12rpx;
   font-size: 24rpx;
   line-height: 2.2;
   color: var(--theme-muted);
   background: transparent;
-}
-.hugged {
-  color: var(--theme-brand);
-  background: var(--theme-peach);
 }
 </style>

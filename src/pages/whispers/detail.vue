@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
 import WhisperPostEditor from '@/components/WhisperPostEditor.vue'
 import { useWhisperPostEditor } from '@/composables/use-whisper-post-editor'
@@ -23,7 +24,24 @@ const comments = ref<PublicComment[]>([])
 const cursor = ref<string | null>(null)
 const commentsError = ref('')
 const seen = new Set<string>()
+const hugCelebrating = ref(false)
+const hugSparks = [
+  { x: -100, y: -138, angle: -34, size: 42 },
+  { x: 8, y: -172, angle: 6, size: 52 },
+  { x: 116, y: -119, angle: 31, size: 36 },
+  { x: 154, y: -14, angle: 50, size: 44 },
+  { x: 88, y: 85, angle: 24, size: 32 },
+  { x: -65, y: 106, angle: -24, size: 34 },
+  { x: -151, y: -22, angle: -52, size: 44 },
+]
+let hugTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+function stopHugCelebration() {
+  if (hugTimer !== undefined) globalThis.clearTimeout(hugTimer)
+  hugTimer = undefined
+  hugCelebrating.value = false
+}
 function clear() {
+  stopHugCelebration()
   editing.value = false
   ownerPost.value = null
   clearPublic()
@@ -144,8 +162,15 @@ async function hug(active: boolean) {
       if (result.post_id !== target.id || post.value?.id !== target.id)
         throw new Error('抱抱回执目标不匹配，请刷新。')
       // 总数和本人状态均采用权威回执，不用本地加减推算。
+      const justHugged = !post.value.my_hug?.active && result.my_hug.active
       post.value = { ...post.value, hug_count: result.hug_count, my_hug: result.my_hug }
       notice.value = result.my_hug.active ? '已送出抱抱。' : '已取消抱抱。'
+      if (justHugged) {
+        hugCelebrating.value = true
+        hugTimer = globalThis.setTimeout(stopHugCelebration, 1000)
+      } else if (!result.my_hug.active) {
+        stopHugCelebration()
+      }
     },
     () => load(),
   )
@@ -189,6 +214,21 @@ onShow(() => {
 </script>
 <template>
   <AppPage>
+    <view v-if="hugCelebrating" class="hug-firework" aria-hidden="true">
+      <text class="hug-firework-center">♥</text>
+      <text
+        v-for="spark in hugSparks"
+        :key="spark.x"
+        class="hug-firework-spark"
+        :style="{
+          '--spark-x': spark.x + 'rpx',
+          '--spark-y': spark.y + 'rpx',
+          '--spark-angle': spark.angle + 'deg',
+          fontSize: spark.size + 'rpx',
+        }"
+        >♥</text
+      >
+    </view>
     <text v-if="editing || post || ownerPost" class="title">{{
       (editing ? editor.record.value?.title : (post?.title ?? ownerPost?.title)) || '未命名悄悄话'
     }}</text>
@@ -227,11 +267,14 @@ onShow(() => {
           post.my_hug &&
           canWhisperAction('PublicPost', post, 'whisperHugSet')
         "
+        class="hug-button"
+        :aria-label="post.my_hug.active ? '取消抱抱' : '抱抱'"
         :disabled="busy || writing || retryReady"
         :loading="isPageActionPending('pages-whispers-detail-button-2')"
         @click="runPageAction(() => hug(!post!.my_hug!.active), 'pages-whispers-detail-button-2')"
       >
-        {{ post.my_hug.active ? '取消抱抱' : '抱抱' }}
+        <AppIcon name="heart" :active="post.my_hug.active" :size="34" />
+        抱抱
       </button>
       <view class="moderation-actions">
         <navigator
@@ -314,6 +357,74 @@ onShow(() => {
   </AppPage>
 </template>
 <style scoped>
+.card button.hug-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  background: #ffbd59;
+  color: #532c00;
+}
+.card button.hug-button[disabled] {
+  background: var(--theme-warning);
+  color: var(--theme-warning-ink);
+}
+.hug-firework {
+  position: fixed;
+  z-index: 1100;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.hug-firework-center,
+.hug-firework-spark {
+  position: absolute;
+  display: block;
+  line-height: 1;
+  text-shadow: 0 0 16rpx #ffb54f;
+}
+.hug-firework-center {
+  color: #ff6846;
+  font-size: 92rpx;
+  animation: hug-heart-pop 950ms ease-out both;
+}
+.hug-firework-spark {
+  color: #ffad36;
+  animation: hug-spark-fly 950ms ease-out both;
+}
+.hug-firework-spark:nth-child(2n) {
+  color: #ff6c66;
+}
+@keyframes hug-heart-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.35);
+  }
+  28% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -95%) scale(0.85);
+  }
+}
+@keyframes hug-spark-fly {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--spark-x), var(--spark-y))
+      rotate(var(--spark-angle)) scale(0.85);
+  }
+}
 .moderation-actions {
   display: flex;
   align-items: center;
