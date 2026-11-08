@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
@@ -18,6 +18,7 @@ const name = ref('')
 const studentNumber = ref('')
 const asset = ref<StudentCardAsset | null>(null)
 const uploading = ref(false)
+const resizeCanvas = shallowRef<{ width: number; height: number } | null>(null)
 const submitting = ref(false)
 // 各动作单独显示进度；共享互斥只用于禁止并行写入，不能让无关按钮同时转圈。
 const busy = computed(() => uploading.value || submitting.value)
@@ -81,6 +82,7 @@ function clearPrivateData() {
   stopScanPolling()
   scanNotice.value = ''
   generation++
+  resizeCanvas.value = null
   name.value = ''
   studentNumber.value = ''
   asset.value = null
@@ -143,6 +145,38 @@ function showCardResult(result: StudentCardAsset) {
     uni.$emit?.('app:notice', { message: scanNotice.value, kind: 'warning' })
   }
 }
+async function resizeCardWithCanvas(path: string, width: number, height: number) {
+  const dimensions = { width, height }
+  resizeCanvas.value = dimensions
+  try {
+    await nextTick()
+    if (resizeCanvas.value !== dimensions) throw new Error('图片处理已取消')
+    const canvasId = 'student-card-resize'
+    const canvas = uni.createCanvasContext(canvasId)
+    canvas.setFillStyle('#ffffff')
+    canvas.fillRect(0, 0, width, height)
+    canvas.drawImage(path, 0, 0, width, height)
+    return await new Promise<string>((resolve, reject) => {
+      canvas.draw(false, () => {
+        uni.canvasToTempFilePath({
+          canvasId,
+          width,
+          height,
+          destWidth: width,
+          destHeight: height,
+          fileType: 'jpg',
+          quality: 0.92,
+          success: ({ tempFilePath }) => resolve(tempFilePath),
+          fail: reject,
+        })
+      })
+    })
+  } catch {
+    throw new Error('无法自动缩小图片，请裁剪后重新选择')
+  } finally {
+    if (resizeCanvas.value === dimensions) resizeCanvas.value = null
+  }
+}
 async function chooseCard() {
   if (busy.value || querying.value) return
   error.value = ''
@@ -157,6 +191,7 @@ async function chooseCard() {
   }
   const current = generation
   const epoch = session.getEpoch()
+  const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
   uploading.value = true
   try {
     // 微信选图会临时隐藏页面，此时保留内存表单；选图结束后恢复正常离开清理。
@@ -169,10 +204,10 @@ async function chooseCard() {
     } finally {
       selectingCard = false
     }
-    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    if (!isCurrent()) return
     // 选图返回会触发应用刷新资格，等待本人资格确认后再判断上传权限。
     if (!store.validated) await store.refresh(false)
-    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    if (!isCurrent()) return
     if (!canUpload.value) {
       error.value = '当前账号暂不能上传学生卡，请刷新账号状态后重试。'
       return
@@ -183,8 +218,15 @@ async function chooseCard() {
     const uploaded = await uploadStudentCard(
       path,
       `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      {
+        resize: (path, width, height) => {
+          if (!isCurrent()) return Promise.reject(new Error('图片处理已取消'))
+          return resizeCardWithCanvas(path, width, height)
+        },
+        isCurrent,
+      },
     )
-    if (visible && current === generation && epoch === session.getEpoch()) {
+    if (isCurrent()) {
       asset.value = uploaded
       assetEpoch.value = epoch
       scanNotice.value = ''
@@ -192,12 +234,13 @@ async function chooseCard() {
       showCardResult(uploaded)
       // 自动查询只在本页本次上传后运行，到期后保留手动查询入口。
       if (uploaded.scan_status === 'pending') {
+        uni.$emit?.('app:notice', { message: '图片已受理，等待安全扫描。', kind: 'success' })
         scanDeadline = Date.now() + 120_000
         scanPoller.start()
       }
     }
   } catch (failure) {
-    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    if (!isCurrent()) return
     if (
       failure &&
       typeof failure === 'object' &&
@@ -359,6 +402,12 @@ onPullDownRefresh(async () => {
 </script>
 <template>
   <AppPage>
+    <canvas
+      v-if="resizeCanvas"
+      canvas-id="student-card-resize"
+      class="resize-canvas"
+      :style="{ width: resizeCanvas.width + 'px', height: resizeCanvas.height + 'px' }"
+    />
     <text class="title">学生认证</text>
     <text v-if="config.useMock" class="notice"
       >合成演示 · 请仅填写虚构资料，不选择或上传真实学生卡</text
@@ -367,7 +416,7 @@ onPullDownRefresh(async () => {
     <view class="card">
       <text v-if="uploading || submitting || refreshing || querying" class="notice">{{
         uploading
-          ? '正在选择或上传学生卡，其他操作暂不可用。'
+          ? '正在准备或上传学生卡，其他操作暂不可用。'
           : submitting
             ? '正在提交认证申请，其他操作暂不可用。'
             : refreshing
@@ -445,7 +494,7 @@ onPullDownRefresh(async () => {
         {{ config.useMock ? '选择合成学生卡' : '选择并上传学生卡' }}
       </button>
       <text v-if="!config.useMock && !asset && !busy">
-        请选择真实 PNG/JPEG 图片。上传成功后显示扫描查询按钮。
+        请选择清晰的 PNG/JPEG 图片，大图会自动缩小。上传成功后显示扫描查询按钮。
       </text>
       <text v-if="!asset && scanNotice">{{ scanNotice }}</text>
       <text v-if="asset"
@@ -504,6 +553,11 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.resize-canvas {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+}
 input.student-number-invalid {
   border-color: var(--theme-danger);
 }

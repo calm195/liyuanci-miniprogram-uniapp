@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { dictionaryLabel } from '@/features/dictionaries/catalog'
 import { openMainPage } from '@/utils/navigation'
 function openOwnWishes() {
@@ -10,13 +11,23 @@ import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import AppIcon from '@/components/AppIcon.vue'
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore, type ThemePreference } from '@/stores/theme'
 import { useEntryStore } from '@/stores/entry'
 import { useUserStore } from '@/stores/user'
 import { config } from '@/config'
 import type { VerificationState } from '@/types/api'
 const user = useUserStore()
 const theme = useThemeStore()
+const themeOptions: { value: ThemePreference; label: string }[] = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
+]
+const themeIndex = computed(() => themeOptions.findIndex(({ value }) => value === theme.preference))
+function selectTheme(event: { detail: { value: string | number } }) {
+  const option = themeOptions[Number(event.detail.value)]
+  if (option) theme.setMode(option.value)
+}
 const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 const wishStates = [
@@ -97,18 +108,17 @@ onPullDownRefresh(async () => {
       >
         功能使用说明
       </button>
-      <button
-        :aria-label="theme.mode === 'dark' ? '切换亮色' : '切换暗色'"
-        :loading="isPageActionPending('src-pages-profile-index.vue-action-2')"
-        @click="
-          runPageAction(
-            () => theme.setMode(theme.mode === 'dark' ? 'light' : 'dark'),
-            'src-pages-profile-index.vue-action-2',
-          )
-        "
+      <picker
+        :range="themeOptions"
+        range-key="label"
+        :value="themeIndex"
+        @change="runPageAction(() => selectTheme($event))"
       >
-        <AppIcon name="sun" :size="38" />
-      </button>
+        <button>
+          <AppIcon name="sun" :size="34" />
+          外观 · {{ themeOptions[themeIndex]?.label }}
+        </button>
+      </picker>
     </view>
     <view class="profile-banner">
       <text class="section-title">把善意，攒成好运</text>

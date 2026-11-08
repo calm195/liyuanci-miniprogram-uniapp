@@ -1,4 +1,4 @@
-// 与当前生产学生卡预算保持一致；服务端仍负责实际图片和规范化结果的最终校验。
+// 与服务端上传预算一致；原图超过预算时先尝试缩放。
 export const studentCardMaxBytes = 4 * 1024 * 1024
 export const studentCardMaxPixels = 4_000_000
 
@@ -10,8 +10,6 @@ export function assertStudentCardSize(size: number) {
 export function assertStudentCardDimensions(width: number, height: number) {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1)
     throw new Error('无法确认图片尺寸，请重新选择 PNG/JPEG 图片')
-  if (width > studentCardMaxPixels / height)
-    throw new Error('图片不能超过 400 万像素，请降低分辨率后重新选择')
 }
 
 export function studentCardMultipart(bytes: Uint8Array, decodedType: string) {

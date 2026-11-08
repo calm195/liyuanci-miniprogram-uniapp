@@ -7,6 +7,8 @@ import {
   studentCardMultipart,
   assertStudentCardSize,
   assertStudentCardDimensions,
+  studentCardMaxBytes,
+  studentCardMaxPixels,
 } from '../src/utils/student-card.ts'
 
 test('T013：单个 file、显式图片 MIME、boundary 与二进制内容保持一致', () => {
@@ -51,20 +53,57 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
   let changeDuringRead = false
   let fileSize = bytes.byteLength
   let imageWidth = 2
+  let imageHeight = 2
   let reads = 0
+  let compressions = 0
+  let rejectCompression = false
+  let rejectNormalization = false
+  class RequestError extends Error {
+    readonly error_code: string
+    constructor(error_code: string) {
+      super(error_code)
+      this.error_code = error_code
+    }
+  }
   Object.assign(globalThis, {
     __studentCardApi: {
       request: async (options: Record<string, unknown>) => {
         sent.push(options)
+        if (rejectNormalization) {
+          rejectNormalization = false
+          throw new RequestError('STUDENT_CARD_NORMALIZED_IMAGE_TOO_LARGE')
+        }
       },
+      RequestError,
       session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
       studentCardMultipart,
       assertStudentCardSize,
       assertStudentCardDimensions,
+      studentCardMaxBytes,
+      studentCardMaxPixels,
     },
     uni: {
-      getFileInfo: async () => ({ size: fileSize }),
-      getImageInfo: async () => ({ type: 'png', width: imageWidth, height: 2 }),
+      getFileInfo: async ({ filePath }: { filePath: string }) => ({
+        size: filePath === 'synthetic-path' ? fileSize : bytes.byteLength,
+      }),
+      getImageInfo: async ({ src }: { src: string }) => ({
+        type: 'png',
+        width: src === 'synthetic-path' ? imageWidth : 2,
+        height: src === 'synthetic-path' ? imageHeight : 2,
+      }),
+      compressImage: (options: {
+        src: string
+        compressedWidth: number
+        compressedHeight: number
+        success: (value: { tempFilePath: string }) => void
+        fail: () => void
+      }) => {
+        compressions++
+        assert.equal(options.src, 'synthetic-path')
+        assert.ok(options.compressedWidth * options.compressedHeight <= studentCardMaxPixels)
+        if (rejectCompression) options.fail()
+        else options.success({ tempFilePath: 'compressed-path' })
+      },
       getFileSystemManager: () => ({
         readFile: (options: { success: (value: { data: ArrayBuffer }) => void }) => {
           reads++
@@ -80,7 +119,7 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
       'utf8',
     ).replace(/^import\s[\s\S]*?from\s+'[^']+'\n/gm, '')
     const compiled = ts.transpileModule(
-      `const { request, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions } = globalThis.__studentCardApi;\n${source}`,
+      `const { request, RequestError, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions, studentCardMaxBytes, studentCardMaxPixels } = globalThis.__studentCardApi;\n${source}`,
       { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } },
     ).outputText
     const { uploadStudentCard } = await import(
@@ -96,29 +135,53 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
     assert.match(headers['Content-Type']!, /^multipart\/form-data; boundary=/)
     assert.equal(headers['Idempotency-Key'], 'synthetic-key')
     assert.equal(sent[0]!.filePath, undefined)
-    const previousReads = reads
-    fileSize = 4 * 1024 * 1024 + 1
-    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /4 MiB/)
+    assert.equal(compressions, 0)
+    fileSize = studentCardMaxBytes + 1
+    imageWidth = 4032
+    imageHeight = 3024
+    await uploadStudentCard('synthetic-path', 'synthetic-large')
+    assert.equal(compressions, 1)
+    assert.equal(reads, 2)
+    assert.equal(sent.length, 2)
     fileSize = bytes.byteLength
-    imageWidth = 4_000_000
-    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /400 万像素/)
-    imageWidth = 2
-    assert.equal(reads, previousReads)
-    assert.equal(sent.length, 1)
+    rejectCompression = true
+    await uploadStudentCard('synthetic-path', 'synthetic-png', {
+      resize: async (path: string, width: number, height: number) => {
+        assert.equal(path, 'synthetic-path')
+        assert.ok(width > height && width * height <= studentCardMaxPixels)
+        return 'canvas-path'
+      },
+      isCurrent: () => true,
+    })
+    assert.equal(compressions, 2)
+    assert.equal(sent.length, 3)
+    imageWidth = 2000
+    imageHeight = 1500
+    rejectCompression = false
+    rejectNormalization = true
+    await uploadStudentCard('synthetic-path', 'synthetic-normalized')
+    assert.equal(compressions, 3)
+    assert.equal(sent.length, 5)
+    for (const options of sent.slice(-2)) {
+      assert.equal(
+        (options.header as Record<string, string>)['Idempotency-Key'],
+        'synthetic-normalized',
+      )
+    }
     changeDuringRead = true
     await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /会话已变化/)
-    assert.equal(sent.length, 1)
+    assert.equal(sent.length, 5)
   } finally {
     Reflect.deleteProperty(globalThis, 'uni')
     Reflect.deleteProperty(globalThis, '__studentCardApi')
   }
 })
 
-test('学生卡文件和像素边界在网络发送前明确提示，等于上限仍可接受', () => {
+test('学生卡上传文件遵守字节预算，原图尺寸校验允许高分辨率', () => {
   assert.doesNotThrow(() => assertStudentCardSize(4 * 1024 * 1024))
   assert.throws(() => assertStudentCardSize(4 * 1024 * 1024 + 1), /4 MiB/)
   assert.throws(() => assertStudentCardSize(Number.NaN), /无法确认/)
   assert.doesNotThrow(() => assertStudentCardDimensions(2000, 2000))
-  assert.throws(() => assertStudentCardDimensions(2001, 2000), /400 万像素/)
+  assert.doesNotThrow(() => assertStudentCardDimensions(4032, 3024))
   assert.throws(() => assertStudentCardDimensions(0, 2000), /无法确认/)
 })

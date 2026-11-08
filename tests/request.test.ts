@@ -7,6 +7,8 @@ import {
   studentCardMultipart,
   assertStudentCardSize,
   assertStudentCardDimensions,
+  studentCardMaxBytes,
+  studentCardMaxPixels,
 } from '../src/utils/student-card.ts'
 // T009 / REQ-002、018：替换平台传输，直接执行生产请求层；不访问网络。
 const config = { apiBaseUrl: 'https://synthetic.invalid/api/v1', useMock: false, isDev: false }
@@ -38,7 +40,7 @@ const source = readFileSync(new URL('../src/utils/request.ts', import.meta.url),
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText
-const { request } = await import(
+const { request, RequestError } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
 test('T009 / REQ-002、018：成功、错误标识、204、401与 Mock 隔离', async () => {
@@ -194,10 +196,13 @@ test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及
 Object.assign(globalThis, {
   __verificationTest: {
     request,
+    RequestError,
     session,
     studentCardMultipart,
     assertStudentCardSize,
     assertStudentCardDimensions,
+    studentCardMaxBytes,
+    studentCardMaxPixels,
   },
 })
 const verificationSource = readFileSync(
@@ -205,7 +210,7 @@ const verificationSource = readFileSync(
   'utf8',
 ).replace(/^import\s[\s\S]*?from\s+'[^']+'\n/gm, '')
 const verificationPrelude =
-  'const { request, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions } = globalThis.__verificationTest;\n'
+  'const { request, RequestError, session, studentCardMultipart, assertStudentCardSize, assertStudentCardDimensions, studentCardMaxBytes, studentCardMaxPixels } = globalThis.__verificationTest;\n'
 const verificationCompiled = ts.transpileModule(verificationPrelude + verificationSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText
