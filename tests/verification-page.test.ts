@@ -2,15 +2,15 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { createVisiblePoller } from '../src/utils/visible-poller.ts'
 import { canMeAction, validStudentNumber, verificationInput } from '../src/utils/actions.ts'
 
 // 执行实际页面脚本，仅替换平台、会话及后端传输，不能作为真实联调证据。
-async function setup() {
+async function setup(fromWish = false) {
   const hooks: Record<string, () => void> = {}
   let epoch = 1
-  let scheduledScan: (() => void) | undefined
+  const scheduled = new Map<number, () => void>()
   const sent: unknown[] = []
   const modals: { title: string; content: string }[] = []
   const showModal = (modal: (typeof modals)[number]) => modals.push(modal)
@@ -49,16 +49,21 @@ async function setup() {
   Object.assign(globalThis, {
     __verificationPage: {
       config,
-      createVisiblePoller: (task: () => Promise<void>) =>
-        createVisiblePoller(task, {
-          set: (callback) => {
-            scheduledScan = callback
-            return 1 as unknown as ReturnType<typeof setTimeout>
+      createVisiblePoller: (task: () => Promise<void>, _: unknown, interval = 3000) =>
+        createVisiblePoller(
+          task,
+          {
+            set: (callback) => {
+              scheduled.set(interval, callback)
+              return interval as unknown as ReturnType<typeof setTimeout>
+            },
+            clear: () => {
+              scheduled.delete(interval)
+            },
           },
-          clear: () => {
-            scheduledScan = undefined
-          },
-        }),
+          interval,
+        ),
+      useWishActionReturn: () => ({ active: ref(fromWish) }),
       canMeAction,
       validStudentNumber,
       verificationInput,
@@ -89,7 +94,7 @@ async function setup() {
     .split('</script>')[0]!
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, createVisiblePoller, useUserStore, getVerification, RequestError, canMeAction, validStudentNumber, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
+  const source = `const { config, createVisiblePoller, useWishActionReturn, useUserStore, getVerification, RequestError, canMeAction, validStudentNumber, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
@@ -106,9 +111,9 @@ async function setup() {
     modals,
     showModal,
     $emit,
-    nextScan: () => {
-      const callback = scheduledScan
-      scheduledScan = undefined
+    nextScan: (interval = 3000) => {
+      const callback = scheduled.get(interval)
+      scheduled.delete(interval)
       return callback
     },
     setSubmit: (fn: typeof submit) => {
@@ -128,6 +133,31 @@ async function setup() {
 async function settle() {
   for (let i = 0; i < 10; i++) await Promise.resolve()
 }
+
+test('分享详情进入待审认证时只轮询资格，状态变化后更新审核记录，离开后停止', async () => {
+  const { page, hooks, setRead, store, nextScan } = await setup(true)
+  let recordReads = 0
+  store.user.verification = 'pending'
+  setRead(async () => {
+    recordReads++
+    return { version: recordReads, status: store.user.verification }
+  })
+  hooks.show!()
+  await settle()
+  assert.equal(page.currentReview.value.status, 'pending')
+  nextScan(10_000)!()
+  await settle()
+  assert.equal(recordReads, 1)
+  store.user.verification = 'rejected'
+  nextScan(10_000)!()
+  await settle()
+  assert.equal(page.currentReview.value.status, 'rejected')
+  assert.equal(nextScan(10_000), undefined)
+  store.user.verification = 'pending'
+  await page.refreshReview()
+  hooks.hide!()
+  assert.equal(nextScan(10_000), undefined)
+})
 
 test('T013 / 002-A/B/C：页面区分当前记录、404首次与读取失败，不使用Me.version', async () => {
   const { page, hooks, setRead, RequestError } = await setup()

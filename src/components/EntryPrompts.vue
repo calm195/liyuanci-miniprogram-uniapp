@@ -6,6 +6,8 @@ import { useEntryStore } from '@/stores/entry'
 import { config } from '@/config'
 const user = useUserStore()
 const entry = useEntryStore()
+const props = defineProps<{ hideGuide?: boolean }>()
+const emit = defineEmits<{ loginCancel: [] }>()
 const loginError = ref('')
 const guidePage = ref(0)
 watch(
@@ -33,11 +35,11 @@ watch(
   },
 )
 watch(
-  () => [user.validated, user.user?.verification],
+  () => [user.validated, user.user?.verification, props.hideGuide],
   () => {
     if (!config.useMock && user.validated) {
       entry.loginVisible = false
-      void entry.showGuide()
+      if (!props.hideGuide) void entry.showGuide()
     }
   },
   { immediate: true },
@@ -53,7 +55,7 @@ async function login() {
     if (!user.validated) throw new Error('登录尚未确认，请重试。')
     uni.$emit?.('app:notice', { message: '登录成功', kind: 'success' })
     entry.loginVisible = false
-    await entry.showGuide()
+    if (!props.hideGuide) await entry.showGuide()
   } catch (failure) {
     if (active())
       loginError.value = failure instanceof Error ? failure.message : '登录未完成，请重试。'
@@ -79,6 +81,7 @@ async function login() {
         @click="
           runPageAction(() => {
             entry.loginVisible = false
+            emit('loginCancel')
           }, 'src-components-EntryPrompts.vue-action-2')
         "
       >
@@ -86,7 +89,7 @@ async function login() {
       </button>
     </view>
   </view>
-  <view v-else-if="entry.guideVisible && entry.guide" class="prompt-shade">
+  <view v-else-if="!hideGuide && entry.guideVisible && entry.guide" class="prompt-shade">
     <view class="prompt-card" role="dialog" aria-label="功能使用说明">
       <text class="title">功能使用说明</text>
       <template v-for="(item, index) in entry.guide.modules" :key="item.module">

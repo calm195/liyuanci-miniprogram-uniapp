@@ -12,8 +12,10 @@ import { uploadStudentCard, getStudentCardAsset, submitVerification } from '@/ap
 import type { StudentCardAsset, Verification } from '@/types/api'
 import { session } from '@/utils/session'
 import { createVisiblePoller } from '@/utils/visible-poller'
+import { useWishActionReturn } from '@/composables/use-wish-action-return'
 
 const store = useUserStore()
+const wishReturn = useWishActionReturn('verification')
 const name = ref('')
 const studentNumber = ref('')
 const asset = ref<StudentCardAsset | null>(null)
@@ -28,6 +30,8 @@ const refreshing = ref(false)
 const querying = ref(false)
 const scanNotice = ref('')
 const scanPoller = createVisiblePoller(() => queryAsset())
+const reviewPoller = createVisiblePoller(() => refreshReview(true), undefined, 10_000)
+let readingReview = false
 let scanDeadline = 0
 const assetEpoch = ref(-1)
 const reviewEpoch = ref(-1)
@@ -80,6 +84,8 @@ function showScanProblem(title: string, content: string) {
 }
 function clearPrivateData() {
   stopScanPolling()
+  reviewPoller.stop()
+  readingReview = false
   scanNotice.value = ''
   generation++
   resizeCanvas.value = null
@@ -105,18 +111,23 @@ function acceptReview(review: Verification, epoch: number) {
   reviewOwner.value = store.user?.id || ''
 }
 // 审核记录独立读取；本人资格和资产扫描都不能替代审核记录版本。
-async function refreshReview() {
-  if (refreshing.value) return
+async function refreshReview(background = false) {
+  if (readingReview || (background && (busy.value || querying.value))) return
   const current = generation
   const epoch = session.getEpoch()
   const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
-  refreshing.value = true
-  currentReview.value = null
-  reviewState.value = 'unknown'
-  error.value = ''
+  readingReview = true
+  if (!background) {
+    refreshing.value = true
+    currentReview.value = null
+    reviewState.value = 'unknown'
+    error.value = ''
+  }
   try {
     await store.refresh(false, true)
     if (!isCurrent() || !store.isLoggedIn) return
+    // 审核仍在等待时不重复读取审核资料；资格发生变化后再更新页面记录。
+    if (background && store.user?.verification === 'pending') return
     try {
       const review = await getVerification(true)
       if (!isCurrent()) return
@@ -124,15 +135,20 @@ async function refreshReview() {
     } catch (failure) {
       if (!isCurrent()) return
       if (failure instanceof RequestError && (failure.statusCode || failure.code) === 404) {
+        currentReview.value = null
         reviewState.value = 'absent'
         reviewEpoch.value = epoch
         reviewOwner.value = store.user?.id || ''
       } else throw failure
     }
   } catch {
-    if (isCurrent()) error.value = '无法确认当前审核记录，请重新读取；不能据此作为首次申请。'
+    if (isCurrent() && !background)
+      error.value = '无法确认当前审核记录，请重新读取；不能据此作为首次申请。'
   } finally {
-    if (visible && current === generation) refreshing.value = false
+    if (current === generation) {
+      readingReview = false
+      refreshing.value = false
+    }
   }
 }
 function showCardResult(result: StudentCardAsset) {
@@ -362,6 +378,13 @@ watch(
   },
   { flush: 'sync' },
 )
+watch(
+  () => wishReturn.active.value && currentReview.value?.status === 'pending',
+  (pending) => {
+    if (!config.useMock && visible && pending) reviewPoller.start(false)
+    else reviewPoller.stop()
+  },
+)
 function submitDemo() {
   if (!canSubmitDemo.value) return
   demoStatus.value = 'pending'
@@ -401,7 +424,7 @@ onPullDownRefresh(async () => {
 })
 </script>
 <template>
-  <AppPage>
+  <AppPage :hide-entry-guide="wishReturn.active.value">
     <canvas
       v-if="resizeCanvas"
       canvas-id="student-card-resize"
@@ -409,6 +432,16 @@ onPullDownRefresh(async () => {
       :style="{ width: resizeCanvas.width + 'px', height: resizeCanvas.height + 'px' }"
     />
     <text class="title">学生认证</text>
+    <view v-if="wishReturn.active.value" class="card">
+      <text>认证通过后会返回心愿详情。等待审核期间可返回，审核通过后再继续操作。</text>
+      <button
+        :disabled="uploading || submitting || wishReturn.returning.value"
+        :loading="wishReturn.returning.value"
+        @click="wishReturn.returnToWish"
+      >
+        返回心愿详情
+      </button>
+    </view>
     <text v-if="config.useMock" class="notice"
       >合成演示 · 请仅填写虚构资料，不选择或上传真实学生卡</text
     >

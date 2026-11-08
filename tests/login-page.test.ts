@@ -29,6 +29,8 @@ async function setup() {
       '\nexport { login, loginError };',
     {
       config: { useMock: false },
+      defineProps: () => ({}),
+      defineEmits: () => () => {},
       useEntryStore: () => entry,
       useUserStore: () => user,
       onShow: (fn: () => void) => (hooks.show = fn),

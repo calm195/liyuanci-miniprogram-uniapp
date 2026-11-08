@@ -8,6 +8,7 @@ export function createVisiblePoller(
     set: (callback, delay) => setTimeout(callback, delay),
     clear: (timer) => clearTimeout(timer),
   },
+  interval = 3000,
 ) {
   let generation = 0
   let active = false
@@ -18,6 +19,11 @@ export function createVisiblePoller(
     generation++
     if (timer !== undefined) scheduler.clear(timer)
     timer = undefined
+  }
+  function schedule(current: number) {
+    timer = scheduler.set(() => {
+      void tick(current)
+    }, interval)
   }
   async function tick(current: number) {
     if (!active || current !== generation || running) return
@@ -32,17 +38,15 @@ export function createVisiblePoller(
       if (active) {
         // 快速离开后返回时等待旧请求结束，再开始当前代次，避免重叠请求。
         if (current !== generation) void tick(generation)
-        else
-          timer = scheduler.set(() => {
-            void tick(current)
-          }, 3000)
+        else schedule(current)
       }
     }
   }
-  function start() {
+  function start(immediate = true) {
     stop()
     active = true
-    void tick(generation)
+    if (immediate) void tick(generation)
+    else schedule(generation)
   }
   return { start, stop }
 }
