@@ -16,6 +16,8 @@ const inputReceipt = ref('')
 const preparing = ref(false)
 const confirming = ref(false)
 const notice = ref('')
+const checked = ref(false)
+const eligible = computed(() => checked.value && canDeleteAccount(user.user, user.validated))
 let visible = false
 let generation = 0
 const busy = computed(
@@ -28,16 +30,18 @@ const maySubmit = computed(
     !busy.value &&
     !deletion.receipt &&
     !deletion.uncertain &&
-    canDeleteAccount(user.user, user.validated),
+    eligible.value,
 )
 async function refresh() {
   if (busy.value || config.useMock || deletion.receipt || deletion.uncertain || !session.getToken())
     return
   const current = ++generation
+  checked.value = false
   preparing.value = true
   notice.value = ''
   try {
-    await user.refresh(false)
+    await user.refresh(false, true)
+    if (visible && current === generation) checked.value = user.validated
   } catch {
     if (visible && current === generation) notice.value = '当前账号资格读取失败，请重试。'
   } finally {
@@ -109,6 +113,7 @@ function leave() {
   generation++
   preparing.value = false
   confirming.value = false
+  checked.value = false
   acknowledged.value = false
   inputReceipt.value = ''
   notice.value = ''
@@ -154,9 +159,13 @@ onPullDownRefresh(async () => {
       >
         重新读取账号资格
       </button>
-      <text v-if="user.isLoggedIn && !canDeleteAccount(user.user, user.validated)"
-        >当前服务未授予注销动作或资格尚未校验。</text
-      >
+      <template v-if="user.isLoggedIn && !config.useMock">
+        <text v-if="preparing">正在校验注销资格…</text>
+        <text v-else-if="!notice && (!checked || !user.validated)"
+          >注销资格尚未校验，请重新读取。</text
+        >
+        <text v-else-if="checked && !eligible">当前服务未开放账号注销。</text>
+      </template>
       <checkbox-group @change="runPageAction(() => toggle($event))">
         <label
           ><checkbox

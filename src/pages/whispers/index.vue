@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import ContentSearchBar from '@/components/ContentSearchBar.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
 import { canWhisperAction } from '@/utils/whispers'
 import { useWhisperFeed } from '@/composables/use-whisper-feed'
-const { items, cursor, ready, busy, writing, retryReady, error, notice, load, hug, retry } =
-  useWhisperFeed()
+const {
+  items,
+  cursor,
+  ready,
+  busy,
+  writing,
+  retryReady,
+  error,
+  notice,
+  keyword,
+  sort,
+  load,
+  search,
+  hug,
+  retry,
+} = useWhisperFeed()
 </script>
 <template>
   <AppPage tab="whispers" title="悄悄话">
@@ -28,7 +43,12 @@ const { items, cursor, ready, busy, writing, retryReady, error, notice, load, hu
         >如果有点累，来这里歇一歇 · 解忧与援助 ›</text
       ></navigator
     >
-    <view class="section-heading"><text class="section-title">听见彼此</text></view>
+    <ContentSearchBar
+      :keyword="keyword"
+      :sort="sort"
+      :disabled="busy || writing || retryReady"
+      @search="search"
+    />
     <view v-for="item in items" :key="item.id" class="whisper-preview">
       <WhisperContent :content="item" />
       <view class="card-footer">
@@ -58,8 +78,11 @@ const { items, cursor, ready, busy, writing, retryReady, error, notice, load, hu
         >
       </view>
     </view>
+    <text v-if="busy && !items.length" class="page-footnote">正在加载悄悄话…</text>
     <view v-if="ready && !items.length && !busy" class="empty-state"
-      ><AppIcon name="chat" :size="52" /><text>这里静静的，等一个轻轻的声音。</text></view
+      ><AppIcon name="chat" :size="52" /><text>{{
+        keyword ? '暂时没有符合条件的悄悄话' : '这里静静的，等一个轻轻的声音。'
+      }}</text></view
     >
     <button
       v-if="cursor"

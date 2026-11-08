@@ -9,6 +9,7 @@ test('页内还愿墙重读保留内容，离页清理且丢弃晚到结果，�
   const props = reactive({ storyId: '' })
   const user = reactive({ user: { id: 'wall-owner' } })
   let delayed = false
+  const queries: unknown[] = []
   let resolve!: (page: unknown) => void
   const content = {
     id: 'story-one',
@@ -21,7 +22,7 @@ test('页内还愿墙重读保留内容，离页清理且丢弃晚到结果，�
   const result = { items: [content], next_cursor: null }
   const page = await loadRuntime(
     pageScript(new URL('../src/components/StoryWall.vue', import.meta.url)) +
-      '\nexport { load, rows };',
+      '\nexport { load, rows, search };',
     {
       config: { useMock: false },
       session: { getEpoch: () => 1 },
@@ -46,7 +47,8 @@ test('页内还愿墙重读保留内容，离页清理且丢弃晚到结果，�
       onHide(fn: () => void) {
         hooks.hide = fn
       },
-      async listStories() {
+      async listStories(cursor: string | undefined, search: unknown) {
+        queries.push({ cursor, search })
         return delayed
           ? new Promise((done) => {
               resolve = done
@@ -58,6 +60,8 @@ test('页内还愿墙重读保留内容，离页清理且丢弃晚到结果，�
   hooks.mount!()
   await settle()
   assert.equal(page.rows.value.length, 1)
+  await page.search('自习', 'hot')
+  assert.deepEqual(queries.at(-1), { cursor: undefined, search: { keyword: '自习', sort: 'hot' } })
   delayed = true
   const pending = page.load()
   assert.equal(page.rows.value.length, 1)

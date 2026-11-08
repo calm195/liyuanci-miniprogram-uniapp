@@ -8,6 +8,8 @@ import { listStories, getStory } from '@/api/stories'
 import { isPublicContent } from '@/utils/story'
 import type { WishPublicContent } from '@/types/wish'
 import PublicContent from '@/components/PublicContent.vue'
+import ContentSearchBar from '@/components/ContentSearchBar.vue'
+import type { ContentSort } from '@/types/content'
 const user = useUserStore()
 const props = defineProps<{ storyId?: string }>()
 const id = computed(() => props.storyId || '')
@@ -15,6 +17,8 @@ const items = ref<WishPublicContent[]>([])
 const cursor = ref<string | null>(null)
 const busy = ref(false)
 const error = ref('')
+const keyword = ref('')
+const sort = ref<ContentSort>('time')
 const readEpoch = ref(-1)
 const rows = computed(() => (readEpoch.value === session.getEpoch() ? items.value : []))
 let visible = false
@@ -46,7 +50,7 @@ async function load(more = false) {
   try {
     const page = id.value
       ? { items: [await getStory(id.value)], next_cursor: null }
-      : await listStories(next)
+      : await listStories(next, { keyword: keyword.value, sort: sort.value })
     if (!active()) return
     if (
       !Array.isArray(page.items) ||
@@ -75,6 +79,13 @@ async function load(more = false) {
   } finally {
     if (current === generation) busy.value = false
   }
+}
+async function search(value: string, order: ContentSort) {
+  if (busy.value) return
+  keyword.value = value
+  sort.value = order
+  clear()
+  await load()
 }
 function openStory(storyId: string) {
   const encoded = encodeURIComponent(storyId)
@@ -117,6 +128,13 @@ defineExpose({ refresh: load })
 </script>
 <template>
   <view class="story-wall">
+    <ContentSearchBar
+      v-if="!id && !config.useMock"
+      :keyword="keyword"
+      :sort="sort"
+      :disabled="busy"
+      @search="search"
+    />
     <text v-if="busy && !rows.length" class="wall-state">正在加载故事…</text>
     <view v-for="content in rows" :key="content.id" class="story-card">
       <text v-if="content.title" class="story-title">{{ content.title }}</text>
@@ -133,7 +151,7 @@ defineExpose({ refresh: load })
       </PublicContent>
     </view>
     <view v-if="!busy && !error && !rows.length" class="wall-state">
-      <text>还没有公开的还愿故事</text>
+      <text>{{ keyword ? '暂时没有符合条件的还愿故事' : '还没有公开的还愿故事' }}</text>
     </view>
     <button
       v-if="cursor && rows.length"

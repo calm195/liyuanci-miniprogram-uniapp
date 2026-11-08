@@ -265,7 +265,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     readFileSync(new URL('../../src/composables/use-whisper-feed.ts', import.meta.url), 'utf8'),
     {
       ...platform,
-      callWhisper: api.callWhisper,
+      listWhisperPosts: api.listWhisperPosts,
       useWhispersStore: () => module,
       useWhisperPage: controller.useWhisperPage,
       mergeWhisperPage: content.mergeWhisperPage,
@@ -302,7 +302,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     notifications: 'items,cursor,ready,capsule,capsuleNotice,unread,load,markRead,open,page',
     help: 'directory,load,page',
     report: 'target,typeCode,load,submit,page',
-    index: 'items,cursor,ready,busy,error,load,hug',
+    index: 'items,cursor,ready,busy,error,load,search,hug',
   }
   let source =
     pageScript(

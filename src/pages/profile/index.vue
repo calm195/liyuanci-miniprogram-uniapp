@@ -33,8 +33,8 @@ const groups = [
   ],
   [
     { label: '悄悄话设置', icon: 'settings', url: '/pages/whispers/settings' },
-    { label: '我的悄悄话', icon: 'chat', url: '/pages/whispers/mine' },
-    { label: '我的时光胶囊', icon: 'clock', url: '/pages/capsules/index' },
+    { label: '悄悄话', icon: 'chat', url: '/pages/whispers/mine' },
+    { label: '时光胶囊', icon: 'clock', url: '/pages/capsules/index' },
   ],
   [
     { label: '个人资料与隐私', icon: 'lock', url: '/pages/settings/index' },

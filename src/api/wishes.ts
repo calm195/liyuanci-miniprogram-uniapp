@@ -1,7 +1,7 @@
 import { request } from '@/utils/request'
 import type { WishFilters, WishInput, WishPage, WishPublicContent, WishResult } from '@/types/wish'
-export const getWish = (id: string) =>
-  request<WishResult>({ url: `/wishes/${encodeURIComponent(id)}` })
+export const getWish = (id: string, trackView = false) =>
+  request<WishResult>({ url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}` })
 
 export type WishLifecycleAction = 'withdraw' | 'rollback' | 'complete' | 'exception-exit'
 export function changeWishState(
@@ -31,6 +31,8 @@ export async function listWishes(own: boolean, filters: WishFilters) {
       ? { state: filters.state, cursor: filters.cursor, limit: filters.limit }
       : {
           category: filters.category,
+          keyword: filters.keyword?.trim(),
+          sort: filters.sort,
           campus: filters.campus,
           cursor: filters.cursor,
           limit: filters.limit,

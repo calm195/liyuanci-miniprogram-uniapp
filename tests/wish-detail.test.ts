@@ -122,6 +122,22 @@ async function setup() {
     },
   }
 }
+test('心愿详情每次新打开计一次浏览，刷新和返回当前页不重复计分', async () => {
+  const { page, hooks, calls } = await setup()
+  assert.equal(calls[0]?.url, '/wishes/synthetic-wish?view=1')
+  await page.load()
+  hooks.hide!()
+  hooks.show!()
+  for (let i = 0; i < 15; i++) await Promise.resolve()
+  assert.deepEqual(
+    calls.slice(1).map((call) => call.url),
+    ['/wishes/synthetic-wish', '/wishes/synthetic-wish'],
+  )
+  hooks.load!({ id: sample.id })
+  hooks.show!()
+  for (let i = 0; i < 15; i++) await Promise.resolve()
+  assert.equal(calls.at(-1)?.url, '/wishes/synthetic-wish?view=1')
+})
 test('REQ-004/005：回退绑定目标版本与幂等键，刷新期限由服务端决定，不本地伪造上架', async () => {
   const { page, calls } = await setup()
   page.refreshExpiry.value = true

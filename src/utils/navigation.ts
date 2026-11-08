@@ -16,6 +16,7 @@ export function switchMainTab(target: MainTab, current: MainTab) {
 }
 
 // switchTab 不支持查询参数，以一次性内存意图传递筛选和编辑入口。
+let switching = false
 let pendingQuery: Record<string, string> | null = null
 export function takeMainQuery() {
   const query = pendingQuery
@@ -23,6 +24,7 @@ export function takeMainQuery() {
   return query
 }
 export function openMainPage(url: string): Promise<void> {
+  if (switching) return Promise.resolve()
   const [path, query] = url.split('?')
   const entry = mainNavigation.find((item) => item.url === path)
   if (!entry) return Promise.reject(new Error('导航目标无效'))
@@ -35,7 +37,8 @@ export function openMainPage(url: string): Promise<void> {
           }),
         )
       : null
-  return new Promise((resolve, reject) =>
+  switching = true
+  return new Promise<void>((resolve, reject) =>
     uni.switchTab({
       url: entry.url,
       success: () => resolve(),
@@ -44,5 +47,7 @@ export function openMainPage(url: string): Promise<void> {
         reject(new Error('页面切换失败，请重试'))
       },
     }),
-  )
+  ).finally(() => {
+    switching = false
+  })
 }

@@ -132,3 +132,26 @@ test('缓存心愿页的编辑与筛选意图只消费一次，切换失败清�
   await assert.rejects(openMainPage('/pages/wishes/index?compose=1'), /切换失败/)
   assert.equal(takeMainQuery(), null)
 })
+
+test('快速跨栏点击只发起一次原生切换，失败后允许再次切换', async () => {
+  const calls: { url: string; success: () => void; fail: () => void }[] = []
+  Object.assign(globalThis, {
+    uni: {
+      switchTab(options: (typeof calls)[number]) {
+        calls.push(options)
+      },
+    },
+  })
+  const first = switchMainTab('pond', 'home')
+  await switchMainTab('whispers', 'home')
+  assert.deepEqual(
+    calls.map((item) => item.url),
+    ['/pages/wishes/index'],
+  )
+  calls[0]!.fail()
+  await assert.rejects(first!, /切换失败/)
+  const next = switchMainTab('whispers', 'home')
+  assert.equal(calls[1]!.url, '/pages/whispers/index')
+  calls[1]!.success()
+  await next
+})

@@ -9,6 +9,13 @@
       }
     },
     {
+      "path": "pages/hot-content/index",
+      "style": {
+        "navigationBarTitleText": "本周热点",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
       "path": "pages/login/index",
       "style": {
         "navigationBarTitleText": "登录"
@@ -33,6 +40,13 @@
       "style": {
         "navigationBarTitleText": "心愿池",
         "navigationStyle": "custom",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/wishes/shortcut",
+      "style": {
+        "navigationBarTitleText": "心愿池",
         "enablePullDownRefresh": true
       }
     },
@@ -194,7 +208,7 @@
     {
       "path": "pages/capsules/index",
       "style": {
-        "navigationBarTitleText": "我的时光胶囊",
+        "navigationBarTitleText": "时光胶囊",
         "enablePullDownRefresh": true
       }
     },

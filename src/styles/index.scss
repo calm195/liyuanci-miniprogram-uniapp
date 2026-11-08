@@ -2,7 +2,7 @@
 @use './prototype.scss';
 
 page {
-  background: transparent;
+  background: $color-background;
   color: $color-text;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 28rpx;

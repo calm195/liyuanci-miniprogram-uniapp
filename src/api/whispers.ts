@@ -2,6 +2,8 @@ import { request, RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
 import { whisperOperations, whisperSchemas } from '@/utils/whispers-contract'
 import { matchesSchema } from '@/utils/whispers-schema'
+import { contentSearchParams } from '@/utils/content-search'
+import type { ContentSearch } from '@/types/content'
 import type { WhisperInputs, WhisperOutputs, WhisperOperation } from '@/types/whispers'
 
 function normalizeCapsuleDetail(result: unknown): unknown {
@@ -20,9 +22,24 @@ function normalizeCapsuleDetail(result: unknown): unknown {
 }
 
 // API 与类型共用固定目录，所有操作均走真实 request，不加载合成样例。
-export async function callWhisper<K extends WhisperOperation>(
+export function listWhisperPosts(
+  query: WhisperInputs['whisperPostsList']['query'],
+  search: ContentSearch,
+) {
+  return requestWhisper('whisperPostsList', { query }, contentSearchParams(search))
+}
+
+export function callWhisper<K extends WhisperOperation>(
   operation: K,
   input: WhisperInputs[K],
+): Promise<WhisperOutputs[K]> {
+  return requestWhisper(operation, input)
+}
+
+async function requestWhisper<K extends WhisperOperation>(
+  operation: K,
+  input: WhisperInputs[K],
+  searchParams = '',
 ): Promise<WhisperOutputs[K]> {
   const spec = whisperOperations[operation]
   if (!spec || !matchesSchema(spec.input, input, whisperSchemas))
@@ -43,7 +60,8 @@ export async function callWhisper<K extends WhisperOperation>(
   const query = Object.entries(snapshot.query ?? {})
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&')
-  if (query) url += '?' + query
+  const params = [query, searchParams].filter(Boolean).join('&')
+  if (params) url += '?' + params
   const response = await request<unknown>({
     url,
     method: spec.method,

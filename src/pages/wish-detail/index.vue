@@ -32,6 +32,7 @@ const snapshotOwner = ref('')
 let generation = 0
 let writeGeneration = 0
 let visible = false
+let pendingView = true
 
 // 路由只携带标识；正文与权限始终重新读取，不从列表或本地缓存恢复。
 const currentWish = computed(() => {
@@ -91,9 +92,11 @@ async function load() {
   try {
     if (!config.useMock && session.getToken()) await user.refresh(false, true)
     if (!isCurrent()) return
+    const trackView = pendingView
+    pendingView = false
     const result = config.useMock
       ? demo.demoWishes.find((item) => item.id === id.value)
-      : await getWish(id.value)
+      : await getWish(id.value, trackView)
     if (!isCurrent()) return
     if (!result || result.id !== id.value) throw new Error('心愿不存在或当前不可查看。')
     wish.value = result
@@ -209,6 +212,7 @@ watch(
 )
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
+  pendingView = true
 })
 onShow(() => {
   visible = true

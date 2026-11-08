@@ -1,3 +1,4 @@
+import type { ContentSearch } from './content'
 export const categories = [
   { value: 'help', label: '求助' },
   { value: 'team', label: '组队' },
@@ -96,7 +97,7 @@ export interface WishPage {
   items: WishResult[]
   next_cursor: string | null
 }
-export interface WishFilters {
+export interface WishFilters extends ContentSearch {
   category?: WishInput['category']
   campus?: WishInput['campus']
   state?: WishState

@@ -264,7 +264,7 @@ async function page() {
   let callback: ((value: { confirm: boolean }) => void) | undefined
   const r = await loadRuntime(
     pageScript(new URL('../src/pages/deletion/index.vue', import.meta.url)) +
-      '\nexport { acknowledged, confirmDeletion, refresh, inputReceipt, queryReceipt, busy }',
+      '\nexport { acknowledged, confirmDeletion, refresh, inputReceipt, queryReceipt, busy, eligible, maySubmit, notice }',
     {
       config: h.config,
       useUserStore: () => h.user,
@@ -313,6 +313,23 @@ test('REQ-018：显式勾选加弹窗确认，取消和离页阻止写入，确�
   await settle()
   assert.equal(h.calls.length, 0)
 })
+test('注销资格读取失败时保持关闭，重试成功后恢复提交', async () => {
+  const h = await page()
+  h.r.acknowledged.value = true
+  assert.equal(h.r.maySubmit.value, true)
+  h.user.refresh = async () => {
+    throw new Error('合成网络中断')
+  }
+  await h.r.refresh()
+  assert.equal(h.r.eligible.value, false)
+  assert.match(h.r.notice.value, /读取失败/)
+  await h.r.confirmDeletion()
+  assert.equal(h.calls.length, 0)
+  h.user.refresh = async () => {}
+  await h.r.refresh()
+  assert.equal(h.r.maySubmit.value, true)
+})
+
 test('REQ-018：离页不丢在途受理与回执，返回页可继续查询', async () => {
   const h = await page()
   h.r.acknowledged.value = true

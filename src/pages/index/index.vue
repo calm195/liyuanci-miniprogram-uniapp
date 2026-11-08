@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { openMainPage } from '@/utils/navigation'
-import { onPullDownRefresh } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import WishPreview from '@/components/WishPreview.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
+import HotContentList from '@/components/HotContentList.vue'
+import { useHotContent } from '@/composables/use-hot-content'
 import { useHomeWishes } from '@/composables/use-home-wishes'
 import { useWhisperFeed } from '@/composables/use-whisper-feed'
 import { useUserStore } from '@/stores/user'
@@ -18,26 +20,39 @@ const {
   error: whispersError,
   load: refreshWhispers,
 } = useWhisperFeed(1)
+const {
+  wish: hotWishes,
+  whisper: hotWhispers,
+  busy: hotBusy,
+  errors: hotErrors,
+  load: loadHot,
+} = useHotContent()
+const refreshHot = () => Promise.all([loadHot('wish'), loadHot('whisper')])
+onShow(() => {
+  void refreshHot()
+})
 const shortcuts = [
   {
     label: '许个心愿',
     caption: '让善意发生',
     art: 'entry-wish',
-    url: '/pages/wishes/index?compose=1',
+    url: '/pages/wishes/shortcut?compose=1',
   },
-  { label: '说说心事', caption: '有人在听', art: 'entry-whisper', url: '/pages/whispers/index' },
+  { label: '说说心事', caption: '有人在听', art: 'entry-whisper', url: '/pages/whispers/editor' },
   {
     label: '找个搭子',
     caption: '遇见同路人',
     art: 'entry-buddy',
-    url: '/pages/wishes/index?category=team',
+    url: '/pages/wishes/shortcut?category=team',
   },
   { label: '资料广场', caption: '认证后查看', art: '', url: '/pages/resources/index' },
 ]
+function openShortcut(url: string) {
+  return url === '/pages/resources/index' ? openMainPage(url) : uni.navigateTo({ url })
+}
 onPullDownRefresh(async () => {
   try {
-    await load()
-    await refreshWhispers()
+    await Promise.all([load(), refreshWhispers(), refreshHot()])
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -65,7 +80,7 @@ onPullDownRefresh(async () => {
         <view
           role="button"
           class="hero-button"
-          @click="runPageAction(() => openMainPage('/pages/wishes/index?compose=1'))"
+          @click="runPageAction(() => openShortcut('/pages/wishes/shortcut?compose=1'))"
           >许个心愿 <text class="ui-text">→</text></view
         >
       </view>
@@ -76,7 +91,7 @@ onPullDownRefresh(async () => {
         :key="entry.label"
         role="button"
         class="quick-entry"
-        @click="runPageAction(() => openMainPage(entry.url))"
+        @click="runPageAction(() => openShortcut(entry.url))"
       >
         <image
           v-if="entry.art"
@@ -97,6 +112,27 @@ onPullDownRefresh(async () => {
         >今日锦鲤 · 你也可以成为别人的锦鲤</text
       ></view
     >
+    <view v-if="!config.useMock">
+      <view class="section-heading"><text class="section-title">本周热点</text></view>
+      <view class="section-heading">
+        <text>热门心愿</text>
+        <navigator class="small-link" url="/pages/hot-content/index?kind=wish"
+          >查看更多 ›</navigator
+        >
+      </view>
+      <HotContentList :items="hotWishes.slice(0, 3)" :busy="hotBusy.wish" :error="hotErrors.wish" />
+      <view class="section-heading">
+        <text>热门悄悄话</text>
+        <navigator class="small-link" url="/pages/hot-content/index?kind=whisper"
+          >查看更多 ›</navigator
+        >
+      </view>
+      <HotContentList
+        :items="hotWhispers.slice(0, 3)"
+        :busy="hotBusy.whisper"
+        :error="hotErrors.whisper"
+      />
+    </view>
     <view class="section-heading"
       ><text class="section-title">新鲜心愿</text
       ><view

@@ -46,7 +46,7 @@ onShow(() => {
 </script>
 <template>
   <AppPage>
-    <text class="title">我的时光胶囊</text>
+    <text class="title">时光胶囊</text>
     <button class="create-capsule" @click="createCapsule">＋ 写给未来的自己</button>
 
     <text v-if="ready && !items.length">当前页暂无胶囊。</text>

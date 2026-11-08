@@ -5,6 +5,7 @@ import {
   whisperSchemas,
   whisperWrites,
 } from '../../src/utils/whispers-contract.ts'
+import { contentSearchParams } from '../../src/utils/content-search.ts'
 import { matchesSchema } from '../../src/utils/whispers-schema.ts'
 
 export class WhisperTestError extends Error {
@@ -31,6 +32,7 @@ export async function whispersRuntime(
       RequestError: WhisperTestError,
       session,
       matchesSchema,
+      contentSearchParams,
       whisperOperations,
       whisperSchemas,
     },

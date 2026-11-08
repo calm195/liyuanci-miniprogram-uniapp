@@ -1,3 +1,4 @@
+import { contentSearchParams } from '../src/utils/content-search.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
@@ -67,7 +68,7 @@ async function setup(page: string, query: Record<string, string> = {}) {
   }
   const api = await loadRuntime(
     readFileSync(new URL('../src/api/stories.ts', import.meta.url), 'utf8'),
-    { request },
+    { request, contentSearchParams },
   )
   const exports =
     page === 'story-editor'

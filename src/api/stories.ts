@@ -1,10 +1,15 @@
 import { request } from '@/utils/request'
 import type { WishResult, WishPublicContent } from '@/types/wish'
 import type { StoryAccepted, StoryPage, ShareKind, ShareLink, ShareTarget } from '@/types/story'
-export const listStories = (cursor?: string) =>
-  request<StoryPage>({
-    url: `/stories?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+import { contentSearchParams } from '@/utils/content-search'
+import type { ContentSearch } from '@/types/content'
+
+export function listStories(cursor?: string, search: ContentSearch = {}) {
+  const params = contentSearchParams(search)
+  return request<StoryPage>({
+    url: `/stories?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${params ? '&' + params : ''}`,
   })
+}
 export const getStory = (id: string) =>
   request<WishPublicContent>({ url: `/stories/${encodeURIComponent(id)}` })
 export function writeStory(wish: WishResult, body: string, update: boolean, key: string) {

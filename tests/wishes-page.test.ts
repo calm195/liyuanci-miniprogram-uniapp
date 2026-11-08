@@ -95,7 +95,6 @@ async function setup() {
   Object.assign(globalThis, {
     __wishPage: {
       ...api,
-      takeMainQuery: () => null,
       config,
       useUserStore: () => user,
       useWishStore: () => ({}),
@@ -112,31 +111,29 @@ async function setup() {
       wishStateLabels,
       publicWishBody,
       ownWishBody,
-      onPullDownRefresh: (fn: () => void) => {
-        hooks.pull = fn
-      },
-      onLoad: (fn: (query: Record<string, string>) => void) => {
-        hooks.load = fn as () => void
-      },
-      onShow: (fn: () => void) => {
-        hooks.show = fn
-      },
-      onHide: (fn: () => void) => {
-        hooks.hide = fn
-      },
-      onUnload: (fn: () => void) => {
-        hooks.unload = fn
-      },
+      defineProps: () => ({ mainTab: true }),
+      defineExpose: () => {},
     },
   })
-  const script = readFileSync(new URL('../src/pages/wishes/index.vue', import.meta.url), 'utf8')
+  const script = readFileSync(new URL('../src/components/WishPond.vue', import.meta.url), 'utf8')
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const names =
-    'takeMainQuery, listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, onPullDownRefresh, onLoad, onShow, onHide, onUnload'
+    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, defineProps, defineExpose'
   const page = await moduleFrom(
-    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state };`,
+    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, search, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state, show, leave, refresh };`,
   )
+  let query: Record<string, string> | undefined
+  hooks.load = ((next: Record<string, string>) => {
+    query = next
+  }) as () => void
+  hooks.show = () => {
+    const next = query
+    query = undefined
+    return page.show(next)
+  }
+  hooks.hide = page.leave
+  hooks.pull = page.refresh
   hooks.show!()
   await settle()
   page.own.value = true
@@ -294,12 +291,15 @@ test('原型快捷入口选择组队和本人状态，非法状态回退且不�
   const s = await setup()
   const enter = s.hooks.load as (query: Record<string, string>) => void
   enter({ category: 'team' })
+  await s.hooks.show!()
   assert.equal(s.page.category.value, 'team')
   assert.equal(s.page.own.value, false)
   enter({ own: '1', state: 'realized' })
+  await s.hooks.show!()
   assert.equal(s.page.own.value, true)
   assert.equal(s.page.state.value, 'realized')
   enter({ own: '1', state: '__proto__', category: 'invalid' })
+  await s.hooks.show!()
   assert.equal(s.page.state.value, '')
   assert.equal(s.page.category.value, '')
   enter({ compose: '1' })
@@ -373,6 +373,12 @@ test('REQ-003：公共分类筛选与分页游标保留平铺正文，重复资�
       (call) => call.url.includes('category=team') && call.url.includes('cursor=cursor%2F%2B'),
     ),
   )
+  await s.page.search('组队 & 自习', 'hot')
+  const filtered = new URL(s.calls.at(-1)!.url, 'https://example.test')
+  assert.equal(filtered.searchParams.get('category'), 'team')
+  assert.equal(filtered.searchParams.get('keyword'), '组队 & 自习')
+  assert.equal(filtered.searchParams.get('sort'), 'hot')
+  assert.equal(filtered.searchParams.has('cursor'), false)
 })
 
 test('自定义报答切换预选清理旧文字，编辑中下拉保留草稿与可保存目标', async () => {

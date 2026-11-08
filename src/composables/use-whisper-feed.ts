@@ -1,10 +1,11 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
-import { callWhisper } from '@/api/whispers'
+import { listWhisperPosts } from '@/api/whispers'
 import { useWhispersStore } from '@/stores/whispers'
 import { useWhisperPage } from '@/composables/use-whisper-page'
 import { mergeWhisperPage } from '@/utils/whisper-content'
+import type { ContentSort } from '@/types/content'
 import type { PublicPost } from '@/types/whispers'
 
 export function useWhisperFeed(limit = 20) {
@@ -12,6 +13,8 @@ export function useWhisperFeed(limit = 20) {
   const items = ref<PublicPost[]>([])
   const cursor = ref<string | null>(null)
   const ready = ref(false)
+  const keyword = ref('')
+  const sort = ref<ContentSort>('time')
   const seen = new Set<string>()
   function clear() {
     items.value = []
@@ -27,9 +30,10 @@ export function useWhisperFeed(limit = 20) {
       if (!more) await module.refresh(false)
       if (!active()) return
       if (!module.config?.enabled) throw new Error('树洞尚未开放或当前不可用。')
-      const result = await callWhisper('whisperPostsList', {
-        query: { limit, ...(previous ? { cursor: previous } : {}) },
-      })
+      const result = await listWhisperPosts(
+        { limit, ...(previous ? { cursor: previous } : {}) },
+        { keyword: keyword.value, sort: sort.value },
+      )
       if (!active()) return
       if (!more) seen.clear()
       const merged = mergeWhisperPage(more ? items.value : [], result, previous, seen)
@@ -37,6 +41,13 @@ export function useWhisperFeed(limit = 20) {
       cursor.value = merged.cursor
       ready.value = true
     }, more)
+  }
+  async function search(value: string, order: ContentSort) {
+    if (page.busy.value || page.writing.value || page.retryReady.value) return
+    keyword.value = value
+    sort.value = order
+    clear()
+    await load()
   }
   async function hug(target: PublicPost) {
     if (
@@ -73,5 +84,5 @@ export function useWhisperFeed(limit = 20) {
   onShow(() => {
     void load()
   })
-  return { ...page, items, cursor, ready, load, hug }
+  return { ...page, items, cursor, ready, keyword, sort, load, search, hug }
 }
