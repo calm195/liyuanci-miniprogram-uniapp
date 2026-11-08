@@ -106,20 +106,24 @@ async function load() {
     sharedProjection.value = null
     busy.value = true
     try {
-      const ref = reference.value
+      let targetId = id.value
+      if (reference.value !== undefined) {
+        // 先验证扫码引用，再走好友和朋友圈共用的匿名详情读取。
+        if (!reference.value) throw new Error('分享引用无效')
+        const resolved = await resolveShare(reference.value)
+        if (!isCurrent()) return
+        if (resolved?.target_kind !== 'wish' || !isPublicContent(resolved.target))
+          throw new Error('分享内容不可用')
+        targetId = resolved.target.id
+      }
+      if (!targetId) throw new Error('分享内容不可用')
       const trackView = pendingView
       pendingView = false
-      const result = ref === undefined && id.value ? await getPublicWish(id.value, trackView) : null
-      const resolved = ref ? await resolveShare(ref) : null
+      const result = await getPublicWish(targetId, trackView)
       if (!isCurrent()) return
-      const item =
-        resolved?.target_kind === 'wish'
-          ? resolved.target
-          : result?.id === id.value
-            ? result.public
-            : null
-      if (!item || !isPublicContent(item)) throw new Error('分享内容不可用')
-      sharedProjection.value = item
+      if (result?.id !== targetId || !result.public || !isPublicContent(result.public))
+        throw new Error('分享内容不可用')
+      sharedProjection.value = result.public
     } catch {
       if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
     } finally {

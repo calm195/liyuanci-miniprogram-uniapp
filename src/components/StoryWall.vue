@@ -56,23 +56,27 @@ async function load(more = false) {
   busy.value = true
   try {
     const reference = props.shareRef
-    let page
+    let targetId = id.value
     if (reference !== undefined) {
-      // 扫码只信任服务端重新校验的公开故事，失效时留在详情态。
+      // 先验证扫码引用，再走好友和朋友圈共用的匿名详情读取。
       if (!reference) throw new Error('分享引用无效')
       const share = await resolveShare(reference)
-      if (share?.target_kind !== 'story') throw new Error('分享目标类型不匹配')
-      page = { items: [share.target], next_cursor: null }
-    } else if (id.value) {
-      page = { items: [await getStory(id.value, !props.readOnly)], next_cursor: null }
-    } else {
-      page = await listStories(next, { keyword: keyword.value, sort: sort.value })
+      if (!active()) return
+      if (share?.target_kind !== 'story' || !isPublicContent(share.target))
+        throw new Error('分享内容不可用')
+      targetId = share.target.id
     }
+    const page = targetId
+      ? {
+          items: [await getStory(targetId, reference === undefined && !props.readOnly)],
+          next_cursor: null,
+        }
+      : await listStories(next, { keyword: keyword.value, sort: sort.value })
     if (!active()) return
     if (
       !Array.isArray(page.items) ||
       !page.items.every(isPublicContent) ||
-      (id.value && page.items[0]?.id !== id.value) ||
+      (targetId && page.items[0]?.id !== targetId) ||
       (page.next_cursor !== null &&
         (typeof page.next_cursor !== 'string' ||
           !page.next_cursor ||
@@ -155,7 +159,13 @@ defineExpose({ refresh: load, show, hide: leave })
       <PublicContent :content="content" kind="story" :compact="!detail" :read-only="readOnly">
         <template #actions>
           <ShareActions
-            v-if="detail && !busy && user.validated && user.user?.verification === 'verified'"
+            v-if="
+              detail &&
+              !readOnly &&
+              !busy &&
+              user.validated &&
+              user.user?.verification === 'verified'
+            "
             kind="story"
             :content="content"
           />

@@ -204,6 +204,8 @@ async function sharePoster() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
   gap: 12rpx;
 }
 .share-button {
@@ -216,6 +218,7 @@ async function sharePoster() {
 }
 .share-hint {
   flex-basis: 100%;
+  text-align: right;
   color: var(--theme-muted);
   font-size: 24rpx;
 }

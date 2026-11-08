@@ -374,12 +374,14 @@ test('故事列表进入详情，详情只向页面分享钩子提供当前公�
 })
 
 test('故事扫码只解析 scene，返回页面时重新复核且失效后不回退列表', async () => {
+  const friend = await setup('stories', { id: wish.id, shared: '1' })
   const s = await setup('stories', { scene: reference.replace(/-/g, ''), kind: 'wish' })
   assert.deepEqual(
     s.calls.map((call) => call.url),
-    [`/share-links/${reference}`],
+    [`/share-links/${reference}`, friend.calls[0]?.url],
   )
-  assert.equal(s.shared()?.body, publicStory.body)
+  assert.deepEqual(s.calls[1], friend.calls[0])
+  assert.deepEqual(s.shared(), friend.shared())
   s.hooks.hide()
   assert.equal(s.shared(), null)
   s.setTransport(async () => {
@@ -392,7 +394,7 @@ test('故事扫码只解析 scene，返回页面时重新复核且失效后不�
   assert.match(s.runtime.error.value, /不可公开查看/)
   assert.deepEqual(
     s.calls.map((call) => call.url),
-    Array(2).fill(`/share-links/${reference}`),
+    [`/share-links/${reference}`, friend.calls[0]?.url, `/share-links/${reference}`],
   )
 })
 

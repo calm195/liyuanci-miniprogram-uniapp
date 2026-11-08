@@ -216,9 +216,10 @@ test('微信卡片和扫码回流只读取公开投影，非法扫码参数不�
   const scan = await setup({ scene: shareRef.replace(/-/g, ''), id: 'other' })
   assert.deepEqual(
     scan.calls.map((call) => call.url),
-    [`/share-links/${shareRef}`],
+    [`/share-links/${shareRef}`, friend.calls[0]?.url],
   )
-  assert.equal(scan.page.sharedProjection.value.id, sample.id)
+  assert.deepEqual(scan.calls[1], friend.calls[0])
+  assert.deepEqual(scan.page.sharedProjection.value, friend.page.sharedProjection.value)
   scan.hooks.hide!()
   assert.equal(scan.page.sharedProjection.value, null)
   await scan.page.load()
