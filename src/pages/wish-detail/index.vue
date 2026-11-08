@@ -2,6 +2,7 @@
 import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import ShareActions from '@/components/ShareActions.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -22,10 +23,13 @@ import { resolveShare } from '@/api/stories'
 import { isPublicContent } from '@/utils/story'
 import { shareReference } from '@/utils/share'
 import { useContentShare } from '@/composables/use-content-share'
+import { useHiddenWishes } from '@/composables/use-hidden-wishes'
 import { openWishActionGate, type WishActionReady } from '@/composables/use-wish-action-return'
 import { isShareBrowseOnly, prepareSharedWishBackStack } from '@/utils/shared-wish-navigation'
 
 const user = useUserStore()
+const hiddenWishes = useHiddenWishes()
+const menuOpen = ref(false)
 const demo = useWishStore()
 const id = ref('')
 const reference = ref<string>()
@@ -42,6 +46,7 @@ const browseOnly = ref(false)
 const refreshExpiry = ref(false)
 const snapshotEpoch = ref(-1)
 const snapshotOwner = ref('')
+const sharedApplication = ref<{ owner: string; epoch: number } | null>(null)
 let generation = 0
 let writeGeneration = 0
 let visible = false
@@ -79,6 +84,36 @@ const sharedActions = computed(
     !!publicContent.value &&
     publicContent.value.author?.id !== (user.validated ? user.user?.id : null),
 )
+const applicationInProgress = computed(() =>
+  sharedEntry.value
+    ? user.validated &&
+      sharedApplication.value?.owner === user.user?.id &&
+      sharedApplication.value?.epoch === session.getEpoch()
+    : currentWish.value?.application_in_progress === true,
+)
+const moderationAvailable = computed(
+  () =>
+    !config.useMock &&
+    !currentWish.value?.own_content &&
+    !!publicContent.value &&
+    publicContent.value.author?.id !== (user.validated ? user.user?.id : null),
+)
+const contentHidden = computed(() => hiddenWishes.hidden.value.has(currentWish.value?.id || ''))
+function toggleContentVisibility() {
+  const target = currentWish.value?.id
+  if (!target || !moderationAvailable.value || busy.value || openingAction.value) return
+  actionError.value = ''
+  notice.value = ''
+  if (browseOnly.value) {
+    actionError.value = '请先点击微信的「前往小程序」，再继续操作。'
+    return
+  }
+  try {
+    notice.value = hiddenWishes.toggle(target) ? '已标记为不看此内容。' : '已取消不看此内容。'
+  } catch {
+    actionError.value = '设置保存失败，请重试。'
+  }
+}
 const shareTarget = useContentShare('wish', () =>
   !sharedEntry.value && !busy.value && currentWish.value?.current_state === 'published'
     ? publicShare.value
@@ -101,6 +136,7 @@ function allowed(action: WishLifecycleAction) {
 function clearProjection() {
   wish.value = null
   publicShare.value = null
+  sharedApplication.value = null
   snapshotEpoch.value = -1
   snapshotOwner.value = ''
   refreshExpiry.value = false
@@ -151,6 +187,19 @@ async function load() {
         expires_at: result.expires_at,
         allowed_actions: [],
         public: result.public,
+      }
+      const owner = user.user?.id
+      if (!browseOnly.value && owner && user.validated && user.user?.verification === 'verified') {
+        // 分享正文保持匿名，单独读取当前账号自己的申请状态。
+        const scoped = await getWish(targetId, false, true).catch(() => null)
+        if (
+          isCurrent() &&
+          epoch === session.getEpoch() &&
+          owner === user.user?.id &&
+          scoped?.id === targetId &&
+          scoped.application_in_progress
+        )
+          sharedApplication.value = { owner, epoch }
       }
     } catch {
       if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
@@ -211,7 +260,14 @@ function openPage(url: string) {
 async function openSharedAction(action: SharedAction) {
   const target = currentWish.value?.id || ''
   const author = publicContent.value?.author?.id
-  if (!sharedActions.value || !target || busy.value || openingAction.value) return
+  if (
+    !(action === 'apply' ? sharedActions.value : moderationAvailable.value) ||
+    !target ||
+    busy.value ||
+    openingAction.value
+  )
+    return
+  menuOpen.value = false
   if (browseOnly.value) {
     actionError.value = '请先点击微信的「前往小程序」，再继续操作。'
     return
@@ -269,17 +325,19 @@ async function openSharedAction(action: SharedAction) {
       return
     if (
       scoped?.id !== target ||
-      scoped.current_state !== 'published' ||
+      (action === 'apply' && scoped.current_state !== 'published') ||
       scoped.privacy_review_required ||
       scoped.own_content ||
-      scoped.public?.id !== target ||
-      scoped.public.author?.id === account.id
+      (scoped.public || scoped.participant)?.id !== target ||
+      (scoped.public || scoped.participant)?.author?.id === account.id
     ) {
       actionError.value = '该心愿当前不可操作，请刷新后查看。'
       return
     }
     const queryId = encodeURIComponent(target)
-    if (action === 'apply' && canApplyToWish(user.user, user.validated, scoped)) {
+    if (action === 'apply' && scoped.application_in_progress) {
+      sharedApplication.value = { owner: account.id, epoch }
+    } else if (action === 'apply' && canApplyToWish(user.user, user.validated, scoped)) {
       await openPage(`/pages/applications/index?wishId=${queryId}`)
     } else if (
       action === 'report' &&
@@ -288,7 +346,11 @@ async function openSharedAction(action: SharedAction) {
       )
     ) {
       await openPage(`/pages/report/index?kind=wish&id=${queryId}`)
-    } else if (action === 'block' && author && scoped.public.author?.id === author) {
+    } else if (
+      action === 'block' &&
+      author &&
+      (scoped.public || scoped.participant)?.author?.id === author
+    ) {
       await openPage(
         `/pages/blacklist/index?targetId=${encodeURIComponent(author)}&sourceId=${queryId}&sourceKind=wish`,
       )
@@ -389,6 +451,7 @@ async function act(action: WishLifecycleAction, target?: 'matching' | 'published
   }
 }
 function leave() {
+  menuOpen.value = false
   visible = false
   generation++
   writeGeneration++
@@ -463,6 +526,33 @@ onPullDownRefresh(async () => {
           content.reward_text ||
           rewards.find((item) => item.value === content?.reward_method)?.label
         }}</text>
+        <button
+          v-if="moderationAvailable"
+          class="detail-icon-button"
+          aria-label="更多心愿操作"
+          :aria-expanded="menuOpen"
+          :disabled="busy || openingAction"
+          @click="menuOpen = !menuOpen"
+        >
+          <AppIcon name="more" :size="38" />
+        </button>
+      </view>
+      <view v-if="menuOpen && moderationAvailable" class="detail-menu">
+        <button
+          :loading="isPageActionPending('wish-menu-report')"
+          :disabled="openingAction"
+          @click="runPageAction(() => openSharedAction('report'), 'wish-menu-report')"
+        >
+          举报
+        </button>
+        <button
+          v-if="publicContent?.author"
+          :loading="isPageActionPending('wish-menu-block')"
+          :disabled="openingAction"
+          @click="runPageAction(() => openSharedAction('block'), 'wish-menu-block')"
+        >
+          不看此人
+        </button>
       </view>
       <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
       <template v-else-if="content">
@@ -474,12 +564,17 @@ onPullDownRefresh(async () => {
         >
           {{ publicContent.author.nickname || '查看公开主页' }}
         </navigator>
-        <navigator
-          v-if="!sharedEntry && publicContent?.author && currentWish.current_state === 'published'"
-          class="moderation-link"
-          :url="`/pages/blacklist/index?targetId=${encodeURIComponent(publicContent.author.id)}&sourceId=${encodeURIComponent(id)}&sourceKind=wish`"
-          >屏蔽发布者</navigator
+        <button
+          v-if="moderationAvailable"
+          class="detail-icon-button"
+          :aria-label="contentHidden ? '取消不看此内容' : '不看此内容'"
+          :aria-pressed="contentHidden"
+          :disabled="busy || openingAction"
+          :loading="isPageActionPending('wish-hide-content')"
+          @click="runPageAction(toggleContentVisibility, 'wish-hide-content')"
         >
+          <AppIcon name="thumb-down" :active="contentHidden" :size="40" />
+        </button>
         <text v-if="currentWish.expires_at" class="subtitle"
           >截止时间（北京时间）{{ displayTime(currentWish.expires_at) }}</text
         >
@@ -496,26 +591,11 @@ onPullDownRefresh(async () => {
     </view>
     <view v-if="sharedActions" class="card detail-actions">
       <button
-        :disabled="busy || openingAction"
+        :disabled="busy || openingAction || applicationInProgress"
         :loading="isPageActionPending('shared-wish-apply')"
         @click="runPageAction(() => openSharedAction('apply'), 'shared-wish-apply')"
       >
-        申请应愿
-      </button>
-      <button
-        :disabled="busy || openingAction"
-        :loading="isPageActionPending('shared-wish-report')"
-        @click="runPageAction(() => openSharedAction('report'), 'shared-wish-report')"
-      >
-        举报此心愿
-      </button>
-      <button
-        v-if="publicContent?.author"
-        :disabled="busy || openingAction"
-        :loading="isPageActionPending('shared-wish-block')"
-        @click="runPageAction(() => openSharedAction('block'), 'shared-wish-block')"
-      >
-        屏蔽发布者
+        {{ applicationInProgress ? '申请中' : '申请应愿' }}
       </button>
     </view>
     <view v-if="!sharedEntry && currentWish && !config.useMock" class="card detail-actions">
@@ -530,10 +610,16 @@ onPullDownRefresh(async () => {
         >编辑心愿</view
       >
       <navigator
-        v-if="!writing && !busy && canApplyToWish(user.user, user.validated, currentWish)"
+        v-if="
+          !applicationInProgress &&
+          !writing &&
+          !busy &&
+          canApplyToWish(user.user, user.validated, currentWish)
+        "
         :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
         >申请应愿</navigator
       >
+      <button v-else-if="applicationInProgress" disabled>申请中</button>
       <navigator
         v-if="!writing && !busy && currentWish.own_content"
         :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
@@ -621,12 +707,6 @@ onPullDownRefresh(async () => {
       "
       class="detail-footer"
     >
-      <navigator
-        v-if="publicContent && !currentWish.own_content"
-        class="moderation-link"
-        :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(id)}`"
-        >举报此心愿</navigator
-      >
       <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
     </view>
     <AppNotice :message="notice" kind="info" />
@@ -651,8 +731,32 @@ onPullDownRefresh(async () => {
   align-items: center;
   gap: 20rpx;
 }
+.detail-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.detail-icon-button::after {
+  border: 0;
+}
+.detail-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+.detail-menu button {
+  margin: 0;
+  font-size: 26rpx;
+}
 .detail-footer {
-  justify-content: space-between;
+  justify-content: flex-end;
   margin-top: 32rpx;
 }
 .detail-actions button {

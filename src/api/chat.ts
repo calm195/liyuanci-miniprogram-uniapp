@@ -67,10 +67,15 @@ export const getMessageStatus = (id: string) =>
   request<MessageStatus>({ url: `/me/messages/${encodeURIComponent(id)}/status` })
 export const listNotifications = (cursor?: string) =>
   request<NotificationPage>({ url: `/me/notifications${cursorQuery(cursor)}` })
-export const readNotification = (notification: AppNotification, key: string) =>
+export const readNotification = (
+  notification: Pick<AppNotification, 'id' | 'version'>,
+  key: string,
+  silent = false,
+) =>
   request<AppNotification>({
     url: `/me/notifications/${encodeURIComponent(notification.id)}/read`,
     method: 'POST',
+    silent,
     data: { expected_version: notification.version },
     header: { 'Idempotency-Key': key },
   })

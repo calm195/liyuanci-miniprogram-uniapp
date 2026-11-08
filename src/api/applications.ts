@@ -15,7 +15,12 @@ function query(input: Record<string, string | number | undefined>) {
   return value ? `?${value}` : ''
 }
 export function listMyApplications(
-  input: { status?: ApplicationStatus; cursor?: string; limit?: number } = {},
+  input: {
+    status?: ApplicationStatus
+    cursor?: string
+    limit?: number
+    application_id?: string
+  } = {},
 ) {
   return request<ApplicationPage>({ url: `/me/applications${query(input)}` })
 }
@@ -30,6 +35,7 @@ export function applyToWish(id: string, contentVersion: number, message: string,
     method: 'POST',
     data: { message, wish_content_version: contentVersion },
     header: { 'Idempotency-Key': key },
+    silent: true,
   })
 }
 export function withdrawApplication(application: WishApplication, key: string) {

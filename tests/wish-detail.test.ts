@@ -11,6 +11,7 @@ import type { WishPublicContent, WishResult } from '../src/types/wish.ts'
 import { shareReference } from '../src/utils/share.ts'
 import { isPublicContent } from '../src/utils/story.ts'
 import { emptyWish, wishStateLabels } from '../src/utils/wish.ts'
+import { loadRuntime } from './support/page-runtime.ts'
 
 const sample: WishResult = {
   id: 'synthetic-wish',
@@ -46,7 +47,7 @@ const publicWish = {
   notice_text: '',
 } satisfies WishPublicContent
 
-async function setup(query: Record<string, string> = { id: sample.id }) {
+async function setup(query: Record<string, string> = { id: sample.id }, initial = sample) {
   const hooks: Record<string, (query?: Record<string, string>) => void> = {}
   const user = reactive({
     user: {
@@ -60,7 +61,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
   })
   let epoch = 1
   let token = 'synthetic-token'
-  let row = structuredClone(sample)
+  let row = structuredClone(initial)
   const pages: string[] = []
   const gates: {
     kind: string
@@ -79,8 +80,12 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     error_code = 'VERSION_CONFLICT'
   }
   let command = async () => structuredClone(row)
+  const config = { useMock: false, wishWritesReady: true, apiBaseUrl: 'https://example.invalid' }
+  const storage = new Map<string, unknown>()
   Object.assign(globalThis, {
     uni: {
+      getStorageSync: (key: string) => storage.get(key),
+      setStorageSync: (key: string, value: unknown) => storage.set(key, value),
       navigateTo: (options: { url: string; success: () => void }) => {
         pages.push(options.url)
         options.success()
@@ -105,6 +110,10 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
   const api = await moduleFrom(
     `const request = globalThis.__detailRequest;\n${strip(readFileSync(new URL('../src/api/wishes.ts', import.meta.url), 'utf8'))}`,
   )
+  const { useHiddenWishes } = await loadRuntime(
+    readFileSync(new URL('../src/composables/use-hidden-wishes.ts', import.meta.url), 'utf8'),
+    { config, useUserStore: () => user },
+  )
   Object.assign(globalThis, {
     __detail: {
       ...api,
@@ -118,7 +127,8 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
       user,
       useUserStore: () => user,
       useWishStore: () => ({}),
-      config: { useMock: false, wishWritesReady: true },
+      useHiddenWishes,
+      config,
       canWishAction,
       canApplyToWish,
       isShareBrowseOnly: () => false,
@@ -154,7 +164,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions };`,
+    `const { useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -167,6 +177,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     gates,
     user,
     RequestError,
+    storage,
     setRow: (value: WishResult) => {
       row = value
     },
@@ -259,7 +270,7 @@ test('微信卡片和扫码回流只读取公开投影，非法扫码参数不�
   const scan = await setup({ scene: shareRef.replace(/-/g, ''), id: 'other' })
   assert.deepEqual(
     scan.calls.map((call) => call.url),
-    [`/share-links/${shareRef}`, friend.calls[0]?.url],
+    [`/share-links/${shareRef}`, friend.calls[0]?.url, friend.calls[1]?.url],
   )
   assert.deepEqual(scan.calls[1], friend.calls[0])
   assert.deepEqual(scan.page.currentWish.value, friend.page.currentWish.value)
@@ -281,6 +292,37 @@ const actionableWish: WishResult = {
   public: publicWish,
   allowed_actions: ['postWishesIdApplications'],
 }
+
+test('同一心愿的不看此内容可切换，换账号后不继承原账号状态', async () => {
+  const s = await setup({ id: sample.id, shared: '1' }, actionableWish)
+  s.page.toggleContentVisibility()
+  assert.equal(s.page.contentHidden.value, true)
+  assert.deepEqual([...s.storage.values()], [[sample.id]])
+  assert.equal(s.page.currentWish.value.id, sample.id)
+  s.user.user.id = 'synthetic-other'
+  assert.equal(s.page.contentHidden.value, false)
+  s.user.user.id = 'synthetic-owner'
+  assert.equal(s.page.contentHidden.value, true)
+  s.page.toggleContentVisibility()
+  assert.equal(s.page.contentHidden.value, false)
+  assert.equal(
+    s.calls.some((call) => call.method),
+    false,
+  )
+})
+
+test('分享与普通详情保留申请中，分享投影不包含账号申请状态', async () => {
+  const target = { ...actionableWish, application_in_progress: true, allowed_actions: [] }
+  const regular = await setup({ id: sample.id }, target)
+  assert.equal(regular.page.applicationInProgress.value, true)
+  const shared = await setup({ id: sample.id, shared: '1' }, target)
+  assert.equal(shared.page.applicationInProgress.value, true)
+  assert.equal(shared.page.currentWish.value.application_in_progress, undefined)
+  await shared.page.openSharedAction('apply')
+  assert.deepEqual(shared.pages, [])
+  shared.user.user.id = 'synthetic-other'
+  assert.equal(shared.page.applicationInProgress.value, false)
+})
 
 test('扫码、好友与朋友圈使用同一操作目标，已认证后进入既有流程', async () => {
   const queries: Record<string, string>[] = [

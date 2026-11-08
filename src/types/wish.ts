@@ -59,6 +59,8 @@ export interface WishResult {
   content_version?: number
   current_state: WishState
   allowed_actions: string[]
+  application_in_progress?: boolean
+  unread_application_count?: number
   privacy_review_required?: boolean
   story_review_result?: {
     decision: 'pending' | 'approved' | 'rejected'

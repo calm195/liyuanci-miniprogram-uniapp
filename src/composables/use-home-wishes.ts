@@ -5,10 +5,12 @@ import { config } from '@/config'
 import { useWishStore } from '@/stores/wishes'
 import { publicWishBody } from '@/utils/wish'
 import { session } from '@/utils/session'
+import { useHiddenWishes } from './use-hidden-wishes'
 import type { WishResult } from '@/types/wish'
 
 export function useHomeWishes() {
   const demo = useWishStore()
+  const { hidden } = useHiddenWishes()
   const items = ref<WishResult[]>([])
   const busy = ref(false)
   const error = ref('')
@@ -19,7 +21,7 @@ export function useHomeWishes() {
     config.useMock
       ? demo.demoWishes.filter((wish) => publicWishBody(wish)).slice(0, 2)
       : epoch.value === session.getEpoch()
-        ? items.value
+        ? items.value.filter((wish) => !hidden.value.has(wish.id)).slice(0, 2)
         : [],
   )
   function clear() {
@@ -38,10 +40,10 @@ export function useHomeWishes() {
     const active = () => visible && current === generation && started === session.getEpoch()
     busy.value = true
     try {
-      const page = await listWishes(false, { limit: 2 })
+      const page = await listWishes(false, { limit: 10 })
       if (!active()) return
       // 首页同样只消费已上架公开投影，不能拿本人草稿或屏障正文填充卡片。
-      items.value = page.items.filter((wish) => publicWishBody(wish)).slice(0, 2)
+      items.value = page.items.filter((wish) => publicWishBody(wish))
       epoch.value = started
     } catch {
       if (active()) {

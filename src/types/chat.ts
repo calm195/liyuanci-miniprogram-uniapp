@@ -55,7 +55,7 @@ export interface MessageStatus {
 }
 export interface AppNotification {
   created_at?: string
-  target_kind?: 'post' | 'capsule'
+  target_kind?: 'post' | 'capsule' | 'conversation' | 'wish_applications' | 'my_application'
   comment_id?: string
   id: string
   version: number

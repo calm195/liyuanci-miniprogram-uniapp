@@ -9,6 +9,8 @@ import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
 import { canMeAction, canWishAction } from '@/utils/actions'
+import { canManageApplications } from '@/utils/application'
+import { useHiddenWishes } from '@/composables/use-hidden-wishes'
 import type { WishAction } from '@/utils/actions'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
@@ -26,6 +28,7 @@ import type { WishInput, WishResult, WishState } from '@/types/wish'
 import { emptyWish, validateWish, wishStateLabels, publicWishBody } from '@/utils/wish'
 const props = defineProps<{ mainTab?: boolean }>()
 const user = useUserStore()
+const { hidden } = useHiddenWishes()
 const store = useWishStore()
 const own = ref(false)
 const wall = ref(false)
@@ -72,7 +75,7 @@ const rows = computed(() => {
     return []
   const list = config.useMock ? store.demoWishes : items.value
   return list.filter((wish) => {
-    if (!own.value && !publicWishBody(wish)) return false
+    if (!own.value && (!publicWishBody(wish) || hidden.value.has(wish.id))) return false
     const content = own.value ? wish.own_content : wish.public
     return (
       (!category.value || content?.category === category.value) &&
@@ -506,6 +509,16 @@ defineExpose({ show, leave, refresh })
         <text v-if="own && wish.review_result?.revision_suggestion"
           >修改建议：{{ wish.review_result.revision_suggestion }}</text
         >
+        <navigator
+          v-if="own && !config.useMock && canManageApplications(user.user, user.validated, wish)"
+          class="application-queue-link"
+          :url="`/pages/applications/index?wishId=${encodeURIComponent(wish.id)}`"
+        >
+          <text>查看应愿申请 ›</text>
+          <text v-if="wish.unread_application_count" class="category-pill">
+            {{ wish.unread_application_count }} 个新申请
+          </text>
+        </navigator>
         <view v-if="!config.useMock && own" class="wish-actions">
           <button
             v-if="allowed(wish, 'deleteWishesIdDraft')"
@@ -639,6 +652,14 @@ defineExpose({ show, leave, refresh })
 </template>
 
 <style scoped>
+.application-queue-link {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  color: var(--theme-teal);
+  margin-top: 16rpx;
+}
+
 .wish-actions {
   display: flex;
   gap: 12rpx;

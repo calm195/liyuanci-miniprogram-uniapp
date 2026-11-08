@@ -98,6 +98,7 @@ async function setup() {
       config,
       useUserStore: () => user,
       useWishStore: () => ({}),
+      useHiddenWishes: () => ({ hidden: reactive({ value: new Set<string>() }) }),
       canMeAction,
       canWishAction,
       session: { getEpoch: () => epoch },
@@ -119,7 +120,7 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const names =
-    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, defineProps, defineExpose'
+    'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, useHiddenWishes, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, defineProps, defineExpose'
   const page = await moduleFrom(
     `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, search, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state, show, leave, refresh };`,
   )

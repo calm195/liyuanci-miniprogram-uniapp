@@ -8,6 +8,7 @@ import { useUserStore } from '@/stores/user'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
 import { getWish } from '@/api/wishes'
+import { readNotification } from '@/api/chat'
 import {
   listMyApplications,
   listWishApplications,
@@ -29,6 +30,7 @@ import { wishStateLabels } from '@/utils/wish'
 
 const user = useUserStore()
 const wishId = ref('')
+const applicationId = ref('')
 const wish = ref<WishResult | null>(null)
 const items = ref<WishApplication[]>([])
 const cursor = ref<string | null>(null)
@@ -41,6 +43,17 @@ const error = ref('')
 const notice = ref('')
 const readEpoch = ref(-1)
 const readOwner = ref('')
+interface ApplicationCommand {
+  id: string
+  owner: string
+  epoch: number
+  version: number
+  message: string
+  key: string
+}
+const pendingCommand = ref<ApplicationCommand | null>(null)
+type SubmissionStatus = ApplicationStatus | 'in_progress'
+const submitted = ref<{ owner: string; epoch: number; status: SubmissionStatus } | null>(null)
 let generation = 0
 let writeGeneration = 0
 let visible = false
@@ -51,9 +64,28 @@ const scoped = computed(
 const currentWish = computed(() => (scoped.value ? wish.value : null))
 const ownerMode = computed(() => !!wishId.value && !!currentWish.value?.own_content)
 const rows = computed(() => (scoped.value ? items.value : []))
+const ownsCommand = (command: { owner: string; epoch: number } | null) =>
+  !!command && command.owner === user.user?.id && command.epoch === session.getEpoch()
+const mayRetry = computed(
+  () => !config.useMock && config.wishWritesReady && ownsCommand(pendingCommand.value),
+)
+const submittedStatus = computed(() =>
+  ownsCommand(submitted.value) ? submitted.value?.status : undefined,
+)
+const applicationInProgress = computed(
+  () =>
+    currentWish.value?.application_in_progress === true ||
+    submittedStatus.value === 'pending_scan' ||
+    submittedStatus.value === 'pending_review' ||
+    submittedStatus.value === 'active' ||
+    submittedStatus.value === 'in_progress',
+)
 const mayApply = computed(
   () =>
     scoped.value &&
+    !applicationInProgress.value &&
+    !submittedStatus.value &&
+    !mayRetry.value &&
     !config.useMock &&
     config.wishWritesReady &&
     canApplyToWish(user.user, user.validated, currentWish.value),
@@ -101,10 +133,11 @@ async function load(more = false) {
     if (target && target.id !== wishId.value) throw new Error('心愿目标不匹配')
     const owned = !!target?.own_content
     const page = !wishId.value
-      ? await listMyApplications({
-          ...(status.value ? { status: status.value } : {}),
-          cursor: nextCursor,
-        })
+      ? await listMyApplications(
+          applicationId.value
+            ? { application_id: applicationId.value }
+            : { ...(status.value ? { status: status.value } : {}), cursor: nextCursor },
+        )
       : owned && canManageApplications(user.user, user.validated, target)
         ? await listWishApplications(wishId.value, nextCursor)
         : { items: [], next_cursor: null }
@@ -113,7 +146,7 @@ async function load(more = false) {
     // 许愿人只显示同一心愿的已审有效申请，拒绝将待审或其他目标混入列表。
     const incoming = owned
       ? page.items.filter((item) => item.wish_id === wishId.value && item.status === 'active')
-      : page.items
+      : page.items.filter((item) => !applicationId.value || item.id === applicationId.value)
     wish.value = target
     items.value = [
       ...(more ? items.value : []),
@@ -122,6 +155,20 @@ async function load(more = false) {
     cursor.value = page.next_cursor
     readEpoch.value = epoch
     readOwner.value = owner
+    if (target?.application_in_progress) pendingCommand.value = null
+    // 只标记本页已展示申请对应的通知，保留后来到达和未翻到的申请提醒。
+    if (owned) {
+      for (const item of incoming) {
+        for (const receipt of item.unread_notices ?? []) {
+          if (!isCurrent()) return
+          await readNotification(
+            receipt,
+            `application-notice-${receipt.id}-${receipt.version}`,
+            true,
+          ).catch(() => undefined)
+        }
+      }
+    }
   } catch (failure) {
     if (!isCurrent()) return
     clearProjection()
@@ -204,15 +251,84 @@ async function write(
   }
 }
 async function submit() {
-  error.value = applicationMessageError(message.value)
-  if (error.value || !mayApply.value) return
-  const target = currentWish.value!
-  const input = message.value
-  await write(
-    () => mayApply.value && currentWish.value === target,
-    (key) => applyToWish(target.id, target.content_version!, input, key),
-    '申请已受理，留言审核后才会交给许愿人。可在“我的应愿”查看处理状态。',
-  )
+  if (busy.value || writing.value || (!mayApply.value && !mayRetry.value)) return
+  const retry = mayRetry.value
+  const owner = user.user?.id
+  if (!owner) return
+  if (!retry) {
+    error.value = applicationMessageError(message.value)
+    if (error.value) return
+  }
+  const epoch = session.getEpoch()
+  const command = retry
+    ? pendingCommand.value!
+    : {
+        id: currentWish.value!.id,
+        owner,
+        epoch,
+        version: currentWish.value!.content_version!,
+        message: message.value,
+        key: `application-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      }
+  const writeId = ++writeGeneration
+  const isCurrent = () => visible && ownsCommand(command) && writeId === writeGeneration
+  const confirmProgress = async () => {
+    const target = await getWish(command.id, false, true).catch(() => null)
+    return target?.id === command.id && target.application_in_progress === true
+  }
+  const saveReceipt = (status: SubmissionStatus) => {
+    pendingCommand.value = null
+    submitted.value = { owner, epoch, status }
+    message.value = ''
+    notice.value =
+      status === 'in_progress'
+        ? '已核实申请正在处理中，可在「我的应愿」查看状态。'
+        : ['pending_scan', 'pending_review', 'active'].includes(status)
+          ? '申请已受理，可在「我的应愿」查看处理状态。留言审核通过后会交给许愿人。'
+          : `申请状态已更新为「${applicationStatusLabels[status]}」，请在「我的应愿」查看。`
+  }
+  // 无回执时只核对当前状态或重放原留言、版本与幂等键。
+  pendingCommand.value = command
+  writing.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    if (retry && (await confirmProgress())) {
+      if (isCurrent()) saveReceipt('in_progress')
+      return
+    }
+    if (!isCurrent()) return
+    const result = await applyToWish(command.id, command.version, command.message, command.key)
+    if (!isCurrent()) return
+    if (result?.wish_id !== command.id || !(result.status in applicationStatusLabels))
+      throw new Error('申请回执无效')
+    // 已确认的提交结果不依赖详情刷新，也不会误判为不能申请。
+    saveReceipt(result.status)
+  } catch (failure) {
+    if (!isCurrent()) return
+    const status = failure instanceof RequestError ? failure.statusCode : 0
+    if (status === 408 || status === 409 || status < 400 || status >= 500) {
+      const inProgress = await confirmProgress()
+      if (!isCurrent()) return
+      if (inProgress) {
+        saveReceipt('in_progress')
+        return
+      }
+    }
+    if (status >= 400 && status < 500 && status !== 408) {
+      pendingCommand.value = null
+      await load()
+      if (isCurrent()) {
+        error.value = retry
+          ? '当前无法重试原申请，请在「我的应愿」核对是否已提交。'
+          : '本次申请未提交，请查看当前心愿或前往「我的应愿」确认状态。'
+      }
+    } else {
+      error.value = '申请结果尚未确认。可核实并重试原申请。'
+    }
+  } finally {
+    if (writeId === writeGeneration) writing.value = false
+  }
 }
 async function accept(application: WishApplication) {
   const target = currentWish.value
@@ -253,6 +369,8 @@ function leave() {
 watch(
   () => user.user?.id,
   () => {
+    if (!ownsCommand(pendingCommand.value)) pendingCommand.value = null
+    if (!ownsCommand(submitted.value)) submitted.value = null
     if (readOwner.value && readOwner.value !== user.user?.id) {
       generation++
       writeGeneration++
@@ -266,16 +384,25 @@ watch(
 )
 onLoad((query) => {
   wishId.value = typeof query?.wishId === 'string' ? query.wishId : ''
+  applicationId.value =
+    !wishId.value && typeof query?.applicationId === 'string' ? query.applicationId : ''
 })
 onShow(() => {
   visible = true
   void load()
 })
 onHide(leave)
-onUnload(leave)
+onUnload(() => {
+  pendingCommand.value = null
+  submitted.value = null
+  leave()
+})
 onPullDownRefresh(async () => {
   try {
-    await load()
+    if (!writing.value) {
+      submitted.value = null
+      await load()
+    }
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -283,11 +410,21 @@ onPullDownRefresh(async () => {
 </script>
 <template>
   <AppPage>
-    <text class="title">{{ wishId ? (ownerMode ? '心愿申请列表' : '申请应愿') : '我的应愿' }}</text>
+    <text class="title">{{
+      wishId
+        ? ownerMode
+          ? '心愿申请列表'
+          : '申请应愿'
+        : applicationId
+          ? '应愿申请结果'
+          : '我的应愿'
+    }}</text>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <navigator v-if="wishId" url="/pages/applications/index">查看我的应愿</navigator>
+    <navigator v-if="wishId || applicationId" url="/pages/applications/index"
+      >查看我的应愿</navigator
+    >
     <picker
-      v-if="!wishId"
+      v-if="!wishId && !applicationId"
       :range="['全部状态', ...Object.values(applicationStatusLabels)]"
       @change="runPageAction(() => selectStatus($event))"
     >
@@ -319,17 +456,33 @@ onPullDownRefresh(async () => {
           提交应愿申请
         </button>
       </template>
-      <text v-else-if="!ownerMode">当前无法申请，请以心愿状态和当前账号权限为准。</text>
+      <text v-else-if="applicationInProgress">申请中，可在「我的应愿」查看进度。</text>
+      <text v-else-if="submittedStatus && submittedStatus !== 'in_progress'">{{
+        applicationStatusLabels[submittedStatus]
+      }}</text>
+      <text v-else-if="!ownerMode && !mayRetry"
+        >当前无法申请，请以心愿状态和当前账号权限为准。</text
+      >
       <text v-if="ownerMode">仅显示审核通过且当前可处理的申请。</text>
     </view>
-    <text v-if="!busy && scoped && !rows.length && (!wishId || ownerMode)">暂无可展示的申请</text>
+    <button
+      v-if="mayRetry"
+      :disabled="busy || writing"
+      :loading="isPageActionPending('pages-applications-retry')"
+      @click="runPageAction(() => submit(), 'pages-applications-retry')"
+    >
+      核实并重试原申请
+    </button>
+    <text v-if="!busy && scoped && !rows.length && (!wishId || ownerMode)">{{
+      applicationId ? '这条申请暂不可查看' : '暂无可展示的申请'
+    }}</text>
     <view v-for="application in rows" :key="application.id" class="card">
-      <text>{{ applicationStatusLabels[application.status] || '未知状态' }}</text>
       <navigator
         v-if="!wishId"
         :url="`/pages/wish-detail/index?id=${encodeURIComponent(application.wish_id)}`"
-        >查看目标心愿</navigator
+        >{{ application.wish_title || '心愿标题暂不可查看' }}</navigator
       >
+      <text>{{ applicationStatusLabels[application.status] || '未知状态' }}</text>
       <template v-if="ownerMode && application.status === 'active'">
         <navigator
           class="moderation-link"

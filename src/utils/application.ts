@@ -13,6 +13,7 @@ export function canApplyToWish(me: UserInfo | null, validated: boolean, wish: Wi
     !!wish &&
     wish.current_state === 'published' &&
     !wish.own_content &&
+    !wish.application_in_progress &&
     wish.public?.author?.id !== me?.id &&
     validVersion(wish.content_version) &&
     !!wish.public &&

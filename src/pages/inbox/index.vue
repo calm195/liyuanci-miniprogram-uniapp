@@ -8,7 +8,7 @@ import { useUserStore } from '@/stores/user'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
 import { listConversations, listNotifications, readNotification } from '@/api/chat'
-import { notificationConversation } from '@/utils/chat'
+import { notificationDestination } from '@/utils/chat'
 import type { AppNotification, Conversation } from '@/types/chat'
 
 const user = useUserStore()
@@ -107,13 +107,6 @@ async function load(more = false) {
     if (visible && current === generation) busy.value = false
   }
 }
-function selectTab(value: 'conversations' | 'notifications') {
-  if (writing.value || busy.value || value === tab.value) return
-  tab.value = value
-  clear()
-  notice.value = ''
-  return load()
-}
 async function markRead(notification: AppNotification) {
   if (
     busy.value ||
@@ -159,13 +152,6 @@ async function markRead(notification: AppNotification) {
   } finally {
     if (writeId === writeGeneration) writing.value = false
   }
-}
-function openNotification(notification: AppNotification) {
-  if (busy.value || writing.value || !scoped.value || !notifications.value.includes(notification))
-    return
-  const target = notificationConversation(notification)
-  // 只构造本端固定路由；聊天页再读本人列表与目标消息，不展示通知快照。
-  if (target) uni.navigateTo({ url: `/pages/chat/index?id=${encodeURIComponent(target)}` })
 }
 function leave() {
   visible = false
@@ -229,44 +215,15 @@ onPullDownRefresh(async () => {
       <text v-if="scoped">已加载通知中有 {{ unreadCount }} 条未读</text>
       <text v-if="scoped && !busy && !notificationRows.length">暂无通知</text>
       <view v-for="notification in notificationRows" :key="notification.id" class="card">
-        <navigator
-          v-if="notification.target_kind === 'post' && notification.target_ref"
-          :url="`/pages/whispers/detail?id=${encodeURIComponent(notification.target_ref)}`"
-          >查看悄悄话与暖评</navigator
-        >
-        <navigator
-          v-if="notification.target_kind === 'capsule' && notification.target_ref"
-          :url="`/pages/capsules/detail?id=${encodeURIComponent(notification.target_ref)}`"
-          >查看时光胶囊</navigator
-        >
         <text>{{ notification.read ? '已读' : '未读' }}</text>
-        <text>{{ notification.notice || '有新进展，请查看相关页面。' }}</text>
-        <button
-          v-if="notificationConversation(notification)"
-          :disabled="busy || writing"
-          :loading="isPageActionPending('pages-inbox-index-button-4' + ':' + notification.id)"
-          @click="
-            runPageAction(
-              () => openNotification(notification),
-              'pages-inbox-index-button-4' + ':' + notification.id,
-            )
-          "
+        <text>{{ notification.notice || '这条通知的详情暂不可查看。' }}</text>
+        <navigator
+          v-if="notificationDestination(notification)"
+          :url="notificationDestination(notification)?.url || ''"
         >
-          打开聊天
-        </button>
-        <button
-          v-if="notification.kind === 'message_reviewed'"
-          :disabled="busy || writing"
-          :loading="isPageActionPending('pages-inbox-index-button-5' + ':' + notification.id)"
-          @click="
-            runPageAction(
-              () => selectTab('conversations'),
-              'pages-inbox-index-button-5' + ':' + notification.id,
-            )
-          "
-        >
-          查看聊天列表
-        </button>
+          {{ notificationDestination(notification)?.label }}
+        </navigator>
+        <text v-else class="subtitle">关联内容暂不可打开。</text>
         <button
           v-if="!notification.read"
           :disabled="busy || writing"

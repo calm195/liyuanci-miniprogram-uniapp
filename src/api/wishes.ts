@@ -1,7 +1,10 @@
 import { request } from '@/utils/request'
 import type { WishFilters, WishInput, WishPage, WishPublicContent, WishResult } from '@/types/wish'
-export const getWish = (id: string, trackView = false) =>
-  request<WishResult>({ url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}` })
+export const getWish = (id: string, trackView = false, silent = false) =>
+  request<WishResult>({
+    url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}`,
+    silent,
+  })
 
 // 分享只读取公开投影，避免作者或参与者会话返回自己的私有内容。
 export const getPublicWish = (id: string, trackView = false) =>

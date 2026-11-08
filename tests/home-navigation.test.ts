@@ -30,6 +30,7 @@ async function setup() {
   const epoch = ref(1)
   const hooks: Record<string, () => void> = {}
   const user = reactive({ user: { id: 'synthetic-student-a' } })
+  const hidden = ref(new Set<string>())
   const requests: ((data: unknown) => void)[] = []
   const { useHomeWishes } = await loadRuntime(
     readFileSync(new URL('../src/composables/use-home-wishes.ts', import.meta.url), 'utf8'),
@@ -37,6 +38,7 @@ async function setup() {
       config: { useMock: false },
       useUserStore: () => user,
       useWishStore: () => ({ demoWishes: [] }),
+      useHiddenWishes: () => ({ hidden }),
       publicWishBody,
       session: { getEpoch: () => epoch.value },
       listWishes: () => new Promise((resolve) => requests.push(resolve)),
@@ -52,7 +54,7 @@ async function setup() {
     },
   )
   const feed = useHomeWishes()
-  return { hooks, user, feed, requests, changeSession: () => epoch.value++ }
+  return { hooks, user, feed, hidden, requests, changeSession: () => epoch.value++ }
 }
 
 test('首页只展示公开上架投影，不使用草稿或隐私屏障内容补位', async () => {
@@ -70,6 +72,10 @@ test('首页只展示公开上架投影，不使用草稿或隐私屏障内容�
     s.feed.rows.value.map((x: WishResult) => x.id),
     [sample.id],
   )
+  s.hidden.value = new Set([sample.id])
+  assert.equal(s.feed.rows.value.length, 0)
+  s.hidden.value = new Set()
+  assert.equal(s.feed.rows.value[0].id, sample.id)
 })
 test('首页隐藏、换账号与乱序响应不会重新显示旧内容', async () => {
   const s = await setup()

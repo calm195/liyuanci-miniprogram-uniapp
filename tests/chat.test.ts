@@ -9,11 +9,13 @@ import {
   mergeMessages,
   isMessageStatus,
   notificationConversation,
+  notificationDestination,
 } from '../src/utils/chat.ts'
 import { createVisiblePoller } from '../src/utils/visible-poller.ts'
 import { messageStatusLabels } from '../src/types/chat.ts'
 import { displayFriendly } from '../src/utils/time.ts'
 import type {
+  AppNotification,
   Conversation,
   DeliveredMessage,
   MessageStatus,
@@ -446,6 +448,24 @@ test('REQ-006：仅送达通知可解析为会话，其他不透明引用不能�
       null,
     )
 })
+test('通知按服务端目标类型跳转，不能把目标引用作为任意页面地址', () => {
+  const note: AppNotification = {
+    id: 'notice',
+    version: 1,
+    kind: 'application_active',
+    read: false,
+    target_ref: 'wish?other=1',
+  }
+  assert.equal(notificationDestination(note), null)
+  assert.deepEqual(notificationDestination({ ...note, target_kind: 'wish_applications' }), {
+    url: '/pages/applications/index?wishId=wish%3Fother%3D1',
+    label: '查看应愿申请',
+  })
+  assert.deepEqual(
+    notificationDestination({ ...note, target_kind: 'my_application', target_ref: 'application' }),
+    { url: '/pages/applications/index?applicationId=application', label: '查看申请结果' },
+  )
+})
 async function setupInbox() {
   const user = reactive({
     user: { ...actor, verification: 'rejected' },
@@ -455,7 +475,6 @@ async function setupInbox() {
   })
   const hooks: Record<string, () => void> = {}
   const calls: Transport[] = []
-  const navigations: string[] = []
   let rows = [
     {
       id: 'synthetic-notification',
@@ -492,23 +511,16 @@ async function setupInbox() {
       },
     },
   )
-  Object.assign(globalThis, {
-    uni: {
-      navigateTo: (input: { url: string }) => {
-        navigations.push(input.url)
-      },
-    },
-  })
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/inbox/index.vue', import.meta.url)) +
-      '\nexport { load, selectTab, markRead, openNotification, notificationRows, unreadCount, notice, error };',
+      '\nexport { load, markRead, notificationRows, unreadCount, notice, error };',
     {
       ...api,
       useUserStore: () => user,
       config: { useMock: false },
       session: { getEpoch: () => 1, getToken: () => 'synthetic-token' },
       RequestError,
-      notificationConversation,
+      notificationDestination,
       onShow: (fn: () => void) => {
         hooks.show = fn
       },
@@ -522,12 +534,9 @@ async function setupInbox() {
   )
   hooks.show!()
   await settle()
-  page.selectTab('notifications')
-  await settle()
   return {
     page,
     calls,
-    navigations,
     hooks,
     user,
     RequestError,
@@ -544,8 +553,10 @@ test('REQ-006/018：通知已读绑定本人列表对象与通知6而非Me99，�
   assert.equal(s.page.unreadCount.value, 1)
   await s.page.markRead({ ...s.page.notificationRows.value[0] })
   assert.equal(writes(s.calls).length, 0)
-  s.page.openNotification(s.page.notificationRows.value[0])
-  assert.deepEqual(s.navigations, [`/pages/chat/index?id=${conversation.id}`])
+  assert.equal(
+    notificationDestination(s.page.notificationRows.value[0])?.url,
+    `/pages/chat/index?id=${conversation.id}`,
+  )
   await s.page.markRead(s.page.notificationRows.value[0])
   assert.deepEqual(writes(s.calls)[0]!.data, { expected_version: 6 })
   assert.ok(writes(s.calls)[0]!.header?.['Idempotency-Key'])
@@ -566,8 +577,8 @@ test('REQ-006：通知分页只传本人游标，409重读不重发，离开或�
   assert.match(s.page.notice.value, /手动确认/)
   const old = s.page.notificationRows.value[0]
   s.user.user.id = 'synthetic-other'
-  s.page.openNotification(old)
-  assert.equal(s.navigations.length, 0)
+  await s.page.markRead(old)
+  assert.equal(writes(s.calls).length, 1)
   assert.equal(s.page.notificationRows.value.length, 0)
   s.hooks.hide!()
   assert.equal(s.page.unreadCount.value, 0)

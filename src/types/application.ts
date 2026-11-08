@@ -19,6 +19,8 @@ export interface WishApplication {
   id: string
   version: number
   wish_id: string
+  wish_title?: string
+  unread_notices?: { id: string; version: number }[]
   status: ApplicationStatus
   applicant?: PublicProfile
   message?: string

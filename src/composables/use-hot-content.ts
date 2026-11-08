@@ -1,13 +1,15 @@
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import { listHotContent } from '@/api/hot-content'
 import type { HotContentEntry } from '@/api/hot-content'
 import type { HotContentKind } from '@/types/content'
 import { config } from '@/config'
 import { session } from '@/utils/session'
+import { useHiddenWishes } from './use-hidden-wishes'
 
 export function useHotContent() {
   const wish = ref<HotContentEntry[]>([])
+  const { hidden } = useHiddenWishes()
   const whisper = ref<HotContentEntry[]>([])
   const busy = ref({ wish: false, whisper: false })
   const errors = ref({ wish: '', whisper: '' })
@@ -63,5 +65,11 @@ export function useHotContent() {
   })
   onHide(leave)
   onUnload(leave)
-  return { wish, whisper, busy, errors, load }
+  return {
+    wish: computed(() => wish.value.filter((item) => !hidden.value.has(item.id))),
+    whisper,
+    busy,
+    errors,
+    load,
+  }
 }

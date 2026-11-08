@@ -78,7 +78,7 @@ type Transport = {
   data?: Record<string, unknown>
   header?: Record<string, string>
 }
-async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner') {
+async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner', applicationId?: string) {
   let target = structuredClone(mode === 'owner' ? ownedWish : publicWish)
   let resultRows = [
     structuredClone(sample),
@@ -98,7 +98,7 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner') {
     refresh: async () => {},
   })
   const config = reactive({ useMock: false, wishWritesReady: true })
-  const hooks: Record<string, (query?: { wishId: string }) => void> = {}
+  const hooks: Record<string, (query?: { wishId: string; applicationId?: string }) => void> = {}
   const calls: Transport[] = []
   let command: (input: Transport) => Promise<unknown> = async () => ({
     ...sample,
@@ -131,11 +131,16 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner') {
     readFileSync(new URL('../src/api/wishes.ts', import.meta.url), 'utf8'),
     { request },
   )
+  const { readNotification } = await loadRuntime(
+    readFileSync(new URL('../src/api/chat.ts', import.meta.url), 'utf8'),
+    { request },
+  )
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/applications/index.vue', import.meta.url)) +
-      '\nexport { load, items, rows, message, notice, error, submit, accept, withdraw, mayApply, currentWish, selectStatus, writing };',
+      '\nexport { load, items, rows, message, notice, error, submit, accept, withdraw, mayApply, mayRetry, applicationInProgress, currentWish, selectStatus, writing };',
     {
       ...api,
+      readNotification,
       getWish: wishes.getWish,
       config,
       useUserStore: () => user,
@@ -162,7 +167,7 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner') {
       },
     },
   )
-  hooks.load!({ wishId: mode === 'mine' ? '' : sample.wish_id })
+  hooks.load!({ wishId: mode === 'mine' ? '' : sample.wish_id, applicationId })
   hooks.show!()
   await settle()
   return {
@@ -193,6 +198,36 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner') {
   }
 }
 const writes = (calls: Transport[]) => calls.filter((call) => call.method)
+test('通知直达本人申请时绑定申请身份，许愿人仅标记当前页已展示申请', async () => {
+  const mine = await setup('mine', sample.id)
+  assert.equal(mine.calls[0]?.url, `/me/applications?application_id=${sample.id}`)
+  assert.deepEqual(
+    mine.page.rows.value.map((row: WishApplication) => row.id),
+    [sample.id],
+  )
+
+  const owner = await setup()
+  owner.setRows([
+    { ...sample, unread_notices: [{ id: 'notice-in-view', version: 4 }] },
+    {
+      ...sample,
+      id: 'pending',
+      status: 'pending_review',
+      unread_notices: [{ id: 'notice-not-visible', version: 2 }],
+    },
+  ])
+  await owner.page.load()
+  assert.deepEqual(
+    writes(owner.calls).map(({ url, data, header }) => ({ url, data, header })),
+    [
+      {
+        url: '/me/notifications/notice-in-view/read',
+        data: { expected_version: 4 },
+        header: { 'Idempotency-Key': 'application-notice-notice-in-view-4' },
+      },
+    ],
+  )
+})
 test('REQ-005/006：许愿人只看当前active，同意使用申请7和心愿19，不能套用列表外对象', async () => {
   const s = await setup()
   assert.deepEqual(
@@ -222,10 +257,37 @@ test('REQ-006：申请携当前正文版本，空留言也送审；101码点不�
   await s.page.submit()
   assert.equal(writes(s.calls).length, 0)
   s.page.message.value = ''
+  s.setGet(async () => {
+    throw new Error('提交后详情不可用')
+  })
   await s.page.submit()
   assert.deepEqual(writes(s.calls)[0]!.data, { message: '', wish_content_version: 3 })
-  assert.match(s.page.notice.value, /审核后/)
+  assert.match(s.page.notice.value, /审核通过后/)
   assert.equal(s.page.message.value, '')
+  assert.equal(s.page.applicationInProgress.value, true)
+  assert.equal(s.page.mayApply.value, false)
+  await s.page.submit()
+  assert.equal(writes(s.calls).length, 1)
+})
+test('申请超时先核实状态，结果未知时以原留言、版本和幂等键重试', async () => {
+  const s = await setup('apply')
+  s.page.message.value = '原始留言'
+  s.setCommand(async () => {
+    throw new Error('合成超时')
+  })
+  await s.page.submit()
+  assert.match(s.page.error.value, /尚未确认/)
+  assert.equal(s.page.mayRetry.value, true)
+  const first = writes(s.calls)[0]
+  s.page.message.value = '不随原命令发送'
+  await s.page.submit()
+  assert.deepEqual(writes(s.calls)[1], first)
+  s.setTarget({ ...publicWish, application_in_progress: true, allowed_actions: [] })
+  await s.page.submit()
+  assert.equal(writes(s.calls).length, 2)
+  assert.equal(s.page.mayRetry.value, false)
+  assert.equal(s.page.applicationInProgress.value, true)
+  assert.match(s.page.notice.value, /已核实/)
 })
 test('REQ-006/018：本人撤销只用本人列表，游标/状态透传，409重读不重复接受', async () => {
   const mine = await setup('mine')

@@ -54,8 +54,46 @@ export function isMessageStatus(value: MessageStatus, id: string): boolean {
   )
 }
 export function notificationConversation(notification: AppNotification): string | null {
-  // 仅聊天送达通知的目标是会话；其他类型不将不透明引用猜作会话或URL。
-  return notification.kind === 'message_delivered' && notification.target_ref
+  // 旧送达通知没有目标类型；消息审核必须由服务端确认并返回可访问的会话。
+  return (notification.kind === 'message_delivered' ||
+    (notification.kind === 'message_reviewed' && notification.target_kind === 'conversation')) &&
+    notification.target_ref
     ? notification.target_ref
     : null
+}
+
+export function notificationDestination(notification: AppNotification) {
+  const ref = encodeURIComponent(notification.target_ref || '')
+  const conversation = notificationConversation(notification)
+  if (conversation) {
+    return { url: `/pages/chat/index?id=${encodeURIComponent(conversation)}`, label: '打开聊天' }
+  }
+  if (notification.kind === 'message_reviewed') {
+    return { url: '/pages/inbox/index?view=conversations', label: '查看聊天列表' }
+  }
+  if (!ref) return null
+  if (notification.kind === 'crisis_care') {
+    return { url: `/pages/care/index?id=${ref}`, label: '查看援助资源' }
+  }
+  if (notification.kind === 'penalty_notice') {
+    return {
+      url: `/pages/safety/index?penaltyId=${ref}&notificationId=${encodeURIComponent(notification.id)}`,
+      label: '查看账号处置',
+    }
+  }
+  if (notification.kind === 'appeal_result') {
+    return { url: '/pages/safety/index?tab=appeals', label: '查看申诉结果' }
+  }
+  switch (notification.target_kind) {
+    case 'wish_applications':
+      return { url: `/pages/applications/index?wishId=${ref}`, label: '查看应愿申请' }
+    case 'my_application':
+      return { url: `/pages/applications/index?applicationId=${ref}`, label: '查看申请结果' }
+    case 'post':
+      return { url: `/pages/whispers/detail?id=${ref}`, label: '查看悄悄话与暖评' }
+    case 'capsule':
+      return { url: `/pages/capsules/detail?id=${ref}`, label: '查看时光胶囊' }
+    default:
+      return null
+  }
 }
