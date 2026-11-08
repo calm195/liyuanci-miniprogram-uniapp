@@ -7,10 +7,11 @@ import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { getVerification } from '@/api/auth'
 import { RequestError } from '@/utils/request'
-import { canMeAction, verificationInput } from '@/utils/actions'
+import { canMeAction, validStudentNumber, verificationInput } from '@/utils/actions'
 import { uploadStudentCard, getStudentCardAsset, submitVerification } from '@/api/verification'
 import type { StudentCardAsset, Verification } from '@/types/api'
 import { session } from '@/utils/session'
+import { createVisiblePoller } from '@/utils/visible-poller'
 
 const store = useUserStore()
 const name = ref('')
@@ -24,10 +25,18 @@ const currentReview = ref<Verification | null>(null)
 const reviewState = ref<'unknown' | 'absent' | 'present'>('unknown')
 const refreshing = ref(false)
 const querying = ref(false)
+const scanNotice = ref('')
+const scanPoller = createVisiblePoller(() => queryAsset())
+let scanDeadline = 0
 const assetEpoch = ref(-1)
 const reviewEpoch = ref(-1)
 const reviewOwner = ref('')
 const error = ref('')
+const studentNumberError = computed(() =>
+  studentNumber.value && !validStudentNumber(studentNumber.value)
+    ? '学号须为4位年份加8位数字，共12位，年份首位不能为0。'
+    : '',
+)
 const canUpload = computed(() =>
   canMeAction(store.user, store.user?.id || '', 'postMeStudentCardAssets', store.validated),
 )
@@ -35,7 +44,7 @@ const canSubmitReal = computed(
   () =>
     config.verificationWritesReady &&
     !!name.value.trim() &&
-    !!studentNumber.value.trim() &&
+    validStudentNumber(studentNumber.value) &&
     !busy.value &&
     !refreshing.value &&
     !querying.value &&
@@ -43,7 +52,7 @@ const canSubmitReal = computed(
     reviewEpoch.value === session.getEpoch() &&
     reviewOwner.value === store.user?.id &&
     assetEpoch.value === session.getEpoch() &&
-    reviewState.value !== 'unknown' &&
+    (reviewState.value === 'absent' || currentReview.value?.status === 'rejected') &&
     asset.value?.scan_status === 'approved',
 )
 const demoStatus = ref<'draft' | 'pending' | 'rejected' | 'approved'>('draft')
@@ -55,12 +64,22 @@ const canSubmitDemo = computed(
   () =>
     config.useMock &&
     !!name.value.trim() &&
-    !!studentNumber.value.trim() &&
+    validStudentNumber(studentNumber.value) &&
     asset.value?.scan_status === 'approved' &&
     demoStatus.value !== 'pending' &&
     demoStatus.value !== 'approved',
 )
+function stopScanPolling() {
+  scanPoller.stop()
+  scanDeadline = 0
+}
+function showScanProblem(title: string, content: string) {
+  scanNotice.value = content
+  uni.showModal({ title, content, showCancel: false })
+}
 function clearPrivateData() {
+  stopScanPolling()
+  scanNotice.value = ''
   generation++
   name.value = ''
   studentNumber.value = ''
@@ -76,6 +95,13 @@ function clearPrivateData() {
   refreshing.value = false
   querying.value = false
 }
+function acceptReview(review: Verification, epoch: number) {
+  if (!Number.isInteger(review.version) || review.version < 1) throw new Error('审核版本无效')
+  currentReview.value = review
+  reviewState.value = 'present'
+  reviewEpoch.value = epoch
+  reviewOwner.value = store.user?.id || ''
+}
 // 审核记录独立读取；本人资格和资产扫描都不能替代审核记录版本。
 async function refreshReview() {
   if (refreshing.value) return
@@ -87,16 +113,12 @@ async function refreshReview() {
   reviewState.value = 'unknown'
   error.value = ''
   try {
-    await store.refresh(false)
-    if (!isCurrent() || !store.isLoggedIn || !store.validated) return
+    await store.refresh(false, true)
+    if (!isCurrent() || !store.isLoggedIn) return
     try {
       const review = await getVerification(true)
       if (!isCurrent()) return
-      if (!Number.isInteger(review.version) || review.version < 1) throw new Error('审核版本无效')
-      currentReview.value = review
-      reviewState.value = 'present'
-      reviewEpoch.value = epoch
-      reviewOwner.value = store.user?.id || ''
+      acceptReview(review, epoch)
     } catch (failure) {
       if (!isCurrent()) return
       if (failure instanceof RequestError && (failure.statusCode || failure.code) === 404) {
@@ -109,6 +131,21 @@ async function refreshReview() {
     if (isCurrent()) error.value = '无法确认当前审核记录，请重新读取；不能据此作为首次申请。'
   } finally {
     if (visible && current === generation) refreshing.value = false
+  }
+}
+function showCardResult(result: StudentCardAsset) {
+  if (result.scan_status === 'approved') {
+    uni.showModal({
+      title: '图片扫描通过',
+      content: '请填写姓名和学号，然后点击「提交认证申请」，等待人工审核。',
+      showCancel: false,
+    })
+  } else if (result.scan_status === 'rejected') {
+    uni.showModal({
+      title: '图片扫描未通过',
+      content: '图片未通过安全内容检查，请重新上传清晰、完整的本人学生卡照片。',
+      showCancel: false,
+    })
   }
 }
 async function chooseCard() {
@@ -155,18 +192,36 @@ async function chooseCard() {
     if (visible && current === generation && epoch === session.getEpoch()) {
       asset.value = uploaded
       assetEpoch.value = epoch
+      scanNotice.value = ''
+      stopScanPolling()
+      showCardResult(uploaded)
+      // 自动查询只在本页本次上传后运行，到期后保留手动查询入口。
+      if (uploaded.scan_status === 'pending') {
+        scanDeadline = Date.now() + 120_000
+        scanPoller.start()
+      }
     }
   } catch (failure) {
-    if (visible && current === generation && epoch === session.getEpoch())
-      error.value = failure instanceof Error ? failure.message : '未完成选图或上传，请重试。'
+    if (!visible || current !== generation || epoch !== session.getEpoch()) return
+    if (
+      failure &&
+      typeof failure === 'object' &&
+      'errMsg' in failure &&
+      typeof failure.errMsg === 'string' &&
+      failure.errMsg.includes('cancel')
+    )
+      return
+    const message = failure instanceof Error ? failure.message : '无法打开所选图片，请重新选择。'
+    error.value = message
+    uni.showModal({ title: '学生卡上传未完成', content: message, showCancel: false })
   } finally {
     if (current === generation) uploading.value = false
   }
 }
-// 暂用用户触发的单次查询，不猜测自动查询周期或恢复接口。
 async function queryAsset() {
-  if (config.useMock || querying.value || busy.value || !asset.value || !store.validated) return
+  if (config.useMock || querying.value || busy.value || !asset.value) return
   if (assetEpoch.value !== session.getEpoch()) {
+    stopScanPolling()
     asset.value = null
     return
   }
@@ -178,23 +233,38 @@ async function queryAsset() {
     current === generation &&
     epoch === session.getEpoch() &&
     asset.value?.asset_id === id
+  const previousStatus = asset.value.scan_status
   querying.value = true
-  asset.value = { asset_id: id, scan_status: 'pending' }
-  error.value = ''
+  scanNotice.value = ''
   try {
     const result = await getStudentCardAsset(id)
     if (!isCurrent()) return
     if (result.asset_id !== id || !['pending', 'approved', 'rejected'].includes(result.scan_status))
       throw new Error('资产状态无效')
     asset.value = result
+    if (result.scan_status !== 'pending') {
+      stopScanPolling()
+      if (result.scan_status !== previousStatus) showCardResult(result)
+    } else if (scanDeadline && Date.now() >= scanDeadline) {
+      stopScanPolling()
+      showScanProblem('图片扫描时间较长', '暂未收到扫描结果，可以稍后点击「查询图片扫描状态」。')
+    } else if (!scanDeadline) {
+      scanNotice.value = '仍未收到扫描结果，可以稍后再次查询。'
+    }
   } catch (failure) {
     if (!isCurrent()) return
-    if (
-      failure instanceof RequestError &&
-      ((failure.statusCode || failure.code) === 404 || (failure.statusCode || failure.code) === 401)
-    )
-      asset.value = null
-    error.value = '无法确认图片扫描结果，请重新查询或选择图片。'
+    stopScanPolling()
+    const status = failure instanceof RequestError ? failure.statusCode || failure.code : 0
+    if (status === 404 || status === 401) asset.value = null
+    const message =
+      status === 503
+        ? '安全扫描服务暂未能完成处理。请稍后查询，若仍失败，请重新上传图片。'
+        : status === 404
+          ? '这张图片已无法查询，请重新上传。'
+          : status === 401
+            ? '登录状态已失效，请重新登录后上传图片。'
+            : '暂时无法查询扫描结果，请检查网络后重试。'
+    showScanProblem('图片扫描查询未完成', message)
   } finally {
     if (current === generation) querying.value = false
   }
@@ -211,15 +281,17 @@ async function submitReal() {
       state: reviewState.value,
       record: currentReview.value,
     })
-    await submitVerification(
+    const review = await submitVerification(
       input,
       `verification-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     )
     if (!isCurrent()) return
+    // POST 回执已确认审核记录；本人资格刷新失败也不能覆盖已受理状态。
+    acceptReview(review, epoch)
     name.value = ''
     studentNumber.value = ''
     asset.value = null
-    await refreshReview()
+    void store.refresh(false, true).catch(() => {})
   } catch (failure) {
     if (!isCurrent()) return
     if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
@@ -229,9 +301,10 @@ async function submitReal() {
       if (asset.value) asset.value = { asset_id: asset.value.asset_id, scan_status: 'pending' }
       error.value = '图片扫描尚未就绪，请重新查询。'
     } else {
-      reviewState.value = 'unknown'
-      currentReview.value = null
-      error.value = '申请未完成，请重新读取审核记录后操作。'
+      error.value =
+        failure instanceof RequestError && (failure.statusCode || failure.code) === 409
+          ? '申请与当前账号或学号状态冲突，请核对学号并重新读取审核记录。'
+          : '未能确认本次申请结果，请重新读取审核记录后再试。'
     }
   } finally {
     if (current === generation) submitting.value = false
@@ -243,7 +316,14 @@ function scanDemo(status: 'approved' | 'rejected') {
 function submit() {
   return config.useMock ? submitDemo() : submitReal()
 }
-watch(() => store.user?.id, clearPrivateData, { flush: 'sync' })
+watch(
+  () => store.user?.id,
+  (id) => {
+    clearPrivateData()
+    if (id && visible && !config.useMock) void refreshReview()
+  },
+  { flush: 'sync' },
+)
 function submitDemo() {
   if (!canSubmitDemo.value) return
   demoStatus.value = 'pending'
@@ -313,8 +393,14 @@ onPullDownRefresh(async () => {
           reviewState === 'absent'
             ? '当前没有认证申请记录。'
             : reviewState === 'present'
-              ? '已读取当前认证申请记录。'
-              : '当前审核记录尚未确认。'
+              ? currentReview?.status === 'pending'
+                ? '认证申请已提交，等待人工审核。'
+                : currentReview?.status === 'approved'
+                  ? '学生认证已通过。'
+                  : '认证申请已驳回，可更正后重新提交。'
+              : refreshing
+                ? ''
+                : '当前审核记录尚未确认，请重新读取。'
         }}</text>
         <button
           :disabled="refreshing || busy || querying"
@@ -339,6 +425,7 @@ onPullDownRefresh(async () => {
       />
       <input
         v-model="studentNumber"
+        :class="{ 'student-number-invalid': studentNumberError }"
         placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="学号：4位年份＋8位数字"
@@ -349,6 +436,7 @@ onPullDownRefresh(async () => {
           demoStatus === 'approved'
         "
       />
+      <text v-if="studentNumberError" class="error">{{ studentNumberError }}</text>
       <button
         :disabled="
           busy ||
@@ -364,17 +452,18 @@ onPullDownRefresh(async () => {
       <text v-if="!config.useMock && !asset && !busy">
         请选择真实 PNG/JPEG 图片。上传成功后显示扫描查询按钮。
       </text>
+      <text v-if="!asset && scanNotice">{{ scanNotice }}</text>
       <text v-if="asset"
         >图片扫描状态：{{
           asset.scan_status === 'pending'
-            ? '等待安全扫描'
+            ? scanNotice || '等待安全扫描'
             : asset.scan_status === 'approved'
-              ? '安全扫描通过，尚未认证'
+              ? '安全扫描通过，请提交认证申请'
               : '安全扫描未通过，请重新选择'
         }}</text
       >
-      <text v-if="asset?.scan_status === 'pending' && !config.useMock"
-        >图片已受理，请手动查询扫描状态；安全扫描通过后仍须申请学生认证。</text
+      <text v-if="asset?.scan_status === 'pending' && !config.useMock && !scanNotice"
+        >图片已受理，正在自动查询扫描状态。安全扫描通过后仍须提交认证申请。</text
       >
       <button
         v-if="!config.useMock && asset"
@@ -418,3 +507,9 @@ onPullDownRefresh(async () => {
     </view>
   </AppPage>
 </template>
+
+<style scoped>
+input.student-number-invalid {
+  border-color: var(--theme-danger);
+}
+</style>

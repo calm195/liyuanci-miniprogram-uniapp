@@ -3,16 +3,21 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
 import { reactive } from 'vue'
-import { canMeAction, verificationInput } from '../src/utils/actions.ts'
+import { createVisiblePoller } from '../src/utils/visible-poller.ts'
+import { canMeAction, validStudentNumber, verificationInput } from '../src/utils/actions.ts'
 
 // 执行实际页面脚本，仅替换平台、会话及后端传输，不能作为真实联调证据。
 async function setup() {
   const hooks: Record<string, () => void> = {}
   let epoch = 1
+  let scheduledScan: (() => void) | undefined
   const sent: unknown[] = []
+  const modals: { title: string; content: string }[] = []
+  const showModal = (modal: (typeof modals)[number]) => modals.push(modal)
+  Object.assign(globalThis, { uni: { showModal } })
   let submit = async (input: unknown): Promise<unknown> => {
     sent.push(input)
-    return {}
+    return { request_id: 'synthetic-review', version: 1, status: 'pending' }
   }
   let query = async (id: string): Promise<unknown> => ({ asset_id: id, scan_status: 'approved' })
   const config = reactive({ useMock: false, verificationWritesReady: false })
@@ -40,7 +45,18 @@ async function setup() {
   Object.assign(globalThis, {
     __verificationPage: {
       config,
+      createVisiblePoller: (task: () => Promise<void>) =>
+        createVisiblePoller(task, {
+          set: (callback) => {
+            scheduledScan = callback
+            return 1 as unknown as ReturnType<typeof setTimeout>
+          },
+          clear: () => {
+            scheduledScan = undefined
+          },
+        }),
       canMeAction,
+      validStudentNumber,
       verificationInput,
       submitVerification: (input: unknown) => submit(input),
       getStudentCardAsset: (id: string) => query(id),
@@ -69,7 +85,7 @@ async function setup() {
     .split('</script>')[0]!
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, useUserStore, getVerification, RequestError, canMeAction, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
+  const source = `const { config, createVisiblePoller, useUserStore, getVerification, RequestError, canMeAction, validStudentNumber, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
@@ -83,6 +99,13 @@ async function setup() {
     config,
     store,
     sent,
+    modals,
+    showModal,
+    nextScan: () => {
+      const callback = scheduledScan
+      scheduledScan = undefined
+      return callback
+    },
     setSubmit: (fn: typeof submit) => {
       submit = fn
     },
@@ -246,7 +269,7 @@ test('B14 / I1-S01/S02：单次查询不自动认证，离开丢弃、重入不�
 })
 
 test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可提交，正常离开仍清理', async () => {
-  const { page, hooks, config, store } = await setup()
+  const { page, hooks, config, store, showModal } = await setup()
   hooks.show!()
   await settle()
   config.verificationWritesReady = true
@@ -255,6 +278,7 @@ test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可�
   let choose!: (result: { tempFilePaths: string[] }) => void
   Object.assign(globalThis, {
     uni: {
+      showModal,
       chooseImage: (options: { success: typeof choose }) => {
         hooks.hide!()
         choose = options.success
@@ -301,7 +325,7 @@ test('REQ-018：账号变化清空认证姓名、学号、审核记录与学生�
 })
 
 test('认证页每个动作只显示自身进度，并阻止重复上传、查询和提交', async () => {
-  const { page, hooks, config, setSubmit, sent } = await setup()
+  const { page, hooks, config, setSubmit, sent, showModal } = await setup()
   hooks.show!()
   await settle()
   config.verificationWritesReady = true
@@ -309,6 +333,7 @@ test('认证页每个动作只显示自身进度，并阻止重复上传、查�
   let chooseCalls = 0
   Object.assign(globalThis, {
     uni: {
+      showModal,
       chooseImage: (options: { success: typeof choose }) => {
         chooseCalls++
         choose = options.success
@@ -340,10 +365,113 @@ test('认证页每个动作只显示自身进度，并阻止重复上传、查�
     await page.chooseCard()
     await page.submitReal()
     assert.equal(chooseCalls, 1)
-    complete({})
+    complete({ request_id: 'synthetic-review', version: 8, status: 'pending' })
     await submit
     assert.equal(page.busy.value, false)
   } finally {
     Reflect.deleteProperty(globalThis, 'uni')
   }
+})
+
+test('申请回执确认待审核，后续本人资格刷新失败也保留记录', async () => {
+  const { page, hooks, config, setRead, setSubmit, store } = await setup()
+  hooks.show!()
+  await settle()
+  config.verificationWritesReady = true
+  page.name.value = '合成姓名'
+  page.assetEpoch.value = 1
+  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
+  for (const invalid of ['20260000123', '０20600001234', '002600001234', '202600001234\n']) {
+    page.studentNumber.value = invalid
+    assert.equal(page.canSubmitReal.value, false)
+  }
+  page.studentNumber.value = '202600001234'
+  let reads = 0
+  setRead(async () => {
+    reads++
+    throw new Error('读取失败')
+  })
+  setSubmit(async () => {
+    store.refresh = async () => {
+      throw new Error('资格读取失败')
+    }
+    return { request_id: 'synthetic-review', version: 8, status: 'pending' }
+  })
+  await page.submitReal()
+  assert.equal(page.currentReview.value.status, 'pending')
+  assert.equal(page.reviewState.value, 'present')
+  assert.equal(page.canSubmitReal.value, false)
+  assert.equal(page.error.value, '')
+  assert.equal(reads, 0)
+})
+
+test('图片扫描拒绝和通过都弹窗，分别提示重传和提交认证申请', async () => {
+  const { page, hooks, setQuery, modals } = await setup()
+  hooks.show!()
+  await settle()
+  page.assetEpoch.value = 1
+  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'pending' }
+  setQuery(async (id) => ({ asset_id: id, scan_status: 'rejected' }))
+  await page.queryAsset()
+  assert.equal(modals[0]?.title, '图片扫描未通过')
+  assert.match(modals[0]?.content ?? '', /安全内容检查/)
+  await page.queryAsset()
+  assert.equal(modals.length, 1)
+  page.asset.value = { asset_id: 'another-asset', scan_status: 'pending' }
+  setQuery(async (id) => ({ asset_id: id, scan_status: 'approved' }))
+  await page.queryAsset()
+  assert.equal(modals[1]?.title, '图片扫描通过')
+  assert.match(modals[1]?.content ?? '', /提交认证申请/)
+})
+
+test('扫描服务不可用时弹窗提示，并保留图片供手动重新查询', async () => {
+  const { page, hooks, setQuery, RequestError, modals } = await setup()
+  hooks.show!()
+  await settle()
+  page.assetEpoch.value = 1
+  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'pending' }
+  setQuery(async () => {
+    throw new RequestError(503, 'DEPENDENCY_UNAVAILABLE')
+  })
+  await page.queryAsset()
+  assert.equal(modals[0]?.title, '图片扫描查询未完成')
+  assert.match(modals[0]?.content ?? '', /安全扫描服务暂未能完成处理/)
+  assert.equal(page.asset.value.asset_id, 'synthetic-asset')
+  assert.equal(page.canSubmitReal.value, false)
+  setQuery(async (id) => ({ asset_id: id, scan_status: 'approved' }))
+  await page.queryAsset()
+  assert.equal(modals[1]?.title, '图片扫描通过')
+})
+
+test('上传后自动查询，等待超过两分钟时弹窗并停止自动查询', async (context) => {
+  const { page, hooks, setQuery, modals, showModal, nextScan } = await setup()
+  const clock = context.mock.method(Date, 'now', () => 1000)
+  hooks.show!()
+  await settle()
+  Object.assign(globalThis, {
+    uni: {
+      showModal,
+      chooseImage: (options: { success: (value: { tempFilePaths: string[] }) => void }) =>
+        options.success({ tempFilePaths: ['synthetic-path'] }),
+    },
+  })
+  let reads = 0
+  setQuery(async (id) => {
+    reads++
+    return { asset_id: id, scan_status: 'pending' }
+  })
+  await page.chooseCard()
+  await settle()
+  nextScan()?.()
+  await settle()
+  assert.equal(reads, 1)
+  assert.equal(modals.length, 0)
+  clock.mock.mockImplementation(() => 122_000)
+  nextScan()?.()
+  await settle()
+  assert.equal(reads, 2)
+  assert.equal(modals[0]?.title, '图片扫描时间较长')
+  assert.equal(nextScan(), undefined)
+  await page.queryAsset()
+  assert.equal(reads, 3)
 })

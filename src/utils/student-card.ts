@@ -1,10 +1,10 @@
 // 与当前生产学生卡预算保持一致；服务端仍负责实际图片和规范化结果的最终校验。
-export const studentCardMaxBytes = 8 * 1024 * 1024
+export const studentCardMaxBytes = 4 * 1024 * 1024
 export const studentCardMaxPixels = 4_000_000
 
 export function assertStudentCardSize(size: number) {
   if (!Number.isSafeInteger(size) || size < 1) throw new Error('无法确认图片大小，请重新选择')
-  if (size > studentCardMaxBytes) throw new Error('图片不能超过 8 MiB，请压缩或裁剪后重新选择')
+  if (size > studentCardMaxBytes) throw new Error('图片不能超过 4 MiB，请压缩或裁剪后重新选择')
 }
 
 export function assertStudentCardDimensions(width: number, height: number) {

@@ -43,6 +43,7 @@ function responseErrorMessage(
       return '图片处理后超过服务器大小上限，请裁剪或降低分辨率后重新上传'
     if (code === 'STUDENT_CARD_PIXELS_EXCEEDED')
       return '图片像素超过服务器上限，请降低分辨率后重新上传'
+    if (status === 400) return '服务器无法处理这张图片，请重新选择可正常打开的 PNG 或 JPEG 图片'
   }
   return '请求未完成，请稍后重试'
 }

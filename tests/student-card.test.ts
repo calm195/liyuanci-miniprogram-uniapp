@@ -90,14 +90,15 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
     assert.equal(sent.length, 1)
     assert.equal(sent[0]!.url, '/me/student-card-assets')
     assert.equal(sent[0]!.method, 'POST')
+    assert.equal(sent[0]!.timeout, 45_000)
     assert.ok(sent[0]!.data instanceof ArrayBuffer)
     const headers = sent[0]!.header as Record<string, string>
     assert.match(headers['Content-Type']!, /^multipart\/form-data; boundary=/)
     assert.equal(headers['Idempotency-Key'], 'synthetic-key')
     assert.equal(sent[0]!.filePath, undefined)
     const previousReads = reads
-    fileSize = 8 * 1024 * 1024 + 1
-    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /8 MiB/)
+    fileSize = 4 * 1024 * 1024 + 1
+    await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /4 MiB/)
     fileSize = bytes.byteLength
     imageWidth = 4_000_000
     await assert.rejects(uploadStudentCard('synthetic-path', 'synthetic-key'), /400 万像素/)
@@ -114,8 +115,8 @@ test('T013：真实上传适配发送二进制 multipart、幂等键，兼容跨
 })
 
 test('学生卡文件和像素边界在网络发送前明确提示，等于上限仍可接受', () => {
-  assert.doesNotThrow(() => assertStudentCardSize(8 * 1024 * 1024))
-  assert.throws(() => assertStudentCardSize(8 * 1024 * 1024 + 1), /8 MiB/)
+  assert.doesNotThrow(() => assertStudentCardSize(4 * 1024 * 1024))
+  assert.throws(() => assertStudentCardSize(4 * 1024 * 1024 + 1), /4 MiB/)
   assert.throws(() => assertStudentCardSize(Number.NaN), /无法确认/)
   assert.doesNotThrow(() => assertStudentCardDimensions(2000, 2000))
   assert.throws(() => assertStudentCardDimensions(2001, 2000), /400 万像素/)

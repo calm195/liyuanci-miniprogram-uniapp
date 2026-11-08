@@ -11,10 +11,14 @@ export async function uploadStudentCard(filePath: string, key: string) {
   const epoch = session.getEpoch()
   if (!session.getToken() || !key) throw new Error('请先登录后重新上传学生卡')
   // 先读取文件元数据，超限图片不读入内存、不发送网络请求。
-  const file = await uni.getFileInfo({ filePath })
+  const file = await uni.getFileInfo({ filePath }).catch(() => {
+    throw new Error('无法读取图片文件，请重新选择')
+  })
   assertStudentCardSize(file.size)
   // 平台解码结果与文件签名共同校验，不能只信扩展名。
-  const image = await uni.getImageInfo({ src: filePath })
+  const image = await uni.getImageInfo({ src: filePath }).catch(() => {
+    throw new Error('图片无法解码，请重新选择可正常打开的 PNG 或 JPEG 图片')
+  })
   assertStudentCardDimensions(image.width, image.height)
   const data = await new Promise<ArrayBuffer>((resolve, reject) => {
     uni.getFileSystemManager().readFile({
@@ -35,15 +39,18 @@ export async function uploadStudentCard(filePath: string, key: string) {
   if (epoch !== session.getEpoch()) throw new Error('会话已变化，请重新选择学生卡')
   return request<StudentCardAsset>({
     url: '/me/student-card-assets',
+    timeout: 45_000,
+    silent: true,
     method: 'POST',
     data: multipart.body,
     header: { 'Content-Type': multipart.contentType, 'Idempotency-Key': key },
   })
 }
-// 页面按生命周期隔离单次查询；不推断扫描完成时间。
+// 查询提示由认证页统一展示。
 export function getStudentCardAsset(id: string) {
   return request<StudentCardAsset>({
     url: `/me/student-card-assets/${encodeURIComponent(id)}`,
+    silent: true,
     method: 'GET',
   })
 }
@@ -51,6 +58,7 @@ export function getStudentCardAsset(id: string) {
 export function submitVerification(input: VerificationInput, key: string) {
   return request<Verification>({
     url: '/me/verification-requests',
+    silent: true,
     method: 'POST',
     data: input,
     header: { 'Idempotency-Key': key },
