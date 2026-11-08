@@ -76,6 +76,7 @@ async function markRead(item: Notification) {
       )
         throw new Error('通知回执目标不匹配，请刷新。')
       items.value = items.value.map((old) => (old.id === result.id ? result : old))
+      notice.value = '通知已标记为已读。'
     },
     () => load(),
   )

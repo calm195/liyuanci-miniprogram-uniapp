@@ -14,7 +14,11 @@ async function setup() {
   const sent: unknown[] = []
   const modals: { title: string; content: string }[] = []
   const showModal = (modal: (typeof modals)[number]) => modals.push(modal)
-  Object.assign(globalThis, { uni: { showModal } })
+  const $emit = (_event: string, value: { message: string }) => {
+    const [title, ...parts] = value.message.split('：')
+    modals.push({ title: title!, content: parts.join('：') })
+  }
+  Object.assign(globalThis, { uni: { showModal, $emit } })
   let submit = async (input: unknown): Promise<unknown> => {
     sent.push(input)
     return { request_id: 'synthetic-review', version: 1, status: 'pending' }
@@ -101,6 +105,7 @@ async function setup() {
     sent,
     modals,
     showModal,
+    $emit,
     nextScan: () => {
       const callback = scheduledScan
       scheduledScan = undefined
@@ -269,7 +274,7 @@ test('B14 / I1-S01/S02：单次查询不自动认证，离开丢弃、重入不�
 })
 
 test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可提交，正常离开仍清理', async () => {
-  const { page, hooks, config, store, showModal } = await setup()
+  const { page, hooks, config, store, showModal, $emit } = await setup()
   hooks.show!()
   await settle()
   config.verificationWritesReady = true
@@ -279,6 +284,7 @@ test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可�
   Object.assign(globalThis, {
     uni: {
       showModal,
+      $emit,
       chooseImage: (options: { success: typeof choose }) => {
         hooks.hide!()
         choose = options.success
@@ -325,7 +331,7 @@ test('REQ-018：账号变化清空认证姓名、学号、审核记录与学生�
 })
 
 test('认证页每个动作只显示自身进度，并阻止重复上传、查询和提交', async () => {
-  const { page, hooks, config, setSubmit, sent, showModal } = await setup()
+  const { page, hooks, config, setSubmit, sent, showModal, $emit } = await setup()
   hooks.show!()
   await settle()
   config.verificationWritesReady = true
@@ -334,6 +340,7 @@ test('认证页每个动作只显示自身进度，并阻止重复上传、查�
   Object.assign(globalThis, {
     uni: {
       showModal,
+      $emit,
       chooseImage: (options: { success: typeof choose }) => {
         chooseCalls++
         choose = options.success
@@ -405,7 +412,7 @@ test('申请回执确认待审核，后续本人资格刷新失败也保留记�
   assert.equal(reads, 0)
 })
 
-test('图片扫描拒绝和通过都弹窗，分别提示重传和提交认证申请', async () => {
+test('图片扫描拒绝和通过都悬浮提示，分别提示重传和提交认证申请', async () => {
   const { page, hooks, setQuery, modals } = await setup()
   hooks.show!()
   await settle()
@@ -424,7 +431,7 @@ test('图片扫描拒绝和通过都弹窗，分别提示重传和提交认证�
   assert.match(modals[1]?.content ?? '', /提交认证申请/)
 })
 
-test('扫描服务不可用时弹窗提示，并保留图片供手动重新查询', async () => {
+test('扫描服务不可用时悬浮提示提示，并保留图片供手动重新查询', async () => {
   const { page, hooks, setQuery, RequestError, modals } = await setup()
   hooks.show!()
   await settle()
@@ -443,14 +450,15 @@ test('扫描服务不可用时弹窗提示，并保留图片供手动重新查�
   assert.equal(modals[1]?.title, '图片扫描通过')
 })
 
-test('上传后自动查询，等待超过两分钟时弹窗并停止自动查询', async (context) => {
-  const { page, hooks, setQuery, modals, showModal, nextScan } = await setup()
+test('上传后自动查询，等待超过两分钟时悬浮提示并停止自动查询', async (context) => {
+  const { page, hooks, setQuery, modals, showModal, $emit, nextScan } = await setup()
   const clock = context.mock.method(Date, 'now', () => 1000)
   hooks.show!()
   await settle()
   Object.assign(globalThis, {
     uni: {
       showModal,
+      $emit,
       chooseImage: (options: { success: (value: { tempFilePaths: string[] }) => void }) =>
         options.success({ tempFilePaths: ['synthetic-path'] }),
     },

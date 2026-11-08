@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive } from 'vue'
-import { createNoticeQueue, noticeContext, noticeEvent } from '../src/utils/notices.ts'
+import {
+  createNoticeQueue,
+  noticeContext,
+  noticeEvent,
+  resultNoticeKind,
+} from '../src/utils/notices.ts'
 import type { NoticeItem } from '../src/utils/notices.ts'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
 
@@ -33,7 +38,7 @@ test('悬浮提示按类型定时关闭，重复消息重置计时，旧计时�
   )
   const success = queue.show('已保存', 'success')
   const old = time.jobs.get(1)!
-  assert.equal(old.delay, 4000)
+  assert.equal(old.delay, 3000)
   assert.equal(queue.show('已保存', 'success'), success)
   assert.equal(items.length, 1)
   old.callback()
@@ -71,17 +76,27 @@ test('关闭不改变业务错误，相同错误新操作再次显示，页面�
     pageActionGeneration: 1,
     pageActionIdentity: 'save-avatar',
   })
+  const instance: { proxy?: typeof proxy } = {}
+  let mount = () => {}
   let cleanup = () => {}
   await loadRuntime(pageScript(new URL('../src/components/AppNotice.vue', import.meta.url)), {
     defineProps: () => props,
     withDefaults: (value: unknown) => value,
     inject: () => queue,
     noticeContext,
-    getCurrentInstance: () => ({ proxy }),
+    resultNoticeKind,
+    getCurrentInstance: () => instance,
+    onMounted: (callback: () => void) => {
+      mount = callback
+    },
     onUnmounted: (callback: () => void) => {
       cleanup = callback
     },
   })
+  assert.equal(items.length, 0)
+  instance.proxy = proxy
+  mount()
+  await settle()
   assert.equal(items.length, 1)
   queue.dismiss(items[0]!.id)
   assert.equal(props.message, '请选择图片')
@@ -113,14 +128,20 @@ test('原生事件仅投递到可见页面，页面隐藏和卸载清理计时�
   const time = clock()
   async function page(active: boolean) {
     const proxy = reactive({ isPageVisible: active })
+    const instance: { proxy?: typeof proxy } = {}
+    let mount = () => {}
     let hide = () => {}
     let unmount = () => {}
     const runtime = await loadRuntime(
       readFileSync(new URL('../src/composables/use-page-notices.ts', import.meta.url), 'utf8'),
       {
-        getCurrentInstance: () => ({ proxy }),
+        getCurrentInstance: () => instance,
+        onMounted: (fn: () => void) => {
+          mount = fn
+        },
         provide: () => {},
         noticeContext,
+        resultNoticeKind,
         noticeEvent,
         createNoticeQueue: (update: (items: NoticeItem[]) => void) =>
           createNoticeQueue(update, time.schedule, time.cancel),
@@ -137,9 +158,12 @@ test('原生事件仅投递到可见页面，页面隐藏和卸载清理计时�
         },
       },
     )
+    const notices = runtime.usePageNotices()
+    instance.proxy = proxy
+    mount()
     return {
       proxy,
-      notices: runtime.usePageNotices(),
+      notices,
       hide: () => hide(),
       unmount: () => unmount(),
     }
@@ -185,4 +209,31 @@ test('动态结果提示统一使用悬浮组件，请求层不调用不可关�
   const host = readFileSync(new URL('../src/components/AppNoticeHost.vue', import.meta.url), 'utf8')
   assert.match(host, /position: fixed/)
   assert.match(host, /aria-label="关闭提示"/)
+})
+
+test('警告与未知结果按独立时长关闭，处理中可更新为最终结果', () => {
+  const time = clock()
+  let items: NoticeItem[] = []
+  const queue = createNoticeQueue(
+    (value) => {
+      items = value
+    },
+    time.schedule,
+    time.cancel,
+  )
+  queue.show('请核对输入', 'warning')
+  assert.equal([...time.jobs.values()].at(-1)?.delay, 5000)
+  queue.show('结果尚未确认', resultNoticeKind('结果尚未确认', 'error'))
+  assert.equal([...time.jobs.values()].at(-1)?.delay, 8000)
+  const operation = queue.show('上传中', 'progress')
+  assert.equal(time.jobs.size, 2)
+  queue.show('上传完成', 'success', operation)
+  assert.equal(items.length, 3)
+  assert.equal([...time.jobs.values()].at(-1)?.delay, 3000)
+  queue.dismiss(operation)
+  assert.equal(
+    items.some((item) => item.id === operation),
+    false,
+  )
+  queue.clear()
 })

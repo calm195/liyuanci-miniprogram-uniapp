@@ -1,10 +1,11 @@
 import type { ResourceFeedbackKind, ResourcePage } from '../types/resource.ts'
 import type { UserInfo } from '../types/api.ts'
-export const resourceFeedbackChoices: { kind: ResourceFeedbackKind; label: string }[] = [
-  { kind: 'valid', label: '有用' },
-  { kind: 'link_invalid', label: '链接失效' },
-  { kind: 'outdated', label: '年代久远' },
-  { kind: 'incomplete', label: '不全' },
+// 反馈协议码决定提交与统计结构，展示名称由后台字典提供。
+export const resourceFeedbackCodes: ResourceFeedbackKind[] = [
+  'valid',
+  'link_invalid',
+  'outdated',
+  'incomplete',
 ]
 // 本人接口没有独立处罚枚举；本地认证只作前置条件，当前资料读权仍由资料 API 决定。
 export function resourceGate(

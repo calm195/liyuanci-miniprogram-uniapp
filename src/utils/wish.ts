@@ -1,3 +1,4 @@
+import { dictionaryLabel } from '../features/dictionaries/catalog.ts'
 import { categories, campuses, rewards, genders } from '../types/wish.ts'
 import type { WishInput, WishResult, WishState } from '../types/wish.ts'
 
@@ -35,17 +36,38 @@ export function validateWish(input: WishInput): string {
   }
   return ''
 }
+// 固定协议状态保持完整，显示名称按当前字典快照响应式读取。
 export const wishStateLabels: Record<WishState, string> = {
-  draft: '草稿',
-  pending_review: '审核中',
-  ready: '审核通过，待上架',
-  published: '已上架',
-  matching: '匹配中',
-  realized: '已实现',
-  fulfilled: '已还愿',
-  withdrawn: '已撤回',
-  expired: '已过期',
-  rejected: '已驳回',
+  get draft() {
+    return dictionaryLabel('wish_state', 'draft')
+  },
+  get pending_review() {
+    return dictionaryLabel('wish_state', 'pending_review')
+  },
+  get ready() {
+    return dictionaryLabel('wish_state', 'ready')
+  },
+  get published() {
+    return dictionaryLabel('wish_state', 'published')
+  },
+  get matching() {
+    return dictionaryLabel('wish_state', 'matching')
+  },
+  get realized() {
+    return dictionaryLabel('wish_state', 'realized')
+  },
+  get fulfilled() {
+    return dictionaryLabel('wish_state', 'fulfilled')
+  },
+  get withdrawn() {
+    return dictionaryLabel('wish_state', 'withdrawn')
+  },
+  get expired() {
+    return dictionaryLabel('wish_state', 'expired')
+  },
+  get rejected() {
+    return dictionaryLabel('wish_state', 'rejected')
+  },
 }
 // 公开列表只取公开投影；屏障、待审或非上架状态不借本人正文补位。
 export function publicWishBody(wish: WishResult): string {

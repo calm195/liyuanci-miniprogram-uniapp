@@ -1,3 +1,4 @@
+import { pageTicket } from '../../src/utils/page-scope.ts'
 import { readFileSync } from 'node:fs'
 import { reactive } from 'vue'
 import { defineStore, createPinia, setActivePinia } from 'pinia'
@@ -255,6 +256,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       ...platform,
       config,
       session,
+      pageTicket,
       useUserStore: () => user,
       RequestError,
       createWhisperScope: api.createWhisperScope,

@@ -51,6 +51,7 @@ async function login() {
     await user.login()
     if (!active()) return
     if (!user.validated) throw new Error('登录尚未确认，请重试。')
+    uni.$emit?.('app:notice', { message: '登录成功', kind: 'success' })
     entry.loginVisible = false
     await entry.showGuide()
   } catch (failure) {

@@ -2,9 +2,17 @@
 import type { NoticeItem } from '@/utils/notices'
 defineProps<{ items: NoticeItem[] }>()
 const emit = defineEmits<{ dismiss: [id: number] }>()
+// 微信胶囊覆盖页面顶层，通知放在胶囊下方以保留完整的操作区域。
+const capsuleBottom = uni.getMenuButtonBoundingClientRect?.()?.bottom
+const position = capsuleBottom > 0 ? { top: `${capsuleBottom + 8}px` } : undefined
 </script>
 <template>
-  <view v-if="isPageVisible && items.length" class="floating-notices" aria-live="polite">
+  <view
+    v-if="isPageVisible && items.length"
+    class="floating-notices"
+    :style="position"
+    aria-live="polite"
+  >
     <view
       v-for="item in items"
       :key="item.id"
@@ -49,10 +57,12 @@ const emit = defineEmits<{ dismiss: [id: number] }>()
   box-shadow: 0 10rpx 32rpx rgb(0 0 0 / 18%);
   pointer-events: auto;
 }
+.floating-notice-warning,
+.floating-notice-uncertain,
 .floating-notice-error {
   border-left-color: var(--theme-danger);
 }
-.page .floating-notice-message {
+.floating-notice .floating-notice-message {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -62,11 +72,11 @@ const emit = defineEmits<{ dismiss: [id: number] }>()
   overflow-wrap: anywhere;
   font-size: 27rpx;
 }
-.page button.floating-notice-close {
+.floating-notice button.floating-notice-close {
   flex-shrink: 0;
   width: 60rpx;
   min-height: 60rpx;
-  margin: -10rpx -6rpx -10rpx 0;
+  margin: -10rpx -6rpx -10rpx auto;
   padding: 0;
   border: 0;
   background: transparent;

@@ -1,3 +1,4 @@
+import { replaceDictionaries } from '../src/features/dictionaries/catalog.ts'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -423,4 +424,66 @@ test('REQ-023：固定二维码缺图不预览、加载失败可重试、查看�
   assert.equal(ready.attempt.value, 1)
   ready.preview()
   assert.equal(views.length, 2)
+})
+
+test('反馈选项缺失或停用时不能新建提交', async () => {
+  const page = await setupResourcePage('detail')
+  replaceDictionaries({ version: 100, items: [] })
+  page.runtime.select('valid')
+  await page.runtime.submit()
+  assert.equal(
+    page.api.calls.some((input: Input) => input.method === 'PUT'),
+    false,
+  )
+  replaceDictionaries({
+    version: 101,
+    items: [
+      { type: 'resource_feedback', code: 'valid', label: '有用', sort_order: 0, enabled: false },
+    ],
+  })
+  page.runtime.choice.value = 'valid'
+  await page.runtime.submit()
+  assert.equal(
+    page.api.calls.some((input: Input) => input.method === 'PUT'),
+    false,
+  )
+  replaceDictionaries({
+    version: 102,
+    items: [
+      { type: 'resource_feedback', code: 'valid', label: '有效资料', sort_order: 9, enabled: true },
+      {
+        type: 'resource_feedback',
+        code: 'outdated',
+        label: '需更新',
+        sort_order: 1,
+        enabled: true,
+      },
+      {
+        type: 'resource_feedback',
+        code: 'future',
+        label: '未来协议',
+        sort_order: 0,
+        enabled: true,
+      },
+    ],
+  })
+  assert.deepEqual(
+    page.runtime.resourceFeedbackChoices.value.map((item: { kind: string }) => item.kind),
+    ['outdated', 'valid'],
+  )
+  page.runtime.select('valid')
+  page.transport(async () => {
+    throw new Error('合成超时')
+  })
+  await page.runtime.submit()
+  const attempt = page.api.calls.at(-1)
+  assert.ok(page.runtime.pending.value)
+  replaceDictionaries({ version: 103, items: [] })
+  page.transport(async (input) =>
+    envelope({ ...sample('resourceFeedbackPut'), kind: input.data?.kind }),
+  )
+  await page.runtime.submit(true)
+  assert.deepEqual(page.api.calls.at(-1), attempt)
+  assert.equal(page.runtime.pending.value, null)
+  page.hide()
 })

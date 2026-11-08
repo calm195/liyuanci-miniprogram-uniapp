@@ -205,6 +205,7 @@ async function write(command: (key: string) => Promise<unknown>) {
   try {
     await command(`wish-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     if (!isCurrent()) return
+    uni.$emit?.('app:notice', { message: '心愿操作已受理，状态以最新查询为准。', kind: 'success' })
     cancelEdit()
     own.value = true
     await load()

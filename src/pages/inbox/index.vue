@@ -147,6 +147,7 @@ async function markRead(notification: AppNotification) {
     if (result.id !== notification.id || typeof result.read !== 'boolean')
       throw new Error('通知回执不匹配')
     notifications.value = notifications.value.map((item) => (item === notification ? result : item))
+    notice.value = '通知已标记为已读。'
   } catch (failure) {
     if (!isCurrent()) return
     clear()

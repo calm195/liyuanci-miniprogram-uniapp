@@ -1,3 +1,4 @@
+import { pageTicket } from '@/utils/page-scope'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -38,11 +39,12 @@ export function useWhisperPage(clear: () => void) {
   let scope: ReturnType<typeof createWhisperScope> | null = null
   let acceptRetry: ((result: unknown) => void | Promise<void>) | null = null
   let reloadRetry: (() => Promise<void>) | undefined
-  const ticket = () => {
-    const current = generation
-    const epoch = session.getEpoch()
-    return () => visible && current === generation && epoch === session.getEpoch()
-  }
+  const ticket = () =>
+    pageTicket(
+      () => visible,
+      () => generation,
+      () => session.getEpoch(),
+    )
   function reset() {
     generation++
     scope?.close()

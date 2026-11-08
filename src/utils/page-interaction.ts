@@ -91,7 +91,18 @@ export function createPageInteractionMixin(syncNative: () => void) {
         owner.pageLastActionKey = scopedActionKey(this, key)
         const epoch = ++owner.pageActionEpoch
         owner.pageActionKey = scopedActionKey(this, key)
+        const noticeKey = `${owner.$?.uid ?? 0}:${epoch}`
+        const notify = (message: string) => {
+          if (typeof uni !== 'undefined')
+            uni.$emit?.('app:notice', { message, kind: 'progress', key: noticeKey })
+        }
+        // 仅慢操作展示处理中；关闭展示不取消请求，完成后撤下同一操作的进度。
+        const progress = setTimeout(() => {
+          if (owner.pageIsVisible && owner.pageActionEpoch === epoch) notify('正在处理，请稍候。')
+        }, 800)
         const finish = () => {
+          clearTimeout(progress)
+          if (owner.pageIsVisible && owner.pageActionEpoch === epoch) notify('')
           // 离页和后续动作均会推进代次，旧请求完成不能清掉新动作的进度。
           if (owner.pageActionEpoch === epoch) owner.pageActionKey = ''
         }

@@ -1,3 +1,9 @@
+import {
+  dictionaryLabel,
+  dictionaryItems,
+  replaceDictionaries,
+} from '../../src/features/dictionaries/catalog.ts'
+import { pageTicket } from '../../src/utils/page-scope.ts'
 import { readFileSync } from 'node:fs'
 import { reactive } from 'vue'
 import { session } from '../../src/utils/session.ts'
@@ -74,6 +80,16 @@ export async function setupResourcePage(
   name: 'index' | 'detail',
   verification: UserInfo['verification'] | 'guest' = 'verified',
 ) {
+  replaceDictionaries({
+    version: 1,
+    items: helpers.resourceFeedbackCodes.map((code) => ({
+      type: 'resource_feedback',
+      code,
+      label: code,
+      sort_order: 0,
+      enabled: true,
+    })),
+  })
   session.clear()
   if (verification !== 'guest') session.setToken('synthetic-resource-session')
   const user = reactive({
@@ -128,8 +144,11 @@ export async function setupResourcePage(
       config: { useMock: false },
       session,
       RequestError: api.RequestError,
+      pageTicket,
       useUserStore: () => user,
       ...helpers,
+      dictionaryLabel,
+      dictionaryItems,
     },
   )
   let clipboard = ''
@@ -141,13 +160,15 @@ export async function setupResourcePage(
       '\nexport { page, load, ' +
       (name === 'index'
         ? 'items, categories, category, keyword, cursor, search, changeCategory, contribution, openContribution'
-        : 'detail, choice, pending, writing, copy, select, submit') +
+        : 'detail, choice, pending, writing, copy, select, submit, resourceFeedbackChoices') +
       ' }',
     {
       ...events,
       ...api,
       ...composable,
       ...helpers,
+      dictionaryLabel,
+      dictionaryItems,
       ...schema,
       beijingTime,
       uni: {

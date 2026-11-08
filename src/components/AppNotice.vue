@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, inject, onUnmounted, watch } from 'vue'
-import { noticeContext } from '@/utils/notices'
+import { computed, getCurrentInstance, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+import { noticeContext, resultNoticeKind } from '@/utils/notices'
 import type { NoticeKind } from '@/utils/notices'
 const props = withDefaults(defineProps<{ message?: string | null; kind?: NoticeKind }>(), {
   message: '',
@@ -8,9 +8,13 @@ const props = withDefaults(defineProps<{ message?: string | null; kind?: NoticeK
 })
 const controller = inject(noticeContext)
 const instance = getCurrentInstance()
-const visible = computed(() => instance?.proxy?.isPageVisible === true)
-const action = computed(() => instance?.proxy?.pageActionGeneration ?? 0)
-const identity = computed(() => instance?.proxy?.pageActionIdentity ?? '')
+const mounted = ref(false)
+onMounted(() => {
+  mounted.value = true
+})
+const visible = computed(() => mounted.value && instance?.proxy?.isPageVisible === true)
+const action = computed(() => (mounted.value ? (instance?.proxy?.pageActionGeneration ?? 0) : 0))
+const identity = computed(() => (mounted.value ? (instance?.proxy?.pageActionIdentity ?? '') : ''))
 let trigger = ''
 let previous = 0
 let entered = false
@@ -29,7 +33,7 @@ watch(
       kind !== old?.[1] ||
       (old?.[2] && version !== old[3] && !!trigger && actionKey === trigger)
     ) {
-      previous = controller?.show(message, kind, previous) ?? 0
+      previous = controller?.show(message, resultNoticeKind(message, kind), previous) ?? 0
       trigger = actionKey
     }
     entered = true
@@ -40,4 +44,21 @@ onUnmounted(() => {
   if (previous) controller?.dismiss(previous)
 })
 </script>
-<template><view v-if="false" /></template>
+<template>
+  <view
+    v-if="
+      message &&
+      (kind === 'error' || kind === 'warning' || resultNoticeKind(message, kind) === 'uncertain')
+    "
+    class="notice-detail"
+    >{{ message }}</view
+  >
+</template>
+<style scoped>
+.notice-detail {
+  margin: 16rpx 0;
+  color: var(--theme-danger);
+  font-size: 26rpx;
+  overflow-wrap: anywhere;
+}
+</style>

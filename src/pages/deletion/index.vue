@@ -74,16 +74,21 @@ async function confirmDeletion() {
         epoch !== session.getEpoch()
       )
         return
-      void deletion.submit(owner, epoch, version)
+      void submitDeletion(owner, epoch, version)
     },
     fail: () => {
       confirming.value = false
     },
   })
 }
+async function submitDeletion(owner: string, epoch: number, version: number, retry = false) {
+  await deletion.submit(owner, epoch, version, retry)
+  if (visible && deletion.receipt && !deletion.error)
+    notice.value = '注销申请已受理，请保存删除回执并查询清理进度。'
+}
 function retry() {
   if (busy.value || !visible || !deletion.uncertain) return
-  return deletion.submit('', -1, -1, true)
+  return submitDeletion('', -1, -1, true)
 }
 function queryReceipt() {
   if (busy.value) return
@@ -100,8 +105,12 @@ function copyReceipt() {
   if (!deletion.receipt || busy.value) return
   uni.setClipboardData({
     data: deletion.receipt,
+    showToast: false,
     success: () => {
       if (visible) notice.value = '回执已复制，请自行妥善保存，勿分享给他人。'
+    },
+    fail: () => {
+      if (visible) notice.value = '回执复制失败，请重试。'
     },
   })
 }

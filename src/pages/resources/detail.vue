@@ -1,4 +1,21 @@
 <script setup lang="ts">
+import { dictionaryLabel, dictionaryItems } from '@/features/dictionaries/catalog'
+import { refreshDictionaries } from '@/features/dictionaries/load'
+const resourceFeedbackChoices = computed(() =>
+  dictionaryItems('resource_feedback')
+    .filter(
+      (item) => item.enabled && resourceFeedbackCodes.includes(item.code as ResourceFeedbackKind),
+    )
+    .map((item) => ({ kind: item.code as ResourceFeedbackKind, label: item.label })),
+)
+async function refreshFeedbackChoices() {
+  try {
+    await refreshDictionaries()
+    notice.value = '反馈选项已刷新。'
+  } catch {
+    error.value = '反馈选项暂不可用，请稍后重试。'
+  }
+}
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -13,7 +30,7 @@ import AppPage from '@/components/AppPage.vue'
 import { getResource, getResourceDownload, putResourceFeedback } from '@/api/resources'
 import { useResourcePage } from '@/composables/use-resource-page'
 import { RequestError } from '@/utils/request'
-import { resourceCommandKey, resourceFeedbackChoices } from '@/utils/resources'
+import { resourceCommandKey, resourceFeedbackCodes } from '@/utils/resources'
 import type { ResourceDetail, ResourceFeedbackInput, ResourceFeedbackKind } from '@/types/resource'
 const id = ref('')
 const detail = ref<ResourceDetail | null>(null)
@@ -150,23 +167,32 @@ async function downloadFile() {
 async function shareDownloaded() {
   const file = downloaded.value
   if (!file) return
+  const active = page.ticket()
   try {
     await shareResourceFile(file.path, file.name)
+    if (active()) notice.value = '文件转发操作已完成，请以微信接收结果为准。'
   } catch (failure) {
-    page.fail(failure)
+    if (active()) page.fail(failure)
   }
 }
 onHide(() => cancelDownload?.())
 onUnload(() => cancelDownload?.())
 function select(kind: ResourceFeedbackKind) {
-  if (canFeedback.value && !writing.value && !pending.value) choice.value = kind
+  if (
+    canFeedback.value &&
+    !writing.value &&
+    !pending.value &&
+    resourceFeedbackChoices.value.some((item) => item.kind === kind)
+  )
+    choice.value = kind
 }
 async function submit(retry = false) {
   const resource = detail.value
   if (!canFeedback.value || !resource || busy.value || writing.value || (!retry && pending.value))
     return
   if (!retry) {
-    if (!choice.value) return
+    if (!choice.value || !resourceFeedbackChoices.value.some((item) => item.kind === choice.value))
+      return
     pending.value = {
       id: resource.id,
       key: resourceCommandKey(),
@@ -309,6 +335,15 @@ onPullDownRefresh(async () => {
       </view>
       <view class="card">
         <text>资料反馈</text>
+        <view v-if="!resourceFeedbackChoices.length"
+          ><text>反馈选项暂不可用，请刷新后再提交。</text
+          ><button
+            :loading="isPageActionPending('feedback-options-refresh')"
+            @click="runPageAction(() => refreshFeedbackChoices(), 'feedback-options-refresh')"
+          >
+            刷新反馈选项
+          </button></view
+        >
         <text v-if="!canFeedback">当前允许查看资料，暂不可提交或修改反馈。</text>
         <button
           v-for="option in resourceFeedbackChoices"
@@ -327,14 +362,16 @@ onPullDownRefresh(async () => {
           {{ detail.feedback_summary?.[option.kind] ?? '' }}
         </button>
         <text v-if="detail.my_feedback"
-          >已保存：{{
-            resourceFeedbackChoices.find((option) => option.kind === detail?.my_feedback?.kind)
-              ?.label
-          }}</text
+          >已保存：{{ dictionaryLabel('resource_feedback', detail.my_feedback.kind) }}</text
         >
         <button
           v-if="!pending"
-          :disabled="!canFeedback || !choice || writing || busy"
+          :disabled="
+            !canFeedback ||
+            !resourceFeedbackChoices.some((option) => option.kind === choice) ||
+            writing ||
+            busy
+          "
           :loading="isPageActionPending('pages-resources-detail-button-5')"
           @click="runPageAction(() => submit(), 'pages-resources-detail-button-5')"
         >

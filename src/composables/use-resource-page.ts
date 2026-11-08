@@ -1,3 +1,4 @@
+import { pageTicket } from '@/utils/page-scope'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -29,13 +30,13 @@ export function useResourcePage(clear: () => void) {
   const notice = ref('')
   let visible = false
   let generation = 0
-  function ticket() {
-    const g = generation,
-      epoch = session.getEpoch(),
-      owner = user.user?.id
-    return () =>
-      visible && generation === g && epoch === session.getEpoch() && owner === user.user?.id
-  }
+  const ticket = () =>
+    pageTicket(
+      () => visible,
+      () => generation,
+      () => session.getEpoch(),
+      () => user.user?.id,
+    )
   function reset() {
     generation++
     ready.value = false

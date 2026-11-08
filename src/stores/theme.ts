@@ -64,6 +64,10 @@ export const useThemeStore = defineStore('theme', () => {
     mode.value = value
     try {
       storage.set('theme', value)
+      uni.$emit?.('app:notice', {
+        message: value === 'dark' ? '已切换为深色外观' : '已切换为浅色外观',
+        kind: 'success',
+      })
     } catch {
       uni.$emit?.('app:notice', { message: '外观已切换，但未能保存到本机', kind: 'error' })
     }

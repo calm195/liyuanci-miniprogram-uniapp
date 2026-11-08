@@ -1,6 +1,6 @@
 import type { InjectionKey } from 'vue'
 
-export type NoticeKind = 'success' | 'error' | 'info'
+export type NoticeKind = 'success' | 'error' | 'info' | 'warning' | 'uncertain' | 'progress'
 export interface NoticeItem {
   id: number
   message: string
@@ -42,15 +42,13 @@ export function createNoticeQueue(
     items = [...items.filter((item) => item.id !== id), { id, message, kind }]
     while (items.length > 3) dismiss(items[0]!.id)
     const current = ++generation
-    timers.set(id, {
-      generation: current,
-      handle: schedule(
-        () => {
+    if (kind !== 'progress')
+      timers.set(id, {
+        generation: current,
+        handle: schedule(() => {
           if (timers.get(id)?.generation === current) dismiss(id)
-        },
-        kind === 'error' ? 6000 : 4000,
-      ),
-    })
+        }, { success: 3000, warning: 5000, error: 6000, uncertain: 8000, info: 4000 }[kind]),
+      })
     update([...items])
     return id
   }
@@ -61,4 +59,10 @@ export function createNoticeQueue(
     update([])
   }
   return { show, dismiss, clear }
+}
+
+// 结果未知独立于失败，提示关闭不会丢失原请求的重试状态。
+export function resultNoticeKind(message: string, kind: NoticeKind): NoticeKind {
+  if (/尚未确认|结果不明|未能确认|结果未知/.test(message)) return 'uncertain'
+  return kind
 }

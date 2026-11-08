@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { dictionaryLabel } from '@/features/dictionaries/catalog'
 import { openMainPage } from '@/utils/navigation'
 function openOwnWishes() {
   if (user.isLoggedIn) return openMainPage('/pages/wishes/index?own=1')
@@ -19,10 +20,10 @@ const theme = useThemeStore()
 const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 const wishStates = [
-  { label: '待审核', icon: 'send', state: 'pending_review' },
-  { label: '匹配中', icon: 'chat', state: 'matching' },
-  { label: '待还愿', icon: 'clock', state: 'realized' },
-  { label: '已还愿', icon: 'check', state: 'fulfilled' },
+  { icon: 'send', state: 'pending_review' },
+  { icon: 'chat', state: 'matching' },
+  { icon: 'clock', state: 'realized' },
+  { icon: 'check', state: 'fulfilled' },
 ]
 const groups = [
   [
@@ -55,6 +56,7 @@ async function refresh() {
 async function logout() {
   try {
     await user.logout()
+    uni.$emit?.('app:notice', { message: '已退出登录', kind: 'success' })
   } catch {
     /* 本地会话已清除，撤销失败由请求层提示。 */
   }
@@ -156,7 +158,7 @@ onPullDownRefresh(async () => {
             runPageAction(() => openMainPage(`/pages/wishes/index?own=1&state=${item.state}`))
           "
           ><AppIcon :name="item.icon" :size="46" /><text class="ui-text">{{
-            item.label
+            dictionaryLabel('wish_state', item.state)
           }}</text></view
         >
       </view>

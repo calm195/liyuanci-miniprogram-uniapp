@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import { dictionaryLabel } from '@/features/dictionaries/catalog'
+const resourceFeedbackChoices = computed(() =>
+  resourceFeedbackCodes.map((kind) => ({
+    kind,
+    label: dictionaryLabel('resource_feedback', kind),
+  })),
+)
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
@@ -7,7 +14,7 @@ import AppIcon from '@/components/AppIcon.vue'
 import ResourceContribution from '@/components/ResourceContribution.vue'
 import { listResourceCategories, listResources } from '@/api/resources'
 import { useResourcePage, resourceFailure } from '@/composables/use-resource-page'
-import { mergeResourcePage, resourceFeedbackChoices } from '@/utils/resources'
+import { mergeResourcePage, resourceFeedbackCodes } from '@/utils/resources'
 import { normalizeResourceText } from '@/utils/resource-schema'
 import type { ResourceCategory, ResourceSummary } from '@/types/resource'
 const items = ref<ResourceSummary[]>([])

@@ -1,4 +1,4 @@
-import { computed, getCurrentInstance, onUnmounted, provide, ref, watch } from 'vue'
+import { computed, getCurrentInstance, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { onHide, onUnload } from '@dcloudio/uni-app'
 import { createNoticeQueue, noticeContext, noticeEvent } from '@/utils/notices'
 import type { NoticeItem, NoticeKind } from '@/utils/notices'
@@ -6,7 +6,12 @@ import type { NoticeItem, NoticeKind } from '@/utils/notices'
 // tab 页面可同时存活，只有当前可见页面接收全局操作提示。
 export function usePageNotices() {
   const instance = getCurrentInstance()
-  const visible = computed(() => instance?.proxy?.isPageVisible === true)
+  const mounted = ref(false)
+  // 页面交互 mixin 在 setup 之后初始化，挂载后才读取其响应式状态。
+  onMounted(() => {
+    mounted.value = true
+  })
+  const visible = computed(() => mounted.value && instance?.proxy?.isPageVisible === true)
   const items = ref<NoticeItem[]>([])
   const queue = createNoticeQueue((value) => {
     items.value = value
@@ -18,12 +23,25 @@ export function usePageNotices() {
     dismiss: queue.dismiss,
   }
   provide(noticeContext, controller)
+  const operations = new Map<string, number>()
   function receive(value: unknown) {
     if (!visible.value || !value || typeof value !== 'object') return
-    const input = value as { message?: unknown; kind?: unknown }
-    if (typeof input.message !== 'string' || !input.message.trim()) return
-    const kind = input.kind === 'success' || input.kind === 'error' ? input.kind : 'info'
-    controller.show(input.message, kind)
+    const input = value as { message?: unknown; kind?: unknown; key?: unknown }
+    if (typeof input.message !== 'string') return
+    const key = typeof input.key === 'string' ? input.key : ''
+    if (!input.message.trim()) {
+      const id = operations.get(key)
+      if (id) controller.dismiss(id)
+      operations.delete(key)
+      return
+    }
+    const kind = ['success', 'error', 'warning', 'uncertain', 'progress'].includes(
+      String(input.kind),
+    )
+      ? (input.kind as NoticeKind)
+      : 'info'
+    const id = controller.show(input.message, kind, operations.get(key))
+    if (key) operations.set(key, id)
   }
   uni.$on(noticeEvent, receive)
   watch(
@@ -33,7 +51,10 @@ export function usePageNotices() {
     },
     { flush: 'sync' },
   )
-  onHide(queue.clear)
+  onHide(() => {
+    queue.clear()
+    operations.clear()
+  })
   onUnload(queue.clear)
   onUnmounted(() => {
     uni.$off(noticeEvent, receive)

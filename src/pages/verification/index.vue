@@ -75,7 +75,7 @@ function stopScanPolling() {
 }
 function showScanProblem(title: string, content: string) {
   scanNotice.value = content
-  uni.showModal({ title, content, showCancel: false })
+  uni.$emit?.('app:notice', { message: `${title}：${content}`, kind: 'warning' })
 }
 function clearPrivateData() {
   stopScanPolling()
@@ -135,17 +135,12 @@ async function refreshReview() {
 }
 function showCardResult(result: StudentCardAsset) {
   if (result.scan_status === 'approved') {
-    uni.showModal({
-      title: '图片扫描通过',
-      content: '请填写姓名和学号，然后点击「提交认证申请」，等待人工审核。',
-      showCancel: false,
-    })
+    scanNotice.value = '图片扫描通过：请填写姓名和学号，然后点击「提交认证申请」，等待人工审核。'
+    uni.$emit?.('app:notice', { message: scanNotice.value, kind: 'success' })
   } else if (result.scan_status === 'rejected') {
-    uni.showModal({
-      title: '图片扫描未通过',
-      content: '图片未通过安全内容检查，请重新上传清晰、完整的本人学生卡照片。',
-      showCancel: false,
-    })
+    scanNotice.value =
+      '图片扫描未通过：图片未通过安全内容检查，请重新上传清晰、完整的本人学生卡照片。'
+    uni.$emit?.('app:notice', { message: scanNotice.value, kind: 'warning' })
   }
 }
 async function chooseCard() {
@@ -213,7 +208,6 @@ async function chooseCard() {
       return
     const message = failure instanceof Error ? failure.message : '无法打开所选图片，请重新选择。'
     error.value = message
-    uni.showModal({ title: '学生卡上传未完成', content: message, showCancel: false })
   } finally {
     if (current === generation) uploading.value = false
   }
@@ -288,6 +282,7 @@ async function submitReal() {
     if (!isCurrent()) return
     // POST 回执已确认审核记录；本人资格刷新失败也不能覆盖已受理状态。
     acceptReview(review, epoch)
+    uni.$emit?.('app:notice', { message: '认证申请已受理，等待人工审核。', kind: 'success' })
     name.value = ''
     studentNumber.value = ''
     asset.value = null
