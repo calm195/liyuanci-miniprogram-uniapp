@@ -22,12 +22,14 @@ import { resolveShare } from '@/api/stories'
 import { isPublicContent } from '@/utils/story'
 import { shareReference } from '@/utils/share'
 import { useContentShare } from '@/composables/use-content-share'
+import { isShareBrowseOnly, prepareSharedWishBackStack } from '@/utils/shared-wish-navigation'
 
 const user = useUserStore()
 const demo = useWishStore()
 const id = ref('')
 const reference = ref<string>()
 const sharedEntry = ref(false)
+const browseOnly = ref(false)
 const publicShare = ref<WishPublicContent | null>(null)
 const wish = ref<WishResult | null>(null)
 const busy = ref(false)
@@ -291,7 +293,14 @@ onLoad((query) => {
 })
 onShow(() => {
   visible = true
-  void load()
+  browseOnly.value = sharedEntry.value && isShareBrowseOnly()
+  if (!sharedEntry.value) {
+    void load()
+    return
+  }
+  void prepareSharedWishBackStack(reference.value, id.value).then((replaced) => {
+    if (visible && !replaced) void load()
+  })
 })
 onHide(leave)
 onUnload(leave)
@@ -474,6 +483,13 @@ onPullDownRefresh(async () => {
     </view>
     <AppNotice :message="notice" kind="info" />
     <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
+    <view
+      v-if="sharedEntry && !browseOnly"
+      class="moderation-link"
+      role="button"
+      @click="runPageAction(() => openMainPage('/pages/index/index'))"
+      >返回首页</view
+    >
   </AppPage>
 </template>
 

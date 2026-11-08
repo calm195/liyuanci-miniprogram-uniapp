@@ -91,6 +91,8 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
       ...api,
       useContentShare: () => {},
       shareReference,
+      isShareBrowseOnly: () => false,
+      prepareSharedWishBackStack: async () => false,
       isPublicContent,
       resolveShare: async (ref: string) => {
         calls.push({ url: `/share-links/${ref}` })
@@ -129,7 +131,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, allowed };`,
+    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, isShareBrowseOnly, prepareSharedWishBackStack, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, allowed };`,
   )
   hooks.load!(query)
   hooks.show!()
