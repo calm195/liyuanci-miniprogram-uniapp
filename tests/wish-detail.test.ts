@@ -4,8 +4,10 @@ import { test } from 'node:test'
 import { reactive } from 'vue'
 import ts from 'typescript'
 import { canWishAction } from '../src/utils/actions.ts'
+import { canApplyToWish } from '../src/utils/application.ts'
 import { categories, campuses, rewards } from '../src/types/wish.ts'
-import type { WishResult } from '../src/types/wish.ts'
+import type { UserInfo } from '../src/types/api.ts'
+import type { WishPublicContent, WishResult } from '../src/types/wish.ts'
 import { shareReference } from '../src/utils/share.ts'
 import { isPublicContent } from '../src/utils/story.ts'
 import { emptyWish, wishStateLabels } from '../src/utils/wish.ts'
@@ -35,22 +37,35 @@ const publicWish = {
   title: '公开标题',
   category: 'help',
   campus: 'wushan',
-  reward_method: 'thanks',
+  reward_method: 'sincere_thanks',
   author: { id: 'synthetic-author', nickname: '公开昵称' },
   body: '公开正文',
   content_version: 1,
   school_related: false,
-}
+  notice_codes: [],
+  notice_text: '',
+} satisfies WishPublicContent
 
 async function setup(query: Record<string, string> = { id: sample.id }) {
   const hooks: Record<string, (query?: Record<string, string>) => void> = {}
   const user = reactive({
-    user: { id: 'synthetic-owner', version: 1, verification: 'verified', allowed_actions: [] },
+    user: {
+      id: 'synthetic-owner',
+      version: 1,
+      verification: 'verified',
+      allowed_actions: [],
+    } as UserInfo,
     validated: true,
     refresh: async () => {},
   })
   let epoch = 1
+  let token = 'synthetic-token'
   let row = structuredClone(sample)
+  const pages: string[] = []
+  const gates: {
+    kind: string
+    ready: (receipt: { owner: string; epoch: number }) => void
+  }[] = []
   let confirm = (fn: (result: { confirm: boolean }) => void) => fn({ confirm: true })
   const calls: {
     url: string
@@ -66,6 +81,10 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
   let command = async () => structuredClone(row)
   Object.assign(globalThis, {
     uni: {
+      navigateTo: (options: { url: string; success: () => void }) => {
+        pages.push(options.url)
+        options.success()
+      },
       showModal: (options: { success: (result: { confirm: boolean }) => void }) =>
         confirm(options.success),
     },
@@ -91,8 +110,6 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
       ...api,
       useContentShare: () => {},
       shareReference,
-      isShareBrowseOnly: () => false,
-      prepareSharedWishBackStack: async () => false,
       isPublicContent,
       resolveShare: async (ref: string) => {
         calls.push({ url: `/share-links/${ref}` })
@@ -103,8 +120,14 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
       useWishStore: () => ({}),
       config: { useMock: false, wishWritesReady: true },
       canWishAction,
+      canApplyToWish,
+      isShareBrowseOnly: () => false,
+      prepareSharedWishBackStack: async () => false,
+      openWishActionGate: async (kind: string, ready: (typeof gates)[number]['ready']) => {
+        gates.push({ kind, ready })
+      },
       RequestError,
-      session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
+      session: { getEpoch: () => epoch, getToken: () => token },
       categories,
       campuses,
       rewards,
@@ -131,7 +154,7 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, isShareBrowseOnly, prepareSharedWishBackStack, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, allowed };`,
+    `const { useUserStore, useWishStore, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -140,6 +163,8 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     page,
     hooks,
     calls,
+    pages,
+    gates,
     user,
     RequestError,
     setRow: (value: WishResult) => {
@@ -153,6 +178,9 @@ async function setup(query: Record<string, string> = { id: sample.id }) {
     },
     changeSession: () => {
       epoch++
+    },
+    setToken: (value: string) => {
+      token = value
     },
   }
 }
@@ -243,4 +271,106 @@ test('微信卡片和扫码回流只读取公开投影，非法扫码参数不�
   const invalid = await setup({ scene: 'wrong', id: sample.id })
   assert.equal(invalid.calls.length, 0)
   assert.match(invalid.page.error.value, /分享内容已失效/)
+})
+
+const actionableWish: WishResult = {
+  id: sample.id,
+  version: 7,
+  current_state: 'published',
+  content_version: 1,
+  public: publicWish,
+  allowed_actions: ['postWishesIdApplications'],
+}
+
+test('扫码、好友与朋友圈使用同一操作目标，已认证后进入既有流程', async () => {
+  const queries: Record<string, string>[] = [
+    { scene: shareRef.replace(/-/g, '') },
+    { id: sample.id, shared: '1' },
+    // 朋友圈在点击微信「前往小程序」后传入与好友相同的查询。
+    { id: sample.id, shared: '1' },
+  ]
+  for (const query of queries) {
+    const s = await setup(query)
+    s.setRow(actionableWish)
+    s.user.user.allowed_actions.push('postReports', 'getReportTypes')
+    assert.equal(s.page.sharedActions.value, true)
+    await s.page.openSharedAction('apply')
+    await s.page.openSharedAction('report')
+    await s.page.openSharedAction('block')
+    assert.deepEqual(s.pages, [
+      '/pages/applications/index?wishId=synthetic-wish',
+      '/pages/report/index?kind=wish&id=synthetic-wish',
+      '/pages/blacklist/index?targetId=synthetic-author&sourceId=synthetic-wish&sourceKind=wish',
+    ])
+    assert.equal(s.gates.length, 0)
+    assert.equal(
+      s.calls.some((call) => call.method),
+      false,
+    )
+    s.user.user.id = publicWish.author.id
+    assert.equal(s.page.sharedActions.value, false)
+  }
+})
+
+test('登录后继续认证，审核未完成或取消时不打开操作，完成后只恢复一次', async () => {
+  const s = await setup({ scene: shareRef.replace(/-/g, '') })
+  s.setRow(actionableWish)
+  s.setToken('')
+  s.user.validated = false
+  await s.page.openSharedAction('apply')
+  assert.equal(s.gates[0]?.kind, 'login')
+  const returnToDetail = async () => {
+    s.hooks.show!()
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+  }
+  s.hooks.hide!()
+  s.setToken('synthetic-token')
+  s.changeSession()
+  s.user.user.verification = 'unverified'
+  s.user.validated = true
+  s.gates[0]!.ready({ owner: s.user.user.id, epoch: 2 })
+  await returnToDetail()
+  assert.equal(s.gates[1]?.kind, 'verification')
+  s.hooks.hide!()
+  await returnToDetail()
+  assert.deepEqual(s.pages, [])
+
+  await s.page.openSharedAction('apply')
+  s.hooks.hide!()
+  s.user.user.verification = 'verified'
+  s.gates[2]!.ready({ owner: s.user.user.id, epoch: 2 })
+  await returnToDetail()
+  assert.deepEqual(s.pages, ['/pages/applications/index?wishId=synthetic-wish'])
+  s.hooks.hide!()
+  await returnToDetail()
+  assert.equal(s.pages.length, 1)
+})
+
+test('认证回跳后复核心愿权限，下架时不进入应愿流程', async () => {
+  const s = await setup({ id: sample.id, shared: '1' })
+  s.setRow(actionableWish)
+  s.user.user.verification = 'unverified'
+  await s.page.openSharedAction('apply')
+  s.hooks.hide!()
+  s.user.user.verification = 'verified'
+  s.setRow({ ...actionableWish, current_state: 'withdrawn', allowed_actions: [] })
+  s.gates[0]!.ready({ owner: s.user.user.id, epoch: 1 })
+  s.hooks.show!()
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  assert.deepEqual(s.pages, [])
+  assert.match(s.page.actionError.value, /当前不可操作/)
+})
+
+test('认证期间切换账号时丢弃原账号的操作意图', async () => {
+  const s = await setup({ id: sample.id, shared: '1' })
+  s.setRow(actionableWish)
+  s.user.user.verification = 'unverified'
+  await s.page.openSharedAction('apply')
+  s.hooks.hide!()
+  s.changeSession()
+  s.user.user = { ...s.user.user, id: 'synthetic-other', verification: 'verified' }
+  s.gates[0]!.ready({ owner: s.user.user.id, epoch: 2 })
+  s.hooks.show!()
+  for (let i = 0; i < 20; i++) await Promise.resolve()
+  assert.deepEqual(s.pages, [])
 })

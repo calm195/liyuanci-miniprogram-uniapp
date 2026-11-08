@@ -22,6 +22,7 @@ import { resolveShare } from '@/api/stories'
 import { isPublicContent } from '@/utils/story'
 import { shareReference } from '@/utils/share'
 import { useContentShare } from '@/composables/use-content-share'
+import { openWishActionGate, type WishActionReady } from '@/composables/use-wish-action-return'
 import { isShareBrowseOnly, prepareSharedWishBackStack } from '@/utils/shared-wish-navigation'
 
 const user = useUserStore()
@@ -29,13 +30,15 @@ const demo = useWishStore()
 const id = ref('')
 const reference = ref<string>()
 const sharedEntry = ref(false)
-const browseOnly = ref(false)
 const publicShare = ref<WishPublicContent | null>(null)
 const wish = ref<WishResult | null>(null)
 const busy = ref(false)
 const writing = ref(false)
 const error = ref('')
 const notice = ref('')
+const actionError = ref('')
+const openingAction = ref(false)
+const browseOnly = ref(false)
 const refreshExpiry = ref(false)
 const snapshotEpoch = ref(-1)
 const snapshotOwner = ref('')
@@ -43,9 +46,12 @@ let generation = 0
 let writeGeneration = 0
 let visible = false
 let pendingView = true
+type SharedAction = 'apply' | 'report' | 'block'
+let actionReturn: { action: SharedAction; target: string; ready?: WishActionReady } | null = null
 
 // 路由只携带标识；正文与权限始终重新读取，不从列表或本地缓存恢复。
 const currentWish = computed(() => {
+  if (sharedEntry.value) return wish.value
   if (
     snapshotEpoch.value !== session.getEpoch() ||
     snapshotOwner.value !== (user.user?.id || '') ||
@@ -66,6 +72,13 @@ const publicContent = computed(() => {
   if (!value || value.privacy_review_required) return null
   return value.participant || (value.current_state === 'published' ? value.public : null)
 })
+const sharedActions = computed(
+  () =>
+    sharedEntry.value &&
+    !config.useMock &&
+    !!publicContent.value &&
+    publicContent.value.author?.id !== (user.validated ? user.user?.id : null),
+)
 const shareTarget = useContentShare('wish', () =>
   !sharedEntry.value && !busy.value && currentWish.value?.current_state === 'published'
     ? publicShare.value
@@ -99,7 +112,8 @@ function selectRefreshExpiry(event: unknown) {
 async function load() {
   const current = ++generation
   const epoch = session.getEpoch()
-  const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
+  const isCurrent = () =>
+    visible && current === generation && (sharedEntry.value || epoch === session.getEpoch())
   error.value = ''
   publicShare.value = null
   if (sharedEntry.value) {
@@ -138,8 +152,6 @@ async function load() {
         allowed_actions: [],
         public: result.public,
       }
-      snapshotOwner.value = user.user?.id || ''
-      snapshotEpoch.value = epoch
     } catch {
       if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
     } finally {
@@ -190,6 +202,121 @@ async function load() {
   } finally {
     if (visible && current === generation) busy.value = false
   }
+}
+function openPage(url: string) {
+  return new Promise<void>((resolve, reject) => {
+    uni.navigateTo({ url, success: () => resolve(), fail: reject })
+  })
+}
+async function openSharedAction(action: SharedAction) {
+  const target = currentWish.value?.id || ''
+  const author = publicContent.value?.author?.id
+  if (!sharedActions.value || !target || busy.value || openingAction.value) return
+  if (browseOnly.value) {
+    actionError.value = '请先点击微信的「前往小程序」，再继续操作。'
+    return
+  }
+  const current = generation
+  const active = () => visible && current === generation && currentWish.value?.id === target
+  async function openGate(gate: 'login' | 'verification') {
+    const owner = user.user?.id
+    const epoch = session.getEpoch()
+    const intent: NonNullable<typeof actionReturn> = { action, target }
+    actionReturn = intent
+    try {
+      await openWishActionGate(gate, (ready) => {
+        if (actionReturn !== intent) return
+        intent.ready =
+          ready && (gate === 'login' || (ready.owner === owner && ready.epoch === epoch))
+            ? ready
+            : undefined
+      })
+    } catch (failure) {
+      if (actionReturn === intent) actionReturn = null
+      throw failure
+    }
+  }
+  openingAction.value = true
+  actionError.value = ''
+  try {
+    if (session.getToken()) {
+      try {
+        await user.refresh(false, true)
+      } catch (failure) {
+        if (session.getToken()) throw failure
+      }
+    }
+    if (!active()) return
+    if (!session.getToken()) {
+      await openGate('login')
+      return
+    }
+    if (!user.validated || !user.user) throw new Error('资格读取失败')
+    if (user.user.verification !== 'verified') {
+      await openGate('verification')
+      return
+    }
+    const account = user.user
+    const epoch = session.getEpoch()
+    // 展示仍用匿名公开投影，操作资格使用同一心愿的最新会话投影。
+    const scoped = await getWish(target)
+    if (
+      !active() ||
+      epoch !== session.getEpoch() ||
+      !user.validated ||
+      user.user?.id !== account.id
+    )
+      return
+    if (
+      scoped?.id !== target ||
+      scoped.current_state !== 'published' ||
+      scoped.privacy_review_required ||
+      scoped.own_content ||
+      scoped.public?.id !== target ||
+      scoped.public.author?.id === account.id
+    ) {
+      actionError.value = '该心愿当前不可操作，请刷新后查看。'
+      return
+    }
+    const queryId = encodeURIComponent(target)
+    if (action === 'apply' && canApplyToWish(user.user, user.validated, scoped)) {
+      await openPage(`/pages/applications/index?wishId=${queryId}`)
+    } else if (
+      action === 'report' &&
+      ['postReports', 'getReportTypes'].every((permission) =>
+        user.user?.allowed_actions.includes(permission),
+      )
+    ) {
+      await openPage(`/pages/report/index?kind=wish&id=${queryId}`)
+    } else if (action === 'block' && author && scoped.public.author?.id === author) {
+      await openPage(
+        `/pages/blacklist/index?targetId=${encodeURIComponent(author)}&sourceId=${queryId}&sourceKind=wish`,
+      )
+    } else {
+      actionError.value = '当前账号或心愿状态不支持此操作。'
+    }
+  } catch {
+    if (active()) actionError.value = '暂时无法进入操作，请重试。'
+  } finally {
+    if (active()) openingAction.value = false
+  }
+}
+async function showDetail() {
+  visible = true
+  browseOnly.value = sharedEntry.value && isShareBrowseOnly()
+  if (sharedEntry.value && (await prepareSharedWishBackStack(reference.value, id.value))) return
+  if (!visible) return
+  const intent = actionReturn
+  actionReturn = null
+  await load()
+  if (
+    visible &&
+    intent?.ready &&
+    intent.target === currentWish.value?.id &&
+    intent.ready.owner === user.user?.id &&
+    intent.ready.epoch === session.getEpoch()
+  )
+    await openSharedAction(intent.action)
 }
 function confirmAction(message: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -269,11 +396,14 @@ function leave() {
   busy.value = false
   writing.value = false
   notice.value = ''
+  actionError.value = ''
+  openingAction.value = false
   error.value = ''
 }
 watch(
   () => user.user?.id,
   () => {
+    if (sharedEntry.value) return
     if (wish.value && snapshotOwner.value !== (user.user?.id || '')) {
       generation++
       writeGeneration++
@@ -291,22 +421,15 @@ onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
   pendingView = true
 })
-onShow(() => {
-  visible = true
-  browseOnly.value = sharedEntry.value && isShareBrowseOnly()
-  if (!sharedEntry.value) {
-    void load()
-    return
-  }
-  void prepareSharedWishBackStack(reference.value, id.value).then((replaced) => {
-    if (visible && !replaced) void load()
-  })
-})
+onShow(() => void showDetail())
 onHide(leave)
-onUnload(leave)
+onUnload(() => {
+  actionReturn = null
+  leave()
+})
 onPullDownRefresh(async () => {
   try {
-    await load()
+    if (!openingAction.value) await load()
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -319,6 +442,7 @@ onPullDownRefresh(async () => {
       content?.title || (sharedEntry ? '公开心愿' : '未命名心愿')
     }}</text>
     <text v-if="sharedEntry && error" class="notice">分享的心愿暂不可查看。</text>
+    <text v-if="browseOnly" class="notice">点击微信的「前往小程序」后可登录、认证和操作。</text>
     <text v-if="!sharedEntry && config.useMock" class="notice"
       >合成演示 · 详情只读，不发送 API</text
     >
@@ -369,6 +493,30 @@ onPullDownRefresh(async () => {
           >修改建议：{{ currentWish.review_result.revision_suggestion }}</text
         >
       </template>
+    </view>
+    <view v-if="sharedActions" class="card detail-actions">
+      <button
+        :disabled="busy || openingAction"
+        :loading="isPageActionPending('shared-wish-apply')"
+        @click="runPageAction(() => openSharedAction('apply'), 'shared-wish-apply')"
+      >
+        申请应愿
+      </button>
+      <button
+        :disabled="busy || openingAction"
+        :loading="isPageActionPending('shared-wish-report')"
+        @click="runPageAction(() => openSharedAction('report'), 'shared-wish-report')"
+      >
+        举报此心愿
+      </button>
+      <button
+        v-if="publicContent?.author"
+        :disabled="busy || openingAction"
+        :loading="isPageActionPending('shared-wish-block')"
+        @click="runPageAction(() => openSharedAction('block'), 'shared-wish-block')"
+      >
+        屏蔽发布者
+      </button>
     </view>
     <view v-if="!sharedEntry && currentWish && !config.useMock" class="card detail-actions">
       <view
@@ -482,6 +630,7 @@ onPullDownRefresh(async () => {
       <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
     </view>
     <AppNotice :message="notice" kind="info" />
+    <AppNotice :message="actionError" kind="error" />
     <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
     <view
       v-if="sharedEntry && !browseOnly"
