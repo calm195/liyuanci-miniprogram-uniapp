@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import type { WishPublicContent } from '@/types/wish'
 import { campuses, genders } from '@/types/wish'
-defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story'; compact?: boolean }>()
+defineProps<{
+  content: WishPublicContent
+  kind?: 'wish' | 'story'
+  compact?: boolean
+  readOnly?: boolean
+}>()
 </script>
 <template>
   <view class="content">
@@ -12,10 +17,12 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story'; compact?: boo
     </view>
     <view v-if="content.author" class="content-meta">
       <navigator
+        v-if="!readOnly"
         class="content-author"
         :url="`/pages/public-profile/index?id=${encodeURIComponent(content.author.id)}`"
         >{{ content.author.nickname || '查看公开主页' }}</navigator
       >
+      <text v-else-if="content.author.nickname">{{ content.author.nickname }}</text>
       <text v-if="content.author.identity_tags?.campus"
         >校区：{{
           campuses.find((item) => item.value === content.author?.identity_tags?.campus)?.label
@@ -30,7 +37,7 @@ defineProps<{ content: WishPublicContent; kind?: 'wish' | 'story'; compact?: boo
         >年级：{{ content.author.identity_tags.grade }}</text
       >
     </view>
-    <view v-if="kind" class="content-actions">
+    <view v-if="kind && !readOnly" class="content-actions">
       <navigator
         class="moderation-link"
         :url="`/pages/report/index?kind=${kind}&id=${encodeURIComponent(content.id)}`"

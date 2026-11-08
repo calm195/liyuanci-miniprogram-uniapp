@@ -6,6 +6,8 @@ import ts from 'typescript'
 import { canWishAction } from '../src/utils/actions.ts'
 import { categories, campuses, rewards } from '../src/types/wish.ts'
 import type { WishResult } from '../src/types/wish.ts'
+import { shareReference } from '../src/utils/share.ts'
+import { isPublicContent } from '../src/utils/story.ts'
 import { emptyWish, wishStateLabels } from '../src/utils/wish.ts'
 
 const sample: WishResult = {
@@ -27,8 +29,17 @@ const strip = (source: string) =>
   source.replace(/^import\s[\s\S]*?from\s+'([^']+)'\n/gm, (_all, name) =>
     name === 'vue' ? `import { computed, ref, watch } from '${import.meta.resolve('vue')}'\n` : '',
   )
-async function setup() {
-  const hooks: Record<string, (query?: { id: string }) => void> = {}
+const shareRef = '01234567-89ab-cdef-0123-456789abcdef'
+const publicWish = {
+  id: sample.id,
+  title: '公开标题',
+  body: '公开正文',
+  content_version: 1,
+  school_related: false,
+}
+
+async function setup(query: Record<string, string> = { id: sample.id }) {
+  const hooks: Record<string, (query?: Record<string, string>) => void> = {}
   const user = reactive({
     user: { id: 'synthetic-owner', version: 1, verification: 'verified', allowed_actions: [] },
     validated: true,
@@ -40,6 +51,7 @@ async function setup() {
   const calls: {
     url: string
     method?: string
+    auth?: boolean
     data?: Record<string, unknown>
     header?: Record<string, string>
   }[] = []
@@ -55,7 +67,11 @@ async function setup() {
     },
     __detailRequest: async (options: (typeof calls)[number]) => {
       calls.push(options)
-      return options.method ? command() : structuredClone(row)
+      return options.method
+        ? command()
+        : options.auth === false
+          ? { ...row, public: { ...publicWish } }
+          : structuredClone(row)
     },
   })
   const api = await moduleFrom(
@@ -64,6 +80,13 @@ async function setup() {
   Object.assign(globalThis, {
     __detail: {
       ...api,
+      useContentShare: () => {},
+      shareReference,
+      isPublicContent,
+      resolveShare: async (ref: string) => {
+        calls.push({ url: `/share-links/${ref}` })
+        return { target_kind: 'wish', target: { ...publicWish } }
+      },
       user,
       useUserStore: () => user,
       useWishStore: () => ({}),
@@ -97,9 +120,9 @@ async function setup() {
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, changeWishState, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry };`,
+    `const { useUserStore, useWishStore, config, canWishAction, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, writing, refreshExpiry, sharedProjection };`,
   )
-  hooks.load!({ id: sample.id })
+  hooks.load!(query)
   hooks.show!()
   for (let i = 0; i < 15; i++) await Promise.resolve()
   return {
@@ -182,4 +205,26 @@ test('REQ-004：409仅重读不自动重写；切换账号不保留原正文', a
   s.user.user = { ...s.user.user, id: 'synthetic-other' }
   assert.equal(s.page.wish.value, null)
   assert.equal(s.page.currentWish.value, null)
+})
+
+test('微信卡片和扫码回流只读取公开投影，非法扫码参数不降级为普通详情', async () => {
+  const friend = await setup({ id: sample.id, shared: '1' })
+  assert.equal(friend.calls[0]?.auth, false)
+  assert.equal(friend.page.sharedProjection.value.body, '公开正文')
+  assert.equal(friend.page.currentWish.value, null)
+
+  const scan = await setup({ scene: shareRef.replace(/-/g, ''), id: 'other' })
+  assert.deepEqual(
+    scan.calls.map((call) => call.url),
+    [`/share-links/${shareRef}`],
+  )
+  assert.equal(scan.page.sharedProjection.value.id, sample.id)
+  scan.hooks.hide!()
+  assert.equal(scan.page.sharedProjection.value, null)
+  await scan.page.load()
+  assert.equal(scan.page.sharedProjection.value, null)
+
+  const invalid = await setup({ scene: 'wrong', id: sample.id })
+  assert.equal(invalid.calls.length, 0)
+  assert.match(invalid.page.error.value, /分享内容已失效/)
 })

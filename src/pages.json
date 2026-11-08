@@ -93,13 +93,6 @@
       }
     },
     {
-      "path": "pages/share/index",
-      "style": {
-        "navigationBarTitleText": "分享",
-        "enablePullDownRefresh": true
-      }
-    },
-    {
       "path": "pages/settings/index",
       "style": {
         "navigationBarTitleText": "个人资料与隐私",

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
+import PublicContent from '@/components/PublicContent.vue'
+import ShareActions from '@/components/ShareActions.vue'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
-import { getWish, changeWishState } from '@/api/wishes'
+import { getWish, getPublicWish, changeWishState } from '@/api/wishes'
 import type { WishLifecycleAction } from '@/api/wishes'
-import type { WishResult } from '@/types/wish'
+import type { WishPublicContent, WishResult } from '@/types/wish'
 import { categories, campuses, rewards } from '@/types/wish'
 import { canWishAction } from '@/utils/actions'
 import { canApplyToWish } from '@/utils/application'
@@ -17,10 +19,18 @@ import { RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
 import { wishStateLabels } from '@/utils/wish'
 import { displayTime } from '@/utils/time'
+import { resolveShare } from '@/api/stories'
+import { isPublicContent } from '@/utils/story'
+import { shareReference } from '@/utils/share'
+import { useContentShare } from '@/composables/use-content-share'
 
 const user = useUserStore()
 const demo = useWishStore()
 const id = ref('')
+const reference = ref<string>()
+const sharedEntry = ref(false)
+const sharedProjection = ref<WishPublicContent | null>(null)
+const publicShare = ref<WishPublicContent | null>(null)
 const wish = ref<WishResult | null>(null)
 const busy = ref(false)
 const writing = ref(false)
@@ -56,6 +66,11 @@ const publicContent = computed(() => {
   if (!value || value.privacy_review_required) return null
   return value.participant || (value.current_state === 'published' ? value.public : null)
 })
+const shareTarget = useContentShare('wish', () =>
+  !sharedEntry.value && !busy.value && currentWish.value?.current_state === 'published'
+    ? publicShare.value
+    : null,
+)
 const operations = {
   withdraw: 'postWishesIdWithdraw',
   rollback: 'postWishesIdRollback',
@@ -71,6 +86,8 @@ function allowed(action: WishLifecycleAction) {
 }
 function clearProjection() {
   wish.value = null
+  sharedProjection.value = null
+  publicShare.value = null
   snapshotEpoch.value = -1
   snapshotOwner.value = ''
   refreshExpiry.value = false
@@ -84,6 +101,32 @@ async function load() {
   const epoch = session.getEpoch()
   const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
   error.value = ''
+  publicShare.value = null
+  if (sharedEntry.value) {
+    sharedProjection.value = null
+    busy.value = true
+    try {
+      const ref = reference.value
+      const trackView = pendingView
+      pendingView = false
+      const result = ref === undefined && id.value ? await getPublicWish(id.value, trackView) : null
+      const resolved = ref ? await resolveShare(ref) : null
+      if (!isCurrent()) return
+      const item =
+        resolved?.target_kind === 'wish'
+          ? resolved.target
+          : result?.id === id.value
+            ? result.public
+            : null
+      if (!item || !isPublicContent(item)) throw new Error('分享内容不可用')
+      sharedProjection.value = item
+    } catch {
+      if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
+    } finally {
+      if (visible && current === generation) busy.value = false
+    }
+    return
+  }
   if (!id.value) {
     error.value = '心愿链接无效，请从广场或我的心愿重新进入。'
     return
@@ -102,6 +145,18 @@ async function load() {
     wish.value = result
     snapshotEpoch.value = epoch
     snapshotOwner.value = user.user?.id || ''
+    if (
+      !config.useMock &&
+      result.current_state === 'published' &&
+      !result.privacy_review_required &&
+      user.validated &&
+      user.user?.verification === 'verified'
+    ) {
+      // 作者详情可能是私有投影，分享卡片只使用匿名读取的公开版本。
+      const projection = result.public ?? (await getPublicWish(id.value).catch(() => null))?.public
+      if (isCurrent() && projection?.id === id.value && isPublicContent(projection))
+        publicShare.value = projection
+    }
   } catch (failure) {
     if (!isCurrent()) return
     clearProjection()
@@ -211,6 +266,8 @@ watch(
   { flush: 'sync' },
 )
 onLoad((query) => {
+  reference.value = shareReference(query)
+  sharedEntry.value = reference.value !== undefined || query?.shared === '1'
   id.value = typeof query?.id === 'string' ? query.id : ''
   pendingView = true
 })
@@ -230,11 +287,21 @@ onPullDownRefresh(async () => {
 </script>
 
 <template>
-  <AppPage>
-    <text class="title">{{ content?.title || '未命名心愿' }}</text>
-    <text v-if="config.useMock" class="notice">合成演示 · 详情只读，不发送 API</text>
+  <AppPage :hide-entry-prompts="sharedEntry">
+    <template v-if="sharedEntry">
+      <text v-if="busy">加载中…</text>
+      <view v-if="sharedProjection" class="card">
+        <text class="title">{{ sharedProjection.title || '公开心愿' }}</text>
+        <PublicContent :content="sharedProjection" read-only />
+      </view>
+      <text v-if="error" class="notice">分享的心愿暂不可查看。</text>
+    </template>
+    <text v-if="!sharedEntry" class="title">{{ content?.title || '未命名心愿' }}</text>
+    <text v-if="!sharedEntry && config.useMock" class="notice"
+      >合成演示 · 详情只读，不发送 API</text
+    >
 
-    <text v-if="busy">加载中…</text>
+    <text v-if="!sharedEntry && busy">加载中…</text>
     <view v-if="currentWish" class="card">
       <view class="detail-tags">
         <text class="category-pill">{{
@@ -376,21 +443,16 @@ onPullDownRefresh(async () => {
       >管理我的还愿故事</navigator
     >
     <view
-      v-if="publicContent && currentWish && !currentWish.privacy_review_required"
+      v-if="currentWish && !currentWish.privacy_review_required && (publicContent || shareTarget)"
       class="detail-footer"
     >
       <navigator
-        v-if="!currentWish.own_content"
+        v-if="publicContent && !currentWish.own_content"
         class="moderation-link"
         :url="`/pages/report/index?kind=wish&id=${encodeURIComponent(id)}`"
         >举报此心愿</navigator
       >
-      <navigator
-        v-if="currentWish.current_state === 'published' && !config.useMock"
-        :url="`/pages/share/index?kind=wish&id=${encodeURIComponent(id)}`"
-        class="share-link"
-        >分享心愿</navigator
-      >
+      <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
     </view>
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
@@ -409,9 +471,6 @@ onPullDownRefresh(async () => {
 .detail-footer {
   justify-content: space-between;
   margin-top: 32rpx;
-}
-.share-link {
-  margin-left: auto;
 }
 .detail-actions button {
   margin: 0;

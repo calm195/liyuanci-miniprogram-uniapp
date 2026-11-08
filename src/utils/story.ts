@@ -1,7 +1,7 @@
 import type { UserInfo } from '../types/api.ts'
 import type { WishResult, WishPublicContent } from '../types/wish.ts'
 import { campuses, categories } from '../types/wish.ts'
-import type { ShareLink, ShareTarget } from '../types/story.ts'
+import type { ShareTarget } from '../types/story.ts'
 import { canWishAction } from './actions.ts'
 export type StoryAction = 'submit' | 'update' | 'withdraw'
 const actions = {
@@ -44,12 +44,4 @@ export function shareCard(share: ShareTarget) {
     categories.find((item) => item.value === target.category)?.label,
   ].filter((tag): tag is string => !!tag)
   return { title, tags }
-}
-
-// 分享回流只携带引用，不执行服务端返回的任意路由。
-export function sharePath(link: ShareLink): string {
-  if (!link || typeof link.ref !== 'string' || !link.ref) throw new Error('分享引用无效')
-  const path = `/pages/share/index?ref=${encodeURIComponent(link.ref)}`
-  if (link.miniapp_route !== path) throw new Error('分享路由不匹配')
-  return path
 }

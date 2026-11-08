@@ -5,7 +5,7 @@ import { useThemeStore } from '@/stores/theme'
 import EntryPrompts from '@/components/EntryPrompts.vue'
 import AppTabBar from '@/components/AppTabBar.vue'
 import type { MainTab } from '@/utils/navigation'
-defineProps<{ tab?: MainTab; title?: string; brand?: boolean }>()
+defineProps<{ tab?: MainTab; title?: string; brand?: boolean; hideEntryPrompts?: boolean }>()
 const theme = useThemeStore()
 const notifications = usePageNotices()
 // 自定义导航仅用于主页面，为系统状态栏和微信胶囊保留空间。
@@ -22,6 +22,6 @@ const statusBarHeight = uni.getSystemInfoSync().statusBarHeight || 0
     </view>
     <view class="page-content"><slot /></view>
     <AppTabBar v-if="tab" :active="tab" />
-    <EntryPrompts v-if="isPageVisible" />
+    <EntryPrompts v-if="isPageVisible && !hideEntryPrompts" />
   </view>
 </template>

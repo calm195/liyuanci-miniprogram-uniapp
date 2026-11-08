@@ -10,8 +10,8 @@ export function listStories(cursor?: string, search: ContentSearch = {}) {
     url: `/stories?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${params ? '&' + params : ''}`,
   })
 }
-export const getStory = (id: string) =>
-  request<WishPublicContent>({ url: `/stories/${encodeURIComponent(id)}` })
+export const getStory = (id: string, auth = true) =>
+  request<WishPublicContent>({ url: `/stories/${encodeURIComponent(id)}`, auth })
 export function writeStory(wish: WishResult, body: string, update: boolean, key: string) {
   return request<StoryAccepted>({
     url: `/wishes/${encodeURIComponent(wish.id)}/${update ? 'story' : 'stories'}`,
@@ -38,4 +38,9 @@ export const createShare = (kind: ShareKind, id: string, key: string) =>
     header: { 'Idempotency-Key': key },
   })
 export const resolveShare = (reference: string) =>
-  request<ShareTarget>({ url: `/share-links/${encodeURIComponent(reference)}` })
+  request<ShareTarget>({ url: `/share-links/${encodeURIComponent(reference)}`, auth: false })
+
+export const getShareCode = (reference: string, version: 'develop' | 'trial' | 'release') =>
+  request<{ image_base64: string }>({
+    url: `/share-links/${encodeURIComponent(reference)}/code?env_version=${version}`,
+  })

@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import { onShow, onHide } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
-import { listStories, getStory } from '@/api/stories'
+import { listStories, getStory, resolveShare } from '@/api/stories'
 import { isPublicContent } from '@/utils/story'
 import type { WishPublicContent } from '@/types/wish'
 import PublicContent from '@/components/PublicContent.vue'
 import ContentSearchBar from '@/components/ContentSearchBar.vue'
+import ShareActions from '@/components/ShareActions.vue'
 import type { ContentSort } from '@/types/content'
 const user = useUserStore()
-const props = defineProps<{ storyId?: string }>()
+const props = defineProps<{ storyId?: string; shareRef?: string; readOnly?: boolean }>()
+const emit = defineEmits<{ shareContent: [content: WishPublicContent | null] }>()
 const id = computed(() => props.storyId || '')
+const detail = computed(() => !!id.value || props.shareRef !== undefined)
 const items = ref<WishPublicContent[]>([])
 const cursor = ref<string | null>(null)
 const busy = ref(false)
@@ -31,13 +33,18 @@ function clear() {
   usedCursors.clear()
 }
 async function load(more = false) {
-  if (busy.value || (more && (!cursor.value || id.value || readEpoch.value !== session.getEpoch())))
+  if (
+    !visible ||
+    busy.value ||
+    (more && (!cursor.value || detail.value || readEpoch.value !== session.getEpoch()))
+  )
     return
   const current = ++generation
   const epoch = session.getEpoch()
   const active = () => visible && current === generation && epoch === session.getEpoch()
   const next = more ? cursor.value! : undefined
   if (!more) {
+    if (detail.value) items.value = []
     cursor.value = null
     usedCursors.clear()
   }
@@ -48,9 +55,19 @@ async function load(more = false) {
   }
   busy.value = true
   try {
-    const page = id.value
-      ? { items: [await getStory(id.value)], next_cursor: null }
-      : await listStories(next, { keyword: keyword.value, sort: sort.value })
+    const reference = props.shareRef
+    let page
+    if (reference !== undefined) {
+      // 扫码只信任服务端重新校验的公开故事，失效时留在详情态。
+      if (!reference) throw new Error('分享引用无效')
+      const share = await resolveShare(reference)
+      if (share?.target_kind !== 'story') throw new Error('分享目标类型不匹配')
+      page = { items: [share.target], next_cursor: null }
+    } else if (id.value) {
+      page = { items: [await getStory(id.value, !props.readOnly)], next_cursor: null }
+    } else {
+      page = await listStories(next, { keyword: keyword.value, sort: sort.value })
+    }
     if (!active()) return
     if (
       !Array.isArray(page.items) ||
@@ -73,7 +90,7 @@ async function load(more = false) {
   } catch {
     if (!active()) return
     clear()
-    error.value = id.value
+    error.value = detail.value
       ? '故事不存在或当前不可公开查看，请刷新后重试。'
       : '还愿墙暂不可读取，请刷新后重试。'
   } finally {
@@ -88,12 +105,7 @@ async function search(value: string, order: ContentSort) {
   await load()
 }
 function openStory(storyId: string) {
-  const encoded = encodeURIComponent(storyId)
-  uni.navigateTo({
-    url: id.value
-      ? `/pages/share/index?kind=story&id=${encoded}`
-      : `/pages/stories/index?id=${encoded}`,
-  })
+  uni.navigateTo({ url: `/pages/stories/index?id=${encodeURIComponent(storyId)}` })
 }
 function leave() {
   visible = false
@@ -102,8 +114,9 @@ function leave() {
   busy.value = false
   error.value = ''
 }
+const identity = [() => user.user?.id, () => session.getEpoch(), id, () => props.shareRef] as const
 watch(
-  [() => user.user?.id, id],
+  identity,
   () => {
     generation++
     clear()
@@ -111,25 +124,26 @@ watch(
   },
   { flush: 'sync' },
 )
-watch(id, () => {
+watch(identity, () => {
   if (visible) void load()
 })
-onMounted(() => {
+watch(
+  () => (detail.value && !busy.value ? (rows.value[0] ?? null) : null),
+  (content) => emit('shareContent', content),
+  { flush: 'sync' },
+)
+function show() {
   visible = true
   void load()
-})
+}
+onMounted(show)
 onUnmounted(leave)
-onShow(() => {
-  visible = true
-  void load()
-})
-onHide(leave)
-defineExpose({ refresh: load })
+defineExpose({ refresh: load, show, hide: leave })
 </script>
 <template>
   <view class="story-wall">
     <ContentSearchBar
-      v-if="!id && !config.useMock"
+      v-if="!detail && !config.useMock"
       :keyword="keyword"
       :sort="sort"
       :disabled="busy"
@@ -138,14 +152,20 @@ defineExpose({ refresh: load })
     <text v-if="busy && !rows.length" class="wall-state">正在加载故事…</text>
     <view v-for="content in rows" :key="content.id" class="story-card">
       <text v-if="content.title" class="story-title">{{ content.title }}</text>
-      <PublicContent :content="content" kind="story" :compact="!id">
+      <PublicContent :content="content" kind="story" :compact="!detail" :read-only="readOnly">
         <template #actions>
+          <ShareActions
+            v-if="detail && !busy && user.validated && user.user?.verification === 'verified'"
+            kind="story"
+            :content="content"
+          />
           <button
+            v-if="!detail"
             class="story-link"
             :loading="isPageActionPending('story-wall-open:' + content.id)"
             @click="runPageAction(() => openStory(content.id), 'story-wall-open:' + content.id)"
           >
-            {{ id ? '分享故事 ›' : '阅读故事 ›' }}
+            阅读故事 ›
           </button>
         </template>
       </PublicContent>
@@ -162,6 +182,7 @@ defineExpose({ refresh: load })
     >
       加载下一页
     </button>
+    <text v-if="readOnly && error" class="wall-state">分享的故事暂不可查看。</text>
     <AppNotice :message="error" kind="error" />
   </view>
 </template>

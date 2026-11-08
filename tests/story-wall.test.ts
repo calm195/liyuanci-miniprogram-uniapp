@@ -29,23 +29,20 @@ test('页内还愿墙重读保留内容，离页清理且丢弃晚到结果，�
       useUserStore: () => user,
       isPublicContent,
       defineProps: () => props,
+      defineEmits: () => () => {},
       async getStory(id: string) {
         return { ...content, id }
       },
-      defineExpose(value: { refresh: unknown }) {
+      defineExpose(value: { refresh: unknown; show: () => void; hide: () => void }) {
         assert.equal(typeof value.refresh, 'function')
+        hooks.show = value.show
+        hooks.hide = value.hide
       },
       onMounted(fn: () => void) {
         hooks.mount = fn
       },
       onUnmounted(fn: () => void) {
         hooks.unmount = fn
-      },
-      onShow(fn: () => void) {
-        hooks.show = fn
-      },
-      onHide(fn: () => void) {
-        hooks.hide = fn
       },
       async listStories(cursor: string | undefined, search: unknown) {
         queries.push({ cursor, search })

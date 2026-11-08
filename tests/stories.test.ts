@@ -2,9 +2,10 @@ import { contentSearchParams } from '../src/utils/content-search.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { nextTick, reactive } from 'vue'
+import { reactive } from 'vue'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
-import { canStoryAction, isPublicContent, shareCard, sharePath } from '../src/utils/story.ts'
+import { canStoryAction, isPublicContent } from '../src/utils/story.ts'
+import { shareReference } from '../src/utils/share.ts'
 import type { WishResult, WishPublicContent } from '../src/types/wish.ts'
 const actor = {
   id: 'synthetic-owner',
@@ -31,8 +32,10 @@ const publicStory: WishPublicContent = {
   notice_codes: ['UNVERIFIED_SCHOOL'],
   notice_text: '未经证实',
 }
+const reference = '12345678-1234-4123-8123-123456789abc'
 type Input = {
   url: string
+  auth?: boolean
   method?: string
   data?: Record<string, unknown>
   header?: Record<string, string>
@@ -58,9 +61,9 @@ async function setup(page: string, query: Record<string, string> = {}) {
     if (input.url.startsWith('/wishes/')) return structuredClone(wish)
     if (input.url.startsWith('/stories/')) return { ...publicStory }
     if (input.url.startsWith('/stories?')) return { items: [{ ...publicStory }], next_cursor: null }
-    if (input.url === '/share-links')
-      return { ref: 'synthetic-ref', miniapp_route: '/pages/share/index?ref=synthetic-ref' }
-    return { target_kind: 'story', target: { ...publicStory }, grade_label: '大三' }
+    if (input.url === `/share-links/${reference}`)
+      return { target_kind: 'story', target: { ...publicStory }, grade_label: '大三' }
+    throw new RequestError(404)
   }
   const request = async (input: Input) => {
     calls.push(input)
@@ -73,14 +76,21 @@ async function setup(page: string, query: Record<string, string> = {}) {
   const exports =
     page === 'story-editor'
       ? 'id,wish,currentWish,body,busy,writing,error,notice,load,act,allowed'
-      : page === 'stories'
-        ? 'id,rows,cursor,busy,error,load'
-        : 'kind,id,reference,currentTarget,path,busy,error,load'
+      : 'id,rows,cursor,busy,error,load,show,leave,openStory'
   let confirm = true
   let modal: (() => void) | undefined
   let delayConfirm = false
+  let shared: WishPublicContent | null = null
+  const navigations: string[] = []
   const context = {
-    defineProps: () => ({ storyId: query.id }),
+    defineProps: () => ({
+      storyId: query.id,
+      shareRef: shareReference(query),
+      readOnly: query.shared === '1' || shareReference(query) !== undefined,
+    }),
+    defineEmits: () => (_event: string, value: WishPublicContent | null) => {
+      shared = value
+    },
     defineExpose: () => {},
     onMounted: (fn: () => unknown) => {
       hooks.mount = fn
@@ -95,21 +105,9 @@ async function setup(page: string, query: Record<string, string> = {}) {
     getWish: (id: string) => request({ url: `/wishes/${id}` }),
     canStoryAction,
     isPublicContent,
-    sharePath,
-    shareCard,
-    nextTick,
     RequestError,
     uni: {
-      createCanvasContext: () => ({
-        setFillStyle: () => {},
-        fillRect: () => {},
-        setFontSize: () => {},
-        fillText: () => {},
-        measureText: (text: string) => ({ width: text.length * 30 }),
-        draw: (_reserve: boolean, callback: () => void) => callback(),
-      }),
-      canvasToTempFilePath: (options: { success: (result: { tempFilePath: string }) => void }) =>
-        options.success({ tempFilePath: '/tmp/synthetic-cover.png' }),
+      navigateTo: ({ url }: { url: string }) => navigations.push(url),
       showModal: (options: { success: (result: { confirm: boolean }) => void }) => {
         modal = () => options.success({ confirm })
         if (!delayConfirm) modal()
@@ -127,9 +125,6 @@ async function setup(page: string, query: Record<string, string> = {}) {
     onUnload: (fn: () => unknown) => {
       hooks.unload = fn
     },
-    onShareAppMessage: (fn: () => unknown) => {
-      hooks.share = fn
-    },
   }
   const source =
     page === 'stories' ? '../src/components/StoryWall.vue' : `../src/pages/${page}/index.vue`
@@ -138,14 +133,19 @@ async function setup(page: string, query: Record<string, string> = {}) {
     context,
   )
   hooks.load?.(query)
-  if (page === 'stories') hooks.mount()
-  else hooks.show()
+  if (page === 'stories') {
+    hooks.show = runtime.show
+    hooks.hide = runtime.leave
+    hooks.mount()
+  } else hooks.show()
   await settle()
   return {
     runtime,
     calls,
     hooks,
     user,
+    shared: () => shared,
+    navigations,
     setTransport: (fn: typeof transport) => {
       transport = fn
     },
@@ -184,18 +184,6 @@ test('REQ-007/015：故事动作绑定本人、心愿状态、服务端提示与
     true,
   )
   assert.equal(isPublicContent({ ...publicStory, body: ' \n' }), false)
-})
-test('REQ-008/018：只接受匹配本地分享路由的引用，不透传外链或正文快照', () => {
-  assert.equal(
-    sharePath({ ref: 'synthetic-ref', miniapp_route: '/pages/share/index?ref=synthetic-ref' }),
-    '/pages/share/index?ref=synthetic-ref',
-  )
-  for (const link of [
-    { ref: '../a', miniapp_route: '/pages/share/index?ref=../a' },
-    { ref: 'synthetic-ref', miniapp_route: 'https://example.invalid/' },
-    { ref: 'synthetic-ref', miniapp_route: '/pages/share/index?ref=synthetic-ref&body=private' },
-  ])
-    assert.throws(() => sharePath(link))
 })
 test('REQ-007/015：实际页面首次提交用wish_expected_version，202后重读fulfilled与待审结果', async () => {
   const s = await setup('story-editor', { wishId: wish.id })
@@ -351,6 +339,7 @@ test('REQ-015/018：故事详情只请求当前公开投影，目标错配、屏
   const s = await setup('stories', { id: wish.id })
   assert.equal(s.runtime.rows.value[0].body, publicStory.body)
   assert.equal(s.calls[0].url, `/stories/${wish.id}`)
+  assert.equal(s.calls[0].auth, true)
   s.setTransport(async () => ({ ...publicStory, id: 'synthetic-other' }))
   await s.runtime.load()
   assert.equal(s.runtime.rows.value.length, 0)
@@ -367,42 +356,57 @@ test('REQ-015/018：故事详情只请求当前公开投影，目标错配、屏
   await pending
   assert.equal(s.runtime.rows.value.length, 0)
 })
-test('REQ-008/018：创建分享只有kind/id；微信卡含公开标题与标签，路由只含引用，回流每次onShow重验并404清空', async () => {
-  const s = await setup('share', { kind: 'story', id: wish.id })
-  assert.equal(s.calls.length, 0)
-  await s.runtime.load(true)
-  const create = s.calls.find((i) => i.method === 'POST')!
-  assert.deepEqual(create.data, { target_kind: 'story', id: wish.id })
-  assert.equal(s.runtime.currentTarget.value.target.body, publicStory.body)
-  assert.deepEqual(s.hooks.share(), {
-    title: '找到一起练琴的伙伴 · 五山 · 大三 · 组队',
-    imageUrl: '/tmp/synthetic-cover.png',
-    path: '/pages/share/index?ref=synthetic-ref',
-  })
+test('故事列表进入详情，详情只向页面分享钩子提供当前公开故事', async () => {
+  const list = await setup('stories')
+  assert.equal(list.shared(), null)
+  list.runtime.openStory(wish.id)
+  assert.deepEqual(list.navigations, [`/pages/stories/index?id=${wish.id}`])
+  const detail = await setup('stories', { id: wish.id, shared: '1' })
+  assert.equal(detail.shared()?.id, wish.id)
+  detail.hooks.hide()
+  assert.equal(detail.shared(), null)
+  assert.equal(detail.runtime.rows.value.length, 0)
+  detail.hooks.show()
+  await settle()
+  assert.equal(detail.shared()?.id, wish.id)
+  assert.ok(detail.calls.every((call) => call.url === `/stories/${wish.id}`))
+  assert.ok(detail.calls.every((call) => call.auth === false))
+})
+
+test('故事扫码只解析 scene，返回页面时重新复核且失效后不回退列表', async () => {
+  const s = await setup('stories', { scene: reference.replace(/-/g, ''), kind: 'wish' })
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    [`/share-links/${reference}`],
+  )
+  assert.equal(s.shared()?.body, publicStory.body)
   s.hooks.hide()
-  assert.equal(s.runtime.currentTarget.value, null)
-  assert.deepEqual(s.hooks.share(), {
-    title: '鲤愿池 · 心愿与还愿故事',
-    imageUrl: '/static/share-cover.png',
-    path: '/pages/index/index',
-  })
+  assert.equal(s.shared(), null)
   s.setTransport(async () => {
     throw new RequestError(404)
   })
   s.hooks.show()
   await settle()
-  assert.equal(s.runtime.currentTarget.value, null)
-  assert.equal(s.calls.filter((i) => i.method === 'POST').length, 1)
-  assert.equal(s.calls.filter((i) => i.url === '/share-links/synthetic-ref').length, 2)
+  assert.equal(s.shared(), null)
+  assert.equal(s.runtime.rows.value.length, 0)
+  assert.match(s.runtime.error.value, /不可公开查看/)
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    Array(2).fill(`/share-links/${reference}`),
+  )
 })
-test('REQ-008/018：分享游客只解析ref；失败、换账号和迟到均无旧内容，不信任额外路由参数', async () => {
-  const s = await setup('share', { ref: 'synthetic-ref', kind: 'wish', id: 'synthetic-wrong' })
-  assert.equal(s.calls[0].url, '/share-links/synthetic-ref')
-  assert.equal(s.runtime.kind.value, null)
-  assert.equal(s.runtime.currentTarget.value.target_kind, 'story')
-  s.user.user.id = 'synthetic-other'
-  assert.equal(s.runtime.currentTarget.value, null)
-  let finish: ((value: unknown) => void) | undefined
+
+test('故事扫码拒绝非法引用和跨类型返回，丢弃换会话后的响应', async () => {
+  const invalid = await setup('stories', { scene: 'bad' })
+  assert.deepEqual(invalid.calls, [])
+  assert.match(invalid.runtime.error.value, /不可公开查看/)
+  const s = await setup('stories', { ref: reference })
+  s.setTransport(async () => ({ target_kind: 'wish', target: publicStory }))
+  const wrongKind = s.runtime.load()
+  assert.equal(s.shared(), null)
+  await wrongKind
+  assert.equal(s.runtime.rows.value.length, 0)
+  let finish!: (value: unknown) => void
   s.setTransport(
     async () =>
       new Promise((resolve) => {
@@ -411,28 +415,50 @@ test('REQ-008/018：分享游客只解析ref；失败、换账号和迟到均无
   )
   const pending = s.runtime.load()
   s.setEpoch()
-  finish!({ target_kind: 'story', target: publicStory })
+  finish({ target_kind: 'story', target: publicStory })
   await pending
-  assert.equal(s.runtime.currentTarget.value, null)
+  assert.equal(s.shared(), null)
+  assert.equal(s.runtime.rows.value.length, 0)
 })
-test('REQ-008：未认证不创建分享，伪造服务端路由与错配目标不展示', async () => {
-  const s = await setup('share', { kind: 'wish', id: wish.id })
-  s.user.validated = false
-  await s.runtime.load(true)
-  assert.equal(s.calls.length, 0)
-  s.user.validated = true
-  s.setTransport(async () => ({
-    ref: 'synthetic-ref',
-    miniapp_route: '/pages/chat/index?id=synthetic-other',
-  }))
-  await s.runtime.load(true)
-  assert.equal(s.runtime.reference.value, '')
-  assert.equal(s.runtime.currentTarget.value, null)
-  s.setTransport(async (input) =>
-    input.method
-      ? { ref: 'synthetic-ref', miniapp_route: '/pages/share/index?ref=synthetic-ref' }
-      : { target_kind: 'story', target: publicStory },
+
+test('故事页注册原生分享，扫码打开时忽略额外目标参数并在隐藏时清除公开投影', async () => {
+  const hooks: Record<string, (...args: never[]) => unknown> = {}
+  let contentForShare!: () => WishPublicContent | null
+  const page = await loadRuntime(
+    pageScript(new URL('../src/pages/stories/index.vue', import.meta.url)) +
+      '\nexport { storyId, shareRef, sharedEntry, publicStory, storyWall }',
+    {
+      shareReference,
+      useContentShare: (kind: string, getter: () => WishPublicContent | null) => {
+        assert.equal(kind, 'story')
+        contentForShare = getter
+      },
+      onLoad: (fn: () => unknown) => {
+        hooks.load = fn
+      },
+      onShow: (fn: () => unknown) => {
+        hooks.show = fn
+      },
+      onHide: (fn: () => unknown) => {
+        hooks.hide = fn
+      },
+    },
   )
-  await s.runtime.load(true)
-  assert.equal(s.runtime.currentTarget.value, null)
+  const show = hooks.show!
+  const hide = hooks.hide!
+  const calls: string[] = []
+  page.storyWall.value = { show: () => calls.push('show'), hide: () => calls.push('hide') }
+  const onLoad = hooks.load! as (query: Record<string, string>) => void
+  onLoad({ scene: reference.replace(/-/g, ''), id: 'ignored' })
+  assert.equal(page.shareRef.value, reference)
+  assert.equal(page.storyId.value, '')
+  assert.equal(page.sharedEntry.value, true)
+  show()
+  page.publicStory.value = publicStory
+  assert.equal(contentForShare(), null)
+  page.sharedEntry.value = false
+  assert.equal(contentForShare()?.id, wish.id)
+  hide()
+  assert.equal(contentForShare(), null)
+  assert.deepEqual(calls, ['show', 'hide'])
 })
