@@ -1,5 +1,6 @@
 export interface ProfileUpdate {
   identity_tags?: import('./wish').IdentityTags
+  mbti?: string
   nickname: string
   hide_identity_tags: boolean
   expected_version: number

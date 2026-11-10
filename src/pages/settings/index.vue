@@ -3,7 +3,7 @@ import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import MatchmakingForm from '@/components/MatchmakingForm.vue'
 import { useMatchmakingProfile } from '@/composables/use-matchmaking-profile'
-import { matchmakingID } from '@/utils/matchmaking'
+import { matchmakingID, matchmakingMbtis } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
 import { computed, ref, watch } from 'vue'
@@ -30,6 +30,32 @@ function returnToActivity() {
 }
 const me = ref<UserInfo | null>(null)
 const nickname = ref('')
+const mbti = ref('')
+const personalityTypes = ['', ...matchmakingMbtis]
+const personalityLabels = ['未设置', ...matchmakingMbtis]
+const assessmentURL = 'https://www.16personalities.com/ch/人格测试'
+
+function selectPersonality(event: { detail: { value: string | number } }) {
+  const value = personalityTypes[Number(event.detail.value)]
+  if (!busy.value && !writing.value && allowed('putMeProfile') && value !== undefined)
+    mbti.value = value
+}
+
+function copyAssessment() {
+  const current = generation
+  const epoch = session.getEpoch()
+  const active = () => visible && current === generation && epoch === session.getEpoch()
+  uni.setClipboardData({
+    data: assessmentURL,
+    showToast: false,
+    success: () => {
+      if (active()) notice.value = '链接已复制，可在浏览器中打开。'
+    },
+    fail: () => {
+      if (active()) error.value = '复制失败，可长按选中网址。'
+    },
+  })
+}
 const avatarDraft = ref('')
 const selectingAvatar = ref(false)
 let avatarPickerHid = false
@@ -82,6 +108,7 @@ function selectTag(
 function clear() {
   me.value = null
   nickname.value = ''
+  mbti.value = ''
   avatarDraft.value = ''
   selectingAvatar.value = false
   avatarPickerHid = false
@@ -123,6 +150,7 @@ async function load() {
       throw new Error('本人资料无效')
     me.value = { ...result, allowed_actions: [...result.allowed_actions] }
     nickname.value = result.nickname ?? ''
+    mbti.value = result.mbti ?? ''
     identityCampus.value = result.identity_tags?.campus || 'any'
     identityGrade.value = result.identity_tags?.grade ?? ''
     identityGender.value = result.identity_tags?.gender || 'undisclosed'
@@ -298,11 +326,12 @@ async function act() {
   if (!snapshot || busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile'))
     return
   if (!nickname.value.trim() || typeof hidden.value !== 'boolean') {
-    error.value = '请填写非空白昵称，并明确选择身份标签是否隐藏。'
+    error.value = '请填写昵称并选择是否公开展示校区、性别和年级。'
     return
   }
   const input = {
     nickname: nickname.value,
+    mbti: mbti.value,
     identity_tags: {
       campus: identityCampus.value,
       gender: identityGender.value,
@@ -326,7 +355,7 @@ async function act() {
   let refresh = false
   try {
     if (
-      !(await confirm('保存资料', '将保存昵称与身份标签显示设置。是否继续？')) ||
+      !(await confirm('保存资料', '将保存个人资料与公开展示设置。是否继续？')) ||
       !active() ||
       !allowed('putMeProfile') ||
       currentMe.value !== snapshot
@@ -390,13 +419,7 @@ onUnload(leave)
 const {
   page: matchmakingPage,
   form: matchmakingForm,
-  grades,
   locked: matchmakingLocked,
-  types,
-  typeLabels,
-  assessmentURL,
-  selectPersonality,
-  copyAssessment,
   save: saveMatchmaking,
   load: loadMatchmaking,
 } = useMatchmakingProfile()
@@ -412,6 +435,7 @@ async function refreshProfileDraft() {
   if (selectingAvatar.value) return
   const draft = {
     nickname: nickname.value,
+    mbti: mbti.value,
     hidden: hidden.value,
     campus: identityCampus.value,
     gender: identityGender.value,
@@ -421,6 +445,7 @@ async function refreshProfileDraft() {
   await load()
   if (epoch === session.getEpoch() && currentMe.value) {
     nickname.value = draft.nickname
+    mbti.value = draft.mbti
     hidden.value = draft.hidden
     identityCampus.value = draft.campus
     identityGender.value = draft.gender
@@ -494,7 +519,7 @@ onPullDownRefresh(async () => {
         :disabled="busy || writing"
         @change="runPageAction(() => selectTag('campus', $event))"
         ><view
-          >校区标签 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
+          >校区 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
         ></picker
       >
       <picker
@@ -503,7 +528,7 @@ onPullDownRefresh(async () => {
         :disabled="busy || writing"
         @change="runPageAction(() => selectTag('gender', $event))"
         ><view
-          >性别标签 {{ genders.find((item) => item.value === identityGender)?.label }}</view
+          >性别 {{ genders.find((item) => item.value === identityGender)?.label }}</view
         ></picker
       >
       <picker
@@ -519,27 +544,44 @@ onPullDownRefresh(async () => {
         @change="runPageAction(() => selectTag('grade', $event))"
       >
         <view
-          >年级标签
+          >年级
           {{ gradeOptions.find((item) => item.code === identityGrade)?.label || '暂不可选' }}</view
         >
       </picker>
-      <text>身份标签显示</text>
-      <text>这里的标签用于公开展示。下方报名资料仅用于包分配。</text>
-      <text>隐藏后，公开内容与公开主页不展示身份标签；学生认证信息不在这里编辑。</text>
+      <text>MBTI（选填）</text>
+      <picker
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        :range="personalityLabels"
+        :value="Math.max(0, personalityTypes.indexOf(mbti))"
+        @change="selectPersonality"
+      >
+        <view class="personality-picker">{{ mbti || '未设置' }} ›</view>
+      </picker>
+      <view class="assessment">
+        <text class="section-title">16Personalities 官方测评</text>
+        <text class="muted">在浏览器完成测评后，可以回来手动选择四字母类型。</text>
+        <text class="muted" selectable>{{ assessmentURL }}</text>
+        <button @click="copyAssessment">复制官方测评链接</button>
+      </view>
+      <text>公开展示设置</text>
+      <text>报名使用已保存的昵称、校区、性别、年级和 MBTI。</text>
+      <text
+        >此设置控制校区、性别和年级在公开内容及主页上的展示。MBTI 仅本人和获授权的活动可见。</text
+      >
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
       <button
         :disabled="busy || writing || !allowed('putMeProfile')"
         :loading="isPageActionPending('pages-settings-index-button-2')"
         @click="runPageAction(() => (hidden = true), 'pages-settings-index-button-2')"
       >
-        {{ hidden === true ? '已选择：隐藏身份标签' : '隐藏身份标签' }}
+        {{ hidden === true ? '已选择：隐藏公开资料' : '隐藏公开资料' }}
       </button>
       <button
         :disabled="busy || writing || !allowed('putMeProfile')"
         :loading="isPageActionPending('pages-settings-index-button-3')"
         @click="runPageAction(() => (hidden = false), 'pages-settings-index-button-3')"
       >
-        {{ hidden === false ? '已选择：显示身份标签' : '显示身份标签' }}
+        {{ hidden === false ? '已选择：显示公开资料' : '显示公开资料' }}
       </button>
       <button
         v-if="allowed('putMeProfile')"
@@ -555,31 +597,11 @@ onPullDownRefresh(async () => {
     <text v-if="user.isLoggedIn && matchmakingGate" class="notice">{{ matchmakingGate }}</text>
     <template v-if="matchmakingForm">
       <view class="card profile-card">
-        <text class="section-title">人格标签</text>
-        <picker
-          :disabled="matchmakingLocked"
-          :range="typeLabels"
-          :value="Math.max(0, types.indexOf(matchmakingForm.mbti))"
-          @change="selectPersonality"
-        >
-          <view class="personality-picker">{{ matchmakingForm.mbti || '未设置' }} ›</view>
-        </picker>
-        <text class="muted"
-          >人格标签选填，来源为本人填写。参加包分配时，标签可随本次报名资料提交。</text
-        >
-        <view class="assessment">
-          <text class="section-title">16Personalities 官方测评</text>
-          <text class="muted">在浏览器完成测评后，可以回来手动选择结果的四字母类型。</text>
-          <text class="muted" selectable>{{ assessmentURL }}</text>
-          <button @click="copyAssessment">复制官方测评链接</button>
-        </view>
-      </view>
-      <view class="card profile-card">
         <text class="section-title">包分配报名资料</text>
         <text class="muted"
-          >保存后可在活动中确认报名。以下资料用于报名审核，并按报名确认的范围展示给配对对象。可以先只保存人格标签。</text
+          >保存后可在活动中确认报名。以下资料用于报名审核，并按报名确认的范围展示给配对对象。</text
         >
-        <MatchmakingForm v-model="matchmakingForm" :grades="grades" :disabled="matchmakingLocked" />
+        <MatchmakingForm v-model="matchmakingForm" :disabled="matchmakingLocked" />
       </view>
       <button
         :disabled="matchmakingLocked"

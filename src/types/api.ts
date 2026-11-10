@@ -7,6 +7,7 @@ export interface UserInfo {
   avatar_id?: string
   grade_options?: { code: string; label: string }[]
   identity_tags?: import('./wish').IdentityTags
+  mbti?: string
   nickname?: string
   verification: VerificationState
   hide_identity_tags?: boolean

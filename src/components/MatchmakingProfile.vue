@@ -8,8 +8,7 @@ defineProps<{ profile: MatchmakingProfile; gradeLabel: string; own?: boolean }>(
     <text class="profile-name">{{ profile.name }}</text>
     <text
       >{{ genders.find((item) => item.value === profile.gender)?.label }} ·
-      {{ campuses.find((item) => item.value === profile.campus)?.label }} ·
-      {{ profile.education }} · {{ gradeLabel }}</text
+      {{ campuses.find((item) => item.value === profile.campus)?.label }} · {{ gradeLabel }}</text
     >
     <view class="profile-facts">
       <text>{{ profile.age }} 岁</text><text>{{ profile.height }} cm</text

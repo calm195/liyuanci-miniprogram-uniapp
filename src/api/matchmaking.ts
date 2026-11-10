@@ -5,7 +5,7 @@ import {
   parseMatchmakingDetail,
   parseMatchmakingAccountProfile,
   parseMatchmakingPage,
-  parseMatchmakingProfileDraft,
+  parseMatchmakingPreferences,
   parseMatchmakingReceipt,
 } from '@/utils/matchmaking'
 import type { MatchmakingCommand } from '@/types/matchmaking'
@@ -45,7 +45,7 @@ export async function getMatchmakingAccountProfile() {
 export async function writeMatchmaking(command: MatchmakingCommand) {
   if (!/^[!-~]{1,128}$/.test(command.key)) throw new Error('操作凭据无效。')
   if (command.kind === 'profile') {
-    const profile = parseMatchmakingProfileDraft(command.input.profile)
+    const profile = parseMatchmakingPreferences(command.input.profile)
     if (!Number.isSafeInteger(command.input.expected_version) || command.input.expected_version < 0)
       throw new Error('个人资料版本无效，请刷新。')
     return parseMatchmakingReceipt(
@@ -61,6 +61,8 @@ export async function writeMatchmaking(command: MatchmakingCommand) {
   if (command.kind === 'enroll') {
     if (
       !command.input.consent ||
+      !Number.isSafeInteger(command.input.account_version) ||
+      command.input.account_version < 1 ||
       !Number.isSafeInteger(command.input.profile_version) ||
       command.input.profile_version < 1 ||
       !Number.isSafeInteger(command.input.expected_version) ||

@@ -26,7 +26,6 @@ export interface MatchmakingActivity {
 export interface MatchmakingProfile {
   name: string
   gender: 'male' | 'female'
-  education: string
   grade: string
   campus: string
   mbti: string
@@ -48,7 +47,13 @@ export type MatchmakingProfileDraft = Omit<MatchmakingProfile, 'gender'> & {
   gender: MatchmakingProfile['gender'] | ''
 }
 
+export type MatchmakingPreferences = Omit<
+  MatchmakingProfileDraft,
+  'name' | 'gender' | 'campus' | 'grade' | 'mbti' | 'consent'
+>
+
 export interface MatchmakingAccountProfile {
+  account_version: number
   profile?: MatchmakingProfileDraft
   version: number
 }
@@ -110,13 +115,18 @@ export type MatchmakingCommand =
       kind: 'profile'
       activityId: 'account-profile'
       key: string
-      input: { expected_version: number; profile: MatchmakingProfileDraft }
+      input: { expected_version: number; profile: MatchmakingPreferences }
     }
   | {
       kind: 'enroll'
       activityId: string
       key: string
-      input: { expected_version: number; profile_version: number; consent: true }
+      input: {
+        expected_version: number
+        profile_version: number
+        account_version: number
+        consent: true
+      }
     }
   | {
       kind: 'withdraw'

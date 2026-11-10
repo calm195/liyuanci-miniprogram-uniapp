@@ -28,11 +28,11 @@ export function validateWish(input: WishInput): string {
   const tags = input.identity_tags
   if (tags) {
     if (tags.gender !== undefined && !genders.some((item) => item.value === tags.gender))
-      return '请选择有效性别标签'
+      return '请选择有效性别'
     if (tags.grade !== undefined && (typeof tags.grade !== 'string' || tags.grade.length === 0))
       return '在读年级不能为空'
     if (tags.campus !== undefined && !campuses.some((item) => item.value === tags.campus))
-      return '请选择有效身份校区标签'
+      return '请选择有效校区'
   }
   return ''
 }

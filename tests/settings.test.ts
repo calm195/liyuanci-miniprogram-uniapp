@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive, ref } from 'vue'
-import { matchmakingID } from '../src/utils/matchmaking.ts'
+import { matchmakingID, matchmakingMbtis } from '../src/utils/matchmaking.ts'
 import type { UserInfo } from '../src/types/api.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { session as realSession } from '../src/utils/session.ts'
@@ -11,6 +11,7 @@ const actor = {
   id: 'synthetic-owner',
   version: 19,
   nickname: '合成昵称',
+  mbti: 'INFP',
   verification: 'unverified' as const,
   hide_identity_tags: true,
   allowed_actions: ['putMeProfile'],
@@ -129,6 +130,7 @@ async function setup(
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
       matchmakingID,
+      matchmakingMbtis,
       useMatchmakingProfile: () => ({
         page: { busy: ref(false), writing: ref(false), pending: ref(null) },
         load: async () => {
@@ -241,6 +243,7 @@ test('REQ-002/014：资料按本人版本提交，显式发送 false，成功从
     nickname: '新昵称',
     identity_tags: { campus: 'any', gender: 'undisclosed' },
     hide_identity_tags: false,
+    mbti: 'INFP',
     expected_version: 19,
   })
   assert.ok(input.header?.['Idempotency-Key'])

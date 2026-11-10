@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import type { MatchmakingProfileDraft } from '@/types/matchmaking'
-import { campuses, genders } from '@/types/wish'
-import { matchmakingEducations } from '@/utils/matchmaking'
+import type { MatchmakingPreferences } from '@/types/matchmaking'
 const props = defineProps<{
-  modelValue: MatchmakingProfileDraft
-  grades: { code: string; label: string }[]
+  modelValue: MatchmakingPreferences
   disabled: boolean
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: MatchmakingProfileDraft] }>()
-type TextField = 'name' | 'wechat' | 'introduction'
+const emit = defineEmits<{ 'update:modelValue': [value: MatchmakingPreferences] }>()
+type TextField = 'wechat' | 'introduction'
 type NumberField =
   | 'age'
   | 'age_min'
@@ -48,8 +45,6 @@ const numericGroups: {
     high: 500,
   },
 ]
-const campusOptions = campuses.filter((item) => item.value !== 'any')
-const genderOptions = genders.filter((item) => item.value !== 'undisclosed')
 function inputValue(event: unknown): string {
   const value = (event as { detail?: { value?: unknown } }).detail?.value
   return typeof value === 'string' ? value : ''
@@ -60,90 +55,9 @@ function input(key: TextField, event: unknown) {
 function numeric(key: NumberField, event: unknown) {
   emit('update:modelValue', { ...props.modelValue, [key]: Number(inputValue(event)) })
 }
-function select(
-  key: 'gender' | 'campus' | 'education' | 'grade',
-  event: { detail: { value: string | number } },
-) {
-  const index = Number(event.detail.value)
-  let value: string | undefined
-  if (key === 'gender') value = genderOptions[index]?.value
-  else if (key === 'campus') value = campusOptions[index]?.value
-  else if (key === 'education') value = matchmakingEducations[index]
-  else value = props.grades[index]?.code
-  if (value !== undefined) emit('update:modelValue', { ...props.modelValue, [key]: value })
-}
 </script>
 <template>
   <view class="match-form">
-    <text class="section-title">关于你</text>
-    <label class="field"
-      ><text>姓名</text
-      ><input
-        :value="modelValue.name"
-        :disabled="disabled"
-        maxlength="32"
-        placeholder="填写参与活动使用的姓名"
-        @input="input('name', $event)"
-    /></label>
-    <view class="form-grid">
-      <picker
-        :disabled="disabled"
-        :range="genderOptions"
-        range-key="label"
-        :value="genderOptions.findIndex((item) => item.value === modelValue.gender)"
-        @change="select('gender', $event)"
-        ><view class="picker-field"
-          >性别：{{
-            genderOptions.find((item) => item.value === modelValue.gender)?.label || '请选择'
-          }}
-          ›</view
-        ></picker
-      >
-      <picker
-        :disabled="disabled"
-        :range="campusOptions"
-        range-key="label"
-        :value="
-          Math.max(
-            0,
-            campusOptions.findIndex((item) => item.value === modelValue.campus),
-          )
-        "
-        @change="select('campus', $event)"
-        ><view class="picker-field"
-          >校区：{{
-            campusOptions.find((item) => item.value === modelValue.campus)?.label || '请选择'
-          }}
-          ›</view
-        ></picker
-      >
-      <picker
-        :disabled="disabled"
-        :range="matchmakingEducations"
-        :value="Math.max(0, matchmakingEducations.indexOf(modelValue.education))"
-        @change="select('education', $event)"
-        ><view class="picker-field">学历：{{ modelValue.education || '请选择' }} ›</view></picker
-      >
-      <picker
-        :disabled="disabled || !grades.length"
-        :range="grades"
-        range-key="label"
-        :value="
-          Math.max(
-            0,
-            grades.findIndex((item) => item.code === modelValue.grade),
-          )
-        "
-        @change="select('grade', $event)"
-        ><view class="picker-field"
-          >年级：{{
-            grades.find((item) => item.code === modelValue.grade)?.label || '请选择'
-          }}
-          ›</view
-        ></picker
-      >
-    </view>
-    <text v-if="!grades.length" class="form-help">年级选项暂不可用，请刷新资格后填写。</text>
     <text class="section-title">个人数据与期待</text>
     <view v-for="group in numericGroups" :key="group.self" class="numeric-group">
       <label class="field"
@@ -207,7 +121,6 @@ function select(
 }
 .field input,
 .range-fields input,
-.picker-field,
 .field textarea {
   border: 1rpx solid var(--theme-line);
   border-radius: 18rpx;
@@ -218,14 +131,6 @@ function select(
 .field textarea {
   width: auto;
   min-height: 180rpx;
-}
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16rpx;
-}
-.picker-field {
-  font-size: 25rpx;
 }
 .numeric-group {
   display: grid;

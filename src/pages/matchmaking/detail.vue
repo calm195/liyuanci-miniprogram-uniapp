@@ -98,7 +98,11 @@ async function load() {
     if (canEdit.value && !pending.value) {
       const profile = await getMatchmakingAccountProfile()
       if (active()) {
-        if (account.value?.version !== profile.version) consent.value = false
+        if (
+          account.value?.version !== profile.version ||
+          account.value?.account_version !== profile.account_version
+        )
+          consent.value = false
         account.value = profile
       }
     }
@@ -135,6 +139,7 @@ async function submit() {
       input: {
         expected_version: editVersion.value,
         profile_version: account.value.version,
+        account_version: account.value.account_version,
         consent: true,
       },
     },

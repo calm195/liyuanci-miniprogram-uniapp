@@ -22,7 +22,6 @@ const secondId = '10000000-0000-4000-8000-000000000005'
 const profile: MatchmakingProfile = {
   name: '合成同学',
   gender: 'female',
-  education: '本科生',
   grade: 'first',
   campus: 'wushan',
   mbti: 'INFP',
@@ -148,6 +147,7 @@ async function setup() {
   let data = sample()
   let accountData: MatchmakingAccountProfile = {
     version: 5,
+    account_version: 17,
     profile: { ...profile, consent: false },
   }
   const calls: Call[] = []
@@ -269,7 +269,6 @@ test('包分配资料解析保留单位和受控枚举，拒绝倒置区间、�
     { weight: 49 },
     { weight_min: 501 },
     { gender: 'undisclosed' },
-    { education: '任意学历' },
     { mbti: 'UNKNOWN' },
   ])
     assert.throws(() => contract.parseMatchmakingProfile({ ...profile, ...changes }))
@@ -326,12 +325,12 @@ test('API使用活动范围、原始版本与幂等键，目标错配或损坏�
     kind: 'enroll',
     activityId,
     key: 'synthetic-enroll',
-    input: { expected_version: 8, profile_version: 5, consent: true },
+    input: { expected_version: 8, profile_version: 5, account_version: 17, consent: true },
   })
   assert.deepEqual(s.calls[0], {
     url: `/matchmaking/activities/${activityId}/enrollment`,
     method: 'PUT',
-    data: { expected_version: 8, profile_version: 5, consent: true },
+    data: { expected_version: 8, profile_version: 5, account_version: 17, consent: true },
     silent: true,
     header: { 'Idempotency-Key': 'synthetic-enroll' },
   })
@@ -353,6 +352,7 @@ test('报名预览账号快照，允许跨校区，提交只带版本和展示�
   const s = await setup()
   s.setAccount({
     version: 5,
+    account_version: 17,
     profile: { ...profile, campus: 'international', mbti: '', wechat: '', consent: false },
   })
   const p = await s.page()
@@ -371,30 +371,34 @@ test('报名预览账号快照，允许跨校区，提交只带版本和展示�
   assert.deepEqual(s.calls.find((call) => call.method === 'PUT')?.data, {
     expected_version: 8,
     profile_version: 5,
+    account_version: 17,
     consent: true,
   })
   assert.equal(p.runtime.editing.value, false)
   assert.match(p.runtime.page.notice.value, /已提交/)
 })
 
-test('资料缺失时阻止报名，标签可随未填完的账号资料保存', async () => {
+test('通用资料缺失时阻止报名，专用资料可独立保存', async () => {
   const s = await setup()
-  const partial = { ...profile, education: '', age: 0, consent: false, mbti: 'INFJ' }
-  s.setAccount({ version: 5, profile: partial })
+  const partial = { ...profile, grade: '', age: 0, consent: false, mbti: 'INFJ' }
+  s.setAccount({ version: 5, account_version: 17, profile: partial })
   const p = await s.page()
   p.runtime.beginEdit()
   p.runtime.consent.value = true
   await p.runtime.submit()
-  assert.match(p.runtime.page.error.value, /学历/)
+  assert.match(p.runtime.page.error.value, /年级/)
   assert.equal(s.calls.filter((call) => call.method === 'PUT').length, 0)
   await s.api.writeMatchmaking({
     kind: 'profile',
     activityId: 'account-profile',
     key: 'synthetic-profile',
-    input: { expected_version: 5, profile: partial },
+    input: { expected_version: 5, profile: contract.parseMatchmakingPreferences(partial) },
   })
   assert.equal(s.calls.at(-1)?.url, '/matchmaking/profile')
-  assert.deepEqual(s.calls.at(-1)?.data, { expected_version: 5, profile: partial })
+  assert.deepEqual(s.calls.at(-1)?.data, {
+    expected_version: 5,
+    profile: contract.parseMatchmakingPreferences(partial),
+  })
 })
 
 test('账号资料版本更新后要求重新确认展示说明', async () => {
@@ -402,7 +406,7 @@ test('账号资料版本更新后要求重新确认展示说明', async () => {
   const p = await s.page()
   p.runtime.beginEdit()
   p.runtime.consent.value = true
-  s.setAccount({ version: 6, profile: { ...profile, consent: false } })
+  s.setAccount({ version: 5, account_version: 18, profile: { ...profile, consent: false } })
   await p.runtime.load()
   assert.equal(p.runtime.consent.value, false)
 })
@@ -419,7 +423,7 @@ test('未知报名结果离开重入仍按原键和版本重试', async () => {
   await p.runtime.submit()
   assert.ok(p.runtime.page.pending.value)
   const original = s.calls.find((call) => call.method === 'PUT')!
-  s.setAccount({ version: 6, profile: { ...profile, consent: false } })
+  s.setAccount({ version: 5, account_version: 18, profile: { ...profile, consent: false } })
   p.unload()
   assert.equal(p.runtime.detail.value, null)
   const reentered = await s.page()

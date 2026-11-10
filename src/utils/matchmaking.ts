@@ -8,6 +8,7 @@ import type {
   MatchmakingPair,
   MatchmakingProfile,
   MatchmakingProfileDraft,
+  MatchmakingPreferences,
   MatchmakingScore,
   MatchmakingTask,
 } from '../types/matchmaking.ts'
@@ -30,7 +31,6 @@ export const matchmakingMbtis = [
   'ISTJ',
   'ESTJ',
 ] as const
-export const matchmakingEducations = ['本科生', '研究生', '博士生']
 const phases: ActivityPhase[] = [
   'draft',
   'cancelled',
@@ -142,9 +142,8 @@ export function parseMatchmakingActivity(value: unknown): MatchmakingActivity {
 export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
   const v = record(value)
   const out: MatchmakingProfile = {
-    name: string(v.name, 32),
+    name: string(v.name, 40),
     gender: option(v.gender, ['male', 'female']),
-    education: option(v.education, matchmakingEducations),
     grade: string(v.grade, 32),
     campus: option(v.campus, campusCodes),
     mbti: option(v.mbti, ['', ...matchmakingMbtis]),
@@ -166,7 +165,6 @@ export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
     out.height_min > out.height_max ||
     out.weight_min > out.weight_max ||
     !out.name.trim() ||
-    !out.education.trim() ||
     !out.grade.trim() ||
     !out.introduction.trim()
   )
@@ -174,17 +172,11 @@ export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
   return out
 }
 
-export function parseMatchmakingProfileDraft(value: unknown): MatchmakingProfileDraft {
+export function parseMatchmakingPreferences(value: unknown): MatchmakingPreferences {
   const v = record(value)
   const numeric = (key: string, min: number, max: number) =>
     v[key] === 0 ? 0 : integer(v[key], min, max)
-  const draft: MatchmakingProfileDraft = {
-    name: string(v.name, 32),
-    gender: option(v.gender, ['', 'male', 'female']),
-    education: option(v.education, ['', ...matchmakingEducations]),
-    grade: string(v.grade, 32),
-    campus: option(v.campus, ['', ...campusCodes]),
-    mbti: option(v.mbti, ['', ...matchmakingMbtis]),
+  const draft: MatchmakingPreferences = {
     age: numeric('age', 18, 80),
     age_min: numeric('age_min', 18, 80),
     age_max: numeric('age_max', 18, 80),
@@ -196,7 +188,6 @@ export function parseMatchmakingProfileDraft(value: unknown): MatchmakingProfile
     weight_max: numeric('weight_max', 50, 500),
     wechat: string(v.wechat, 64),
     introduction: string(v.introduction, 500),
-    consent: bool(v.consent),
   }
   for (const field of ['age', 'height', 'weight'] as const) {
     const min = draft[`${field}_min`]
@@ -206,21 +197,33 @@ export function parseMatchmakingProfileDraft(value: unknown): MatchmakingProfile
   return draft
 }
 
+function parseMatchmakingProfileDraft(v: Record<string, unknown>): MatchmakingProfileDraft {
+  return {
+    ...parseMatchmakingPreferences(v),
+    name: string(v.name, 40),
+    gender: option(v.gender, ['', 'male', 'female']),
+    grade: string(v.grade, 32),
+    campus: option(v.campus, ['', ...campusCodes]),
+    mbti: option(v.mbti, ['', ...matchmakingMbtis]),
+    consent: bool(v.consent),
+  }
+}
+
 export function parseMatchmakingAccountProfile(value: unknown): MatchmakingAccountProfile {
   const v = record(value)
   const version = integer(v.version)
-  if (version === 0 && v.profile == null) return { version }
+  const account_version = integer(v.account_version, 1)
+  if (version === 0 && v.profile == null) return { version, account_version }
   if (version === 0 || v.profile == null) invalid()
-  const profile = parseMatchmakingProfileDraft(v.profile)
+  const profile = parseMatchmakingProfileDraft(record(v.profile))
   if (profile.consent) invalid()
-  return { version, profile }
+  return { version, account_version, profile }
 }
 
 export function matchmakingProfileProblem(profile: MatchmakingProfileDraft): string {
   for (const [key, label] of [
-    ['name', '姓名'],
+    ['name', '昵称'],
     ['gender', '性别'],
-    ['education', '学历'],
     ['grade', '年级'],
     ['campus', '校区'],
     ['introduction', '自我介绍'],
