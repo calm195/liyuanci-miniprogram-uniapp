@@ -9,9 +9,10 @@ import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
+import WishSupportButton from '@/components/WishSupportButton.vue'
 import { getWish, getPublicWish, changeWishState } from '@/api/wishes'
 import type { WishLifecycleAction } from '@/api/wishes'
-import type { WishPublicContent, WishResult } from '@/types/wish'
+import type { WishPublicContent, WishResult, WishSupport } from '@/types/wish'
 import { categories, campuses, rewards } from '@/types/wish'
 import { canWishAction } from '@/utils/actions'
 import { canApplyToWish } from '@/utils/application'
@@ -55,6 +56,7 @@ type SharedAction = 'apply' | 'report' | 'block'
 let actionReturn: { action: SharedAction; target: string; ready?: WishActionReady } | null = null
 
 // 路由只携带标识；正文与权限始终重新读取，不从列表或本地缓存恢复。
+const sharedSupport = ref<{ owner: string; epoch: number; state: WishSupport } | null>(null)
 const currentWish = computed(() => {
   if (sharedEntry.value) return wish.value
   if (
@@ -71,6 +73,12 @@ const content = computed(() => {
   if (value.own_content) return value.own_content
   if (value.participant) return value.participant
   return value.current_state === 'published' ? value.public || null : null
+})
+const supportState = computed(() => {
+  const saved = sharedSupport.value
+  if (sharedEntry.value && saved?.owner === user.user?.id && saved?.epoch === session.getEpoch())
+    return saved.state
+  return currentWish.value?.support
 })
 const publicContent = computed(() => {
   const value = currentWish.value
@@ -137,6 +145,7 @@ function clearProjection() {
   wish.value = null
   publicShare.value = null
   sharedApplication.value = null
+  sharedSupport.value = null
   snapshotEpoch.value = -1
   snapshotOwner.value = ''
   refreshExpiry.value = false
@@ -187,9 +196,10 @@ async function load() {
         expires_at: result.expires_at,
         allowed_actions: [],
         public: result.public,
+        support: result.support,
       }
       const owner = user.user?.id
-      if (!browseOnly.value && owner && user.validated && user.user?.verification === 'verified') {
+      if (!browseOnly.value && owner && user.validated) {
         // 分享正文保持匿名，单独读取当前账号自己的申请状态。
         const scoped = await getWish(targetId, false, true).catch(() => null)
         if (
@@ -197,9 +207,11 @@ async function load() {
           epoch === session.getEpoch() &&
           owner === user.user?.id &&
           scoped?.id === targetId &&
-          scoped.application_in_progress
-        )
-          sharedApplication.value = { owner, epoch }
+          wish.value
+        ) {
+          if (scoped.support) sharedSupport.value = { owner, epoch, state: scoped.support }
+          if (scoped.application_in_progress) sharedApplication.value = { owner, epoch }
+        }
       }
     } catch {
       if (isCurrent()) error.value = '分享内容已失效或暂不可查看。'
@@ -526,6 +538,13 @@ onPullDownRefresh(async () => {
           content.reward_text ||
           rewards.find((item) => item.value === content?.reward_method)?.label
         }}</text>
+        <WishSupportButton
+          v-if="!browseOnly && supportState"
+          id="wish-detail-support"
+          :wish-id="currentWish.id"
+          :count="supportState.support_count"
+          :supported="supportState.supported"
+        />
         <button
           v-if="moderationAvailable"
           class="detail-icon-button"

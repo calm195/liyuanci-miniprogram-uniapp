@@ -1,5 +1,12 @@
 import { request } from '@/utils/request'
-import type { WishFilters, WishInput, WishPage, WishPublicContent, WishResult } from '@/types/wish'
+import type {
+  WishFilters,
+  WishInput,
+  WishPage,
+  WishPublicContent,
+  WishResult,
+  WishSupport,
+} from '@/types/wish'
 export const getWish = (id: string, trackView = false, silent = false) =>
   request<WishResult>({
     url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}`,
@@ -12,6 +19,14 @@ export const getPublicWish = (id: string, trackView = false) =>
     url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}`,
     auth: false,
   })
+
+export function setWishSupport(id: string, supported: boolean) {
+  return request<WishSupport>({
+    url: `/wishes/${encodeURIComponent(id)}/support`,
+    method: supported ? 'PUT' : 'DELETE',
+    silent: true,
+  })
+}
 
 export type WishLifecycleAction = 'withdraw' | 'rollback' | 'complete' | 'exception-exit'
 export function changeWishState(

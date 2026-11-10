@@ -443,6 +443,7 @@ defineExpose({ show, leave, refresh })
         v-if="!own && !config.useMock"
         :keyword="keyword"
         :sort="sort"
+        support-sort
         :disabled="busy || writing"
         @search="search"
       />
@@ -502,7 +503,7 @@ defineExpose({ show, leave, refresh })
         ><text>暂时没有符合条件的心愿</text><text>换个分类看看，或写下自己的期待。</text></view
       >
       <view v-for="wish in rows" :key="wish.id" :class="{ card: own }">
-        <WishPreview :wish="wish" :own="own" />
+        <WishPreview :wish="wish" :own="own" @support-change="sort === 'support' && load()" />
         <text v-if="own && wish.review_result?.reason"
           >驳回原因：{{ wish.review_result.reason }}</text
         >

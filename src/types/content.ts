@@ -1,4 +1,4 @@
-export type ContentSort = 'time' | 'hot'
+export type ContentSort = 'time' | 'hot' | 'support'
 export type HotContentKind = 'wish' | 'whisper'
 
 export interface ContentSearch {

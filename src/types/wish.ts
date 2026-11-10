@@ -53,7 +53,12 @@ export interface WishInput {
   reward_method: (typeof rewards)[number]['value']
   duration_days: number
 }
+export interface WishSupport {
+  support_count: number
+  supported: boolean
+}
 export interface WishResult {
+  support?: WishSupport
   id: string
   version: number
   content_version?: number
@@ -80,7 +85,7 @@ export interface WishResult {
     revision_suggestion?: string
   }
 }
-export interface WishPublicContent {
+export interface WishPublicContent extends Partial<WishSupport> {
   title?: string
   reward_text?: string
   author?: { id: string; nickname: string; identity_tags?: IdentityTags }

@@ -1,10 +1,26 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ContentSort } from '@/types/content'
 
-const props = defineProps<{ keyword: string; sort: ContentSort; disabled?: boolean }>()
+const props = defineProps<{
+  keyword: string
+  sort: ContentSort
+  disabled?: boolean
+  supportSort?: boolean
+}>()
 const emit = defineEmits<{ search: [keyword: string, sort: ContentSort] }>()
 const draft = ref(props.keyword)
+const options = computed<{ value: ContentSort; label: string }[]>(() => [
+  { value: 'time', label: '最新' },
+  { value: 'hot', label: '最热' },
+  ...(props.supportSort ? [{ value: 'support' as const, label: '按支持数' }] : []),
+])
+const selected = computed(() =>
+  Math.max(
+    0,
+    options.value.findIndex((item) => item.value === props.sort),
+  ),
+)
 watch(
   () => props.keyword,
   (keyword) => {
@@ -21,8 +37,8 @@ function reset() {
   emit('search', '', props.sort)
 }
 function changeSort(event: { detail: { value: string | number } }) {
-  if (!props.disabled)
-    emit('search', props.keyword, Number(event.detail.value) === 1 ? 'hot' : 'time')
+  const option = options.value[Number(event.detail.value)]
+  if (!props.disabled && option) emit('search', props.keyword, option.value)
 }
 </script>
 
@@ -58,12 +74,13 @@ function changeSort(event: { detail: { value: string | number } }) {
     </view>
     <picker
       class="sort-picker"
-      :range="['最新', '最热']"
-      :value="sort === 'hot' ? 1 : 0"
+      :range="options"
+      range-key="label"
+      :value="selected"
       :disabled="disabled"
       @change="runPageAction(() => changeSort($event))"
     >
-      <view>{{ sort === 'hot' ? '最热' : '最新' }} ▾</view>
+      <view>{{ options[selected]?.label }} ▾</view>
     </picker>
   </view>
 </template>
