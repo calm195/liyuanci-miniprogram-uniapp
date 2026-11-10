@@ -25,6 +25,8 @@ test('字典发布响应式更新展示，迟到版本不覆盖，未知编码�
   replaceDictionaries(data(2, '旧名称'))
   assert.equal(label.value, '公开中')
   assert.equal(dictionaryLabel('wish_state', 'unknown'), '名称暂不可用')
+  assert.equal(dictionaryLabel('wish_state', 'unknown', '待审心愿'), '待审心愿')
+  assert.equal(dictionaryLabel('wish_state', 'published', '查看心愿'), '公开中')
   assert.throws(() => parseDictionaries({ version: 4, items: [{ type: 'wish_state' }] }))
   const one = data(4, '公开中')
   assert.throws(() => parseDictionaries({ ...one, items: [...one.items, ...one.items] }))

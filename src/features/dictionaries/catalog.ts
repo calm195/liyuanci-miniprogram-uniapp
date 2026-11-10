@@ -51,10 +51,9 @@ export function parseDictionaries(value: unknown): DictionarySnapshot {
 export function replaceDictionaries(value: DictionarySnapshot) {
   if (value.version >= snapshot.value.version) snapshot.value = value
 }
-export function dictionaryLabel(type: string, code: string): string {
+export function dictionaryLabel(type: string, code: string, fallback = '名称暂不可用'): string {
   return (
-    snapshot.value.items.find((item) => item.type === type && item.code === code)?.label ??
-    '名称暂不可用'
+    snapshot.value.items.find((item) => item.type === type && item.code === code)?.label ?? fallback
   )
 }
 export function dictionaryItems(type: string): DictionaryItem[] {

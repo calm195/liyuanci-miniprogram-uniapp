@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
+import { matchmakingID } from '../src/utils/matchmaking.ts'
 import type { UserInfo } from '../src/types/api.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { session as realSession } from '../src/utils/session.ts'
@@ -115,16 +116,25 @@ async function setup(
   let delayed = false
   let modal: (() => void) | undefined
   const prompts: string[] = []
+  const navigation: string[] = []
+  let matchmakingReads = 0
   const config = { useMock: false }
   const runtime = await loadRuntime(
     pageScript(page) +
       (page === blacklistPage
         ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
-        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError }'),
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
+      matchmakingID,
+      useMatchmakingProfile: () => ({
+        page: { busy: ref(false), writing: ref(false), pending: ref(null) },
+        load: async () => {
+          matchmakingReads++
+        },
+      }),
       ...api,
       ...avatarApi,
       ...helpers,
@@ -145,6 +155,8 @@ async function setup(
         return transport(input)
       },
       uni: {
+        navigateBack: ({ fail }: { fail: () => void }) => fail(),
+        redirectTo: ({ url }: { url: string }) => navigation.push(url),
         chooseMedia: (options: typeof choose) => {
           choose = options
         },
@@ -181,6 +193,8 @@ async function setup(
     hooks,
     calls,
     prompts,
+    navigation,
+    matchmakingReads,
     config,
     workspace,
     chooseImage: (image: PickedImage, type = 'png', width = 256, height = 256) => {
@@ -764,4 +778,20 @@ test('头像对审核不支持的小尺寸和超过像素预算的素材提前�
     assert.equal(r.avatarDraft.value, '')
   }
   assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
+})
+
+test('活动与个人中心共用设置页，活动参数只接受有效活动并支持返回', async () => {
+  const activity = '10000000-0000-4000-8000-000000000001'
+  const fromActivity = await setup({ activity })
+  assert.equal(fromActivity.runtime.activity.value, activity)
+  assert.equal(fromActivity.runtime.currentMe.value.nickname, actor.nickname)
+  assert.equal(fromActivity.matchmakingReads, 1)
+  fromActivity.runtime.returnToActivity()
+  assert.deepEqual(fromActivity.navigation, [`/pages/matchmaking/detail?id=${activity}`])
+
+  const fromCenter = await setup({ activity: '../../other' })
+  assert.equal(fromCenter.runtime.activity.value, '')
+  assert.equal(fromCenter.matchmakingReads, 1)
+  fromCenter.runtime.returnToActivity()
+  assert.deepEqual(fromCenter.navigation, [])
 })

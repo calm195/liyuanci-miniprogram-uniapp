@@ -24,7 +24,11 @@ export function matchmakingFailure(failure: unknown): string {
 }
 
 // 将敏感页面绑定到账号与可见代次；隐藏时清理展示，待确认命令跨页面保留在账号内存仓。
-export function useMatchmakingPage(clear: () => void, activityId: () => string = () => '') {
+export function useMatchmakingPage(
+  clear: () => void,
+  activityId: () => string = () => '',
+  refreshSession = true,
+) {
   const user = useUserStore()
   const commands = useMatchmakingStore()
   const busy = ref(false)
@@ -80,7 +84,7 @@ export function useMatchmakingPage(clear: () => void, activityId: () => string =
         clear()
         return
       }
-      await user.refresh(false, true)
+      if (refreshSession) await user.refresh(false, true)
       if (!active()) return
       if (!user.validated || !user.user) throw new Error('当前登录资格未能确认，请重试。')
       await load(ticket())

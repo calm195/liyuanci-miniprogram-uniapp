@@ -327,7 +327,7 @@ onPullDownRefresh(async () => {
         <text v-else class="muted">{{ profileProblem }}</text>
         <navigator
           v-if="!locked"
-          :url="`/pages/matchmaking/profile?activity=${id}`"
+          :url="`/pages/settings/index?activity=${id}`"
           class="small-link profile-editor-link"
           >{{ preview ? '编辑个人资料' : '去完善个人资料' }} ›</navigator
         >

@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { onPullDownRefresh } from '@dcloudio/uni-app'
+import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import MatchmakingForm from '@/components/MatchmakingForm.vue'
+import { useMatchmakingProfile } from '@/composables/use-matchmaking-profile'
+import { matchmakingID } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
 import { computed, ref, watch } from 'vue'
@@ -15,6 +18,16 @@ import type { UserInfo } from '@/types/api'
 import { campuses, genders } from '@/types/wish'
 import type { IdentityTags } from '@/types/wish'
 const user = useUserStore()
+const activity = ref('')
+onLoad((query) => {
+  if (matchmakingID(query?.activity)) activity.value = query.activity
+})
+function returnToActivity() {
+  if (!activity.value) return
+  uni.navigateBack({
+    fail: () => uni.redirectTo({ url: `/pages/matchmaking/detail?id=${activity.value}` }),
+  })
+}
 const me = ref<UserInfo | null>(null)
 const nickname = ref('')
 const avatarDraft = ref('')
@@ -362,9 +375,11 @@ onShow(() => {
     avatarPickerHid = false
     finishAvatarPicker?.()
     finishAvatarPicker = undefined
+    void Promise.resolve().then(loadMatchmaking)
     return
   }
-  void load()
+  // 先刷新本人会话，再读取同账号的私有报名资料。
+  void load().then(loadMatchmaking)
 })
 onHide(() => {
   // 微信原生相册或相机临时遮住页面，选图回调仍需在当前会话校验并提交。
@@ -372,6 +387,27 @@ onHide(() => {
   else leave()
 })
 onUnload(leave)
+const {
+  page: matchmakingPage,
+  form: matchmakingForm,
+  grades,
+  locked: matchmakingLocked,
+  types,
+  typeLabels,
+  assessmentURL,
+  selectPersonality,
+  copyAssessment,
+  save: saveMatchmaking,
+  load: loadMatchmaking,
+} = useMatchmakingProfile()
+const {
+  busy: matchmakingBusy,
+  writing: matchmakingWriting,
+  pending: matchmakingPending,
+  gate: matchmakingGate,
+  error: matchmakingError,
+  notice: matchmakingNotice,
+} = matchmakingPage
 async function refreshProfileDraft() {
   if (selectingAvatar.value) return
   const draft = {
@@ -402,12 +438,16 @@ onPullDownRefresh(async () => {
 <template>
   <AppPage>
     <text class="title">个人资料与隐私</text>
-    <navigator v-if="user.isLoggedIn" url="/pages/matchmaking/profile" class="card small-link"
-      >人格标签与包分配报名资料 ›</navigator
-    >
+    <button v-if="activity" :disabled="matchmakingWriting || writing" @click="returnToActivity">
+      返回包分配活动
+    </button>
+    <navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="card small-link">
+      微信登录 ›
+    </navigator>
 
     <text v-if="busy">加载中…</text>
     <view v-if="currentMe" class="card">
+      <text class="section-title">账号资料与公开设置</text>
       <view class="avatar-settings">
         <ProfileAvatar :src="avatarDraft || currentMe.avatar_url" class="profile-avatar" />
         <view v-if="allowed('putMeProfile')" class="avatar-actions">
@@ -484,6 +524,7 @@ onPullDownRefresh(async () => {
         >
       </picker>
       <text>身份标签显示</text>
+      <text>这里的标签用于公开展示。下方报名资料仅用于包分配。</text>
       <text>隐藏后，公开内容与公开主页不展示身份标签；学生认证信息不在这里编辑。</text>
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
       <button
@@ -510,6 +551,71 @@ onPullDownRefresh(async () => {
       </button>
       <text v-else>当前账号没有修改资料的权限。</text>
     </view>
+    <text v-if="matchmakingBusy" class="notice">正在读取包分配资料…</text>
+    <text v-if="user.isLoggedIn && matchmakingGate" class="notice">{{ matchmakingGate }}</text>
+    <template v-if="matchmakingForm">
+      <view class="card profile-card">
+        <text class="section-title">人格标签</text>
+        <picker
+          :disabled="matchmakingLocked"
+          :range="typeLabels"
+          :value="Math.max(0, types.indexOf(matchmakingForm.mbti))"
+          @change="selectPersonality"
+        >
+          <view class="personality-picker">{{ matchmakingForm.mbti || '未设置' }} ›</view>
+        </picker>
+        <text class="muted"
+          >人格标签选填，来源为本人填写。参加包分配时，标签可随本次报名资料提交。</text
+        >
+        <view class="assessment">
+          <text class="section-title">16Personalities 官方测评</text>
+          <text class="muted">在浏览器完成测评后，可以回来手动选择结果的四字母类型。</text>
+          <text class="muted" selectable>{{ assessmentURL }}</text>
+          <button @click="copyAssessment">复制官方测评链接</button>
+        </view>
+      </view>
+      <view class="card profile-card">
+        <text class="section-title">包分配报名资料</text>
+        <text class="muted"
+          >保存后可在活动中确认报名。以下资料用于报名审核，并按报名确认的范围展示给配对对象。可以先只保存人格标签。</text
+        >
+        <MatchmakingForm v-model="matchmakingForm" :grades="grades" :disabled="matchmakingLocked" />
+      </view>
+      <button
+        :disabled="matchmakingLocked"
+        class="profile-save"
+        :loading="isPageActionPending('matchmaking-account-save')"
+        @click="runPageAction(saveMatchmaking, 'matchmaking-account-save')"
+      >
+        保存包分配资料
+      </button>
+    </template>
+    <view v-if="matchmakingPending" class="card profile-card">
+      <text>上次保存结果尚未确认，请原样重试。</text>
+      <button
+        :disabled="matchmakingBusy || matchmakingWriting"
+        :loading="isPageActionPending('matchmaking-account-retry')"
+        @click="
+          runPageAction(() => matchmakingPage.retry(loadMatchmaking), 'matchmaking-account-retry')
+        "
+      >
+        原样重试上次操作
+      </button>
+    </view>
+    <button
+      v-if="user.isLoggedIn && !matchmakingForm && !matchmakingBusy"
+      :loading="isPageActionPending('settings-reload-matchmaking')"
+      @click="
+        runPageAction(
+          () => (currentMe ? loadMatchmaking() : load().then(loadMatchmaking)),
+          'settings-reload-matchmaking',
+        )
+      "
+    >
+      重新读取包分配资料
+    </button>
+    <AppNotice :message="matchmakingError" kind="error" />
+    <AppNotice :message="matchmakingNotice" kind="success" />
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
     <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>
@@ -531,5 +637,27 @@ onPullDownRefresh(async () => {
 .avatar-actions button {
   margin: 0;
   font-size: 24rpx;
+}
+.profile-card,
+.assessment {
+  display: grid;
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+.assessment {
+  border-top: 1rpx solid var(--theme-line);
+  padding-top: 20rpx;
+  margin-bottom: 0;
+}
+.personality-picker {
+  border: 1rpx solid var(--theme-line);
+  border-radius: 18rpx;
+  padding: 22rpx;
+}
+.muted {
+  font-size: 24rpx;
+  line-height: 1.7;
+  opacity: 0.75;
+  overflow-wrap: anywhere;
 }
 </style>

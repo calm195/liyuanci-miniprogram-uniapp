@@ -7,5 +7,5 @@ export function canAct(me: UserInfo | null, action: string): boolean {
 }
 export function verificationLabel(me: UserInfo | null): string {
   if (!me) return '未登录'
-  return dictionaryLabel('verification_status', me.verification)
+  return dictionaryLabel('verification_status', me.verification, '查看认证状态')
 }

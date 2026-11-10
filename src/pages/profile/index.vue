@@ -31,10 +31,10 @@ function cycleTheme() {
 const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 const wishStates = [
-  { icon: 'send', state: 'pending_review' },
-  { icon: 'chat', state: 'matching' },
-  { icon: 'clock', state: 'realized' },
-  { icon: 'check', state: 'fulfilled' },
+  { icon: 'send', state: 'pending_review', label: '待审心愿' },
+  { icon: 'chat', state: 'matching', label: '配对中的心愿' },
+  { icon: 'clock', state: 'realized', label: '已实现的心愿' },
+  { icon: 'check', state: 'fulfilled', label: '已还愿的心愿' },
 ]
 const groups = [
   [
@@ -162,7 +162,7 @@ onPullDownRefresh(async () => {
             runPageAction(() => openMainPage(`/pages/wishes/index?own=1&state=${item.state}`))
           "
           ><AppIcon :name="item.icon" :size="46" /><text class="ui-text">{{
-            dictionaryLabel('wish_state', item.state)
+            dictionaryLabel('wish_state', item.state, item.label)
           }}</text></view
         >
       </view>
