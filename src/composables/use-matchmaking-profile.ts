@@ -7,17 +7,21 @@ import type { MatchmakingPreferences } from '@/types/matchmaking'
 export function useMatchmakingProfile() {
   const profileScope = 'account-profile'
   const version = ref(0)
+  const saved = ref('')
   const form = ref<MatchmakingPreferences | null>(null)
   const page = useMatchmakingPage(
     () => {
       form.value = null
       version.value = 0
+      saved.value = ''
     },
     () => profileScope,
     false,
   )
   const { busy, writing, pending, error } = page
   const locked = computed(() => busy.value || writing.value || !!pending.value)
+
+  const dirty = computed(() => !!form.value && JSON.stringify(form.value) !== saved.value)
 
   function initialPreferences(): MatchmakingPreferences {
     return {
@@ -48,10 +52,30 @@ export function useMatchmakingProfile() {
       form.value = result.profile
         ? parseMatchmakingPreferences(result.profile)
         : initialPreferences()
+      saved.value = JSON.stringify(form.value)
     })
   }
-  async function save() {
-    if (!form.value || locked.value) return
+  async function refreshDraft() {
+    if (locked.value) return
+    const draft = dirty.value ? form.value : null
+    const active = page.actionTicket()
+    await load()
+    if (active() && form.value && draft && !pending.value) form.value = draft
+  }
+  async function save(manual: boolean) {
+    const active = page.actionTicket()
+    async function reloadAfterSave(submitted: string) {
+      const newer = JSON.stringify(form.value) !== submitted ? form.value : null
+      await load()
+      if (active() && form.value && newer) form.value = newer
+    }
+    if (pending.value?.kind === 'profile' && manual) {
+      const submitted = JSON.stringify(pending.value.input.profile)
+      await page.retry(() => reloadAfterSave(submitted))
+      if (!active() || error.value) return
+    }
+    if (!form.value || !dirty.value || locked.value) return
+    const submitted = JSON.stringify(form.value)
     try {
       const profile = parseMatchmakingPreferences(form.value)
       await page.write(
@@ -61,17 +85,19 @@ export function useMatchmakingProfile() {
           key: matchmakingKey(),
           input: { expected_version: version.value, profile },
         },
-        load,
+        () => reloadAfterSave(submitted),
       )
     } catch (failure) {
-      error.value = failure instanceof Error ? failure.message : '请检查个人资料。'
+      error.value = failure instanceof Error ? failure.message : '请检查包分配资料。'
     }
   }
   return {
     page,
     form,
     locked,
+    dirty,
     save,
+    refreshDraft,
     load,
   }
 }

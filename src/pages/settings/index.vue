@@ -14,6 +14,8 @@ import { useUserStore } from '@/stores/user'
 import { RequestError } from '@/utils/request'
 import { whisperKey } from '@/utils/whispers'
 import { updateProfile } from '@/api/settings'
+import type { MatchmakingPreferences } from '@/types/matchmaking'
+import type { ProfileUpdate } from '@/types/settings'
 import type { UserInfo } from '@/types/api'
 import { campuses, genders } from '@/types/wish'
 import type { IdentityTags } from '@/types/wish'
@@ -22,8 +24,9 @@ const activity = ref('')
 onLoad((query) => {
   if (matchmakingID(query?.activity)) activity.value = query.activity
 })
-function returnToActivity() {
+async function returnToActivity() {
   if (!activity.value) return
+  if (hasUnsavedChanges.value && !(await act())) return
   uni.navigateBack({
     fail: () => uni.redirectTo({ url: `/pages/matchmaking/detail?id=${activity.value}` }),
   })
@@ -37,8 +40,10 @@ const assessmentURL = 'https://www.16personalities.com/ch/人格测试'
 
 function selectPersonality(event: { detail: { value: string | number } }) {
   const value = personalityTypes[Number(event.detail.value)]
-  if (!busy.value && !writing.value && allowed('putMeProfile') && value !== undefined)
+  if (!busy.value && allowed('putMeProfile') && value !== undefined) {
     mbti.value = value
+    queueSave()
+  }
 }
 
 function copyAssessment() {
@@ -73,6 +78,10 @@ const identityGender = ref<IdentityTags['gender']>('undisclosed')
 const hidden = ref<boolean | null>(null)
 const busy = ref(false)
 const writing = ref(false)
+const saving = ref(false)
+const profilePending = ref<{ input: ProfileUpdate; key: string } | null>(null)
+let saveTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+let saveQueued = false
 const error = ref('')
 const notice = ref('')
 const readEpoch = ref(-1)
@@ -98,14 +107,17 @@ function selectTag(
   kind: 'campus' | 'gender' | 'grade',
   event: { detail: { value: string | number } },
 ) {
-  if (busy.value || writing.value || !allowed('putMeProfile')) return
+  if (busy.value || !allowed('putMeProfile')) return
   const index = Number(event.detail.value)
   if (kind === 'campus') identityCampus.value = campuses[index]?.value || 'any'
   else if (kind === 'grade')
     identityGrade.value = gradeOptions.value[index]?.code ?? identityGrade.value
   else identityGender.value = genders[index]?.value || 'undisclosed'
+  queueSave()
 }
 function clear() {
+  cancelSave()
+  profilePending.value = null
   me.value = null
   nickname.value = ''
   mbti.value = ''
@@ -318,64 +330,159 @@ async function changeAvatar(remove = false) {
     if (active()) {
       writing.value = false
       if (reload) await refreshProfileDraft()
+      if (saveQueued) queueSave()
     }
   }
 }
-async function act() {
+const profileDirty = computed(() => {
   const snapshot = currentMe.value
-  if (!snapshot || busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile'))
-    return
-  if (!nickname.value.trim() || typeof hidden.value !== 'boolean') {
-    error.value = '请填写昵称并选择是否公开展示校区、性别和年级。'
+  return (
+    !!snapshot &&
+    (nickname.value !== (snapshot.nickname ?? '') ||
+      mbti.value !== (snapshot.mbti ?? '') ||
+      identityCampus.value !== (snapshot.identity_tags?.campus || 'any') ||
+      identityGrade.value !== (snapshot.identity_tags?.grade ?? '') ||
+      identityGender.value !== (snapshot.identity_tags?.gender || 'undisclosed') ||
+      hidden.value !== (snapshot.hide_identity_tags ?? null))
+  )
+})
+function cancelSave() {
+  globalThis.clearTimeout(saveTimer)
+  saveQueued = false
+}
+function queueSave() {
+  globalThis.clearTimeout(saveTimer)
+  saveQueued = true
+  saveTimer = globalThis.setTimeout(() => {
+    if (!writing.value && !selectingAvatar.value) void act(false)
+  }, 600)
+}
+function editMatchmaking(draft: MatchmakingPreferences) {
+  matchmakingForm.value = draft
+  queueSave()
+}
+function editVisibility(value: boolean) {
+  hidden.value = value
+  queueSave()
+}
+
+async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: number) {
+  const hiddenValue = hidden.value
+  if (
+    !profilePending.value &&
+    (!nickname.value.trim() || [...nickname.value].length > 40 || typeof hiddenValue !== 'boolean')
+  ) {
+    error.value = '请填写 1–40 字的昵称，并选择是否公开展示校区、性别和年级。'
     return
   }
-  const input = {
-    nickname: nickname.value,
-    mbti: mbti.value,
-    identity_tags: {
-      campus: identityCampus.value,
-      gender: identityGender.value,
-      ...(identityGrade.value !== (snapshot.identity_tags?.grade ?? '')
-        ? { grade: identityGrade.value }
-        : {}),
+  const command = profilePending.value ?? {
+    input: {
+      nickname: nickname.value,
+      mbti: mbti.value,
+      identity_tags: {
+        campus: identityCampus.value,
+        gender: identityGender.value,
+        ...(identityGrade.value !== (snapshot.identity_tags?.grade ?? '')
+          ? { grade: identityGrade.value }
+          : {}),
+      },
+      hide_identity_tags: hiddenValue as boolean,
+      expected_version: snapshot.version,
     },
-    hide_identity_tags: hidden.value as boolean,
-    expected_version: snapshot.version,
+    key: whisperKey(),
   }
+  profilePending.value = command
+  try {
+    const result = await updateProfile(command.input, command.key)
+    if (!active()) return
+    if (
+      result?.id !== snapshot.id ||
+      !Number.isSafeInteger(result.version) ||
+      result.version <= command.input.expected_version ||
+      !Array.isArray(result.allowed_actions)
+    )
+      throw new Error('资料回执无效')
+    const updated = user.acceptAvatarProfile(result, epoch)
+    if (!updated) return
+    me.value = { ...updated, allowed_actions: [...updated.allowed_actions] }
+    profilePending.value = null
+    // 只用服务端值同步仍等于提交值的字段，保留请求期间的新编辑。
+    if (nickname.value === command.input.nickname) nickname.value = updated.nickname ?? ''
+    if (mbti.value === command.input.mbti) mbti.value = updated.mbti ?? ''
+    if (hidden.value === command.input.hide_identity_tags)
+      hidden.value = updated.hide_identity_tags ?? null
+    if (identityCampus.value === command.input.identity_tags?.campus)
+      identityCampus.value = updated.identity_tags?.campus || 'any'
+    if (identityGender.value === command.input.identity_tags?.gender)
+      identityGender.value = updated.identity_tags?.gender || 'undisclosed'
+    if (
+      identityGrade.value ===
+      (command.input.identity_tags?.grade ?? snapshot.identity_tags?.grade ?? '')
+    )
+      identityGrade.value = updated.identity_tags?.grade ?? ''
+  } catch (failure) {
+    if (!active()) return
+    if (
+      failure instanceof RequestError &&
+      failure.statusCode === 409 &&
+      failure.error_code === 'VERSION_CONFLICT'
+    ) {
+      profilePending.value = null
+      error.value = '个人资料版本已变化，请下拉刷新后核对，再点保存。'
+    } else if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      ![408, 409, 429].includes(failure.statusCode)
+    ) {
+      profilePending.value = null
+      error.value = '个人资料保存失败，请检查填写内容和账号权限后重试。'
+    } else {
+      error.value = '个人资料保存结果尚未确认，请点保存重试。'
+    }
+  }
+}
+
+async function act(manual = true) {
+  if (!visible || busy.value || writing.value || selectingAvatar.value) return false
+  cancelSave()
+  const snapshot = currentMe.value
   const current = generation
   const epoch = session.getEpoch()
+  const owner = user.user?.id
   const active = () =>
-    visible &&
-    current === generation &&
-    epoch === session.getEpoch() &&
-    snapshot.id === user.user?.id
+    visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
   writing.value = true
+  saving.value = true
   error.value = ''
   notice.value = ''
-  let refresh = false
   try {
-    if (
-      !(await confirm('保存资料', '将保存个人资料与公开展示设置。是否继续？')) ||
-      !active() ||
-      !allowed('putMeProfile') ||
-      currentMe.value !== snapshot
-    )
-      return
-    refresh = true
-    const result = await updateProfile(input, whisperKey())
-    if (result.id !== snapshot.id) throw new Error('资料目标不匹配')
-    if (active()) notice.value = '操作已受理，已重新读取当前设置。'
-  } catch (failure) {
-    if (active()) {
-      notice.value =
-        failure instanceof RequestError && failure.statusCode === 409
-          ? '版本或状态已变化，已重新读取；请核对后手动操作。'
-          : '操作结果尚未确认，请核对重新读取的设置；不会自动重发。'
+    // 两类资料各自有版本和幂等键。一侧失败时仍提交另一侧可保存的改动。
+    const saveCommon = async () => {
+      if (!snapshot || !allowed('putMeProfile')) return
+      const retrying = !!profilePending.value
+      if (retrying ? !manual : !profileDirty.value) return
+      await saveProfile(snapshot, active, epoch)
+      if (
+        retrying &&
+        active() &&
+        !error.value &&
+        profileDirty.value &&
+        currentMe.value &&
+        allowed('putMeProfile')
+      )
+        await saveProfile(currentMe.value, active, epoch)
     }
+    await Promise.all([saveCommon(), saveMatchmaking(manual)])
+    if (!active()) return false
+    const saved = !hasUnsavedChanges.value && !error.value && !matchmakingError.value
+    if (saved && manual) notice.value = '资料已保存。'
+    return saved
   } finally {
     if (active()) {
       writing.value = false
-      if (refresh) await load()
+      saving.value = false
+      if (saveQueued) queueSave()
     }
   }
 }
@@ -385,6 +492,7 @@ function leave() {
   clear()
   busy.value = false
   writing.value = false
+  saving.value = false
   error.value = ''
   notice.value = ''
 }
@@ -395,6 +503,7 @@ watch(
     clear()
     busy.value = false
     writing.value = false
+    saving.value = false
   },
   { flush: 'sync' },
 )
@@ -413,14 +522,20 @@ onShow(() => {
 onHide(() => {
   // 微信原生相册或相机临时遮住页面，选图回调仍需在当前会话校验并提交。
   if (selectingAvatar.value) avatarPickerHid = true
-  else leave()
+  else {
+    // 离开前提交已编辑且尚未发出的内容，迟到回执仍按页面代次丢弃。
+    if (saveQueued) void act(false)
+    leave()
+  }
 })
 onUnload(leave)
 const {
   page: matchmakingPage,
   form: matchmakingForm,
   locked: matchmakingLocked,
+  dirty: matchmakingDirty,
   save: saveMatchmaking,
+  refreshDraft: refreshMatchmakingDraft,
   load: loadMatchmaking,
 } = useMatchmakingProfile()
 const {
@@ -429,32 +544,44 @@ const {
   pending: matchmakingPending,
   gate: matchmakingGate,
   error: matchmakingError,
-  notice: matchmakingNotice,
 } = matchmakingPage
+const hasUnsavedChanges = computed(
+  () =>
+    !!(
+      profileDirty.value ||
+      profilePending.value ||
+      matchmakingDirty.value ||
+      matchmakingPending.value
+    ),
+)
 async function refreshProfileDraft() {
-  if (selectingAvatar.value) return
-  const draft = {
-    nickname: nickname.value,
-    mbti: mbti.value,
-    hidden: hidden.value,
-    campus: identityCampus.value,
-    gender: identityGender.value,
-    grade: identityGrade.value,
+  if (busy.value || writing.value || selectingAvatar.value) return
+  const snapshot = currentMe.value
+  function edit<T>(field: { value: T }, saved: T) {
+    const value = field.value
+    return snapshot && value !== saved
+      ? () => {
+          field.value = value
+        }
+      : null
   }
+  const edits = [
+    edit(nickname, snapshot?.nickname ?? ''),
+    edit(mbti, snapshot?.mbti ?? ''),
+    edit(hidden, snapshot?.hide_identity_tags ?? null),
+    edit(identityCampus, snapshot?.identity_tags?.campus || 'any'),
+    edit(identityGender, snapshot?.identity_tags?.gender || 'undisclosed'),
+    edit(identityGrade, snapshot?.identity_tags?.grade ?? ''),
+  ]
   const epoch = session.getEpoch()
   await load()
-  if (epoch === session.getEpoch() && currentMe.value) {
-    nickname.value = draft.nickname
-    mbti.value = draft.mbti
-    hidden.value = draft.hidden
-    identityCampus.value = draft.campus
-    identityGender.value = draft.gender
-    identityGrade.value = draft.grade
-  }
+  if (epoch === session.getEpoch() && currentMe.value) for (const restore of edits) restore?.()
 }
 onPullDownRefresh(async () => {
   try {
+    if (writing.value || selectingAvatar.value) return
     await refreshProfileDraft()
+    await refreshMatchmakingDraft()
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -463,7 +590,12 @@ onPullDownRefresh(async () => {
 <template>
   <AppPage>
     <text class="title">个人资料与隐私</text>
-    <button v-if="activity" :disabled="matchmakingWriting || writing" @click="returnToActivity">
+    <button
+      v-if="activity"
+      :disabled="matchmakingWriting || writing"
+      :loading="isPageActionPending('settings-return-to-activity')"
+      @click="runPageAction(returnToActivity, 'settings-return-to-activity')"
+    >
       返回包分配活动
     </button>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="card small-link">
@@ -489,7 +621,7 @@ onPullDownRefresh(async () => {
             :loading="isPageActionPending('settings-save-avatar')"
             @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
           >
-            重试保存头像
+            重试头像上传
           </button>
           <button
             v-else-if="!avatarDraft && (currentMe.avatar_id || currentMe.avatar_url)"
@@ -510,13 +642,14 @@ onPullDownRefresh(async () => {
         v-model="nickname"
         placeholder-class="field-placeholder"
         :maxlength="-1"
-        :disabled="busy || writing || !allowed('putMeProfile')"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         placeholder="填写昵称"
+        @input="queueSave"
       />
       <picker
         :range="campuses.map((item) => item.label)"
         :value="campuses.findIndex((item) => item.value === identityCampus)"
-        :disabled="busy || writing"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         @change="runPageAction(() => selectTag('campus', $event))"
         ><view
           >校区 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
@@ -525,7 +658,7 @@ onPullDownRefresh(async () => {
       <picker
         :range="genders.map((item) => item.label)"
         :value="genders.findIndex((item) => item.value === identityGender)"
-        :disabled="busy || writing"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         @change="runPageAction(() => selectTag('gender', $event))"
         ><view
           >性别 {{ genders.find((item) => item.value === identityGender)?.label }}</view
@@ -540,7 +673,9 @@ onPullDownRefresh(async () => {
             gradeOptions.findIndex((item) => item.code === identityGrade),
           )
         "
-        :disabled="busy || writing || !allowed('putMeProfile') || gradeOptions.length < 2"
+        :disabled="
+          busy || (writing && !saving) || !allowed('putMeProfile') || gradeOptions.length < 2
+        "
         @change="runPageAction(() => selectTag('grade', $event))"
       >
         <view
@@ -550,7 +685,7 @@ onPullDownRefresh(async () => {
       </picker>
       <text>MBTI（选填）</text>
       <picker
-        :disabled="busy || writing || !allowed('putMeProfile')"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         :range="personalityLabels"
         :value="Math.max(0, personalityTypes.indexOf(mbti))"
         @change="selectPersonality"
@@ -570,28 +705,20 @@ onPullDownRefresh(async () => {
       >
       <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
       <button
-        :disabled="busy || writing || !allowed('putMeProfile')"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         :loading="isPageActionPending('pages-settings-index-button-2')"
-        @click="runPageAction(() => (hidden = true), 'pages-settings-index-button-2')"
+        @click="runPageAction(() => editVisibility(true), 'pages-settings-index-button-2')"
       >
         {{ hidden === true ? '已选择：隐藏公开资料' : '隐藏公开资料' }}
       </button>
       <button
-        :disabled="busy || writing || !allowed('putMeProfile')"
+        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
         :loading="isPageActionPending('pages-settings-index-button-3')"
-        @click="runPageAction(() => (hidden = false), 'pages-settings-index-button-3')"
+        @click="runPageAction(() => editVisibility(false), 'pages-settings-index-button-3')"
       >
         {{ hidden === false ? '已选择：显示公开资料' : '显示公开资料' }}
       </button>
-      <button
-        v-if="allowed('putMeProfile')"
-        :disabled="busy || writing"
-        :loading="isPageActionPending('pages-settings-index-button-4')"
-        @click="runPageAction(act, 'pages-settings-index-button-4')"
-      >
-        保存资料与隐私设置
-      </button>
-      <text v-else>当前账号没有修改资料的权限。</text>
+      <text v-if="!allowed('putMeProfile')">当前账号没有修改资料的权限。</text>
     </view>
     <text v-if="matchmakingBusy" class="notice">正在读取包分配资料…</text>
     <text v-if="user.isLoggedIn && matchmakingGate" class="notice">{{ matchmakingGate }}</text>
@@ -601,27 +728,30 @@ onPullDownRefresh(async () => {
         <text class="muted"
           >保存后可在活动中确认报名。以下资料用于报名审核，并按报名确认的范围展示给配对对象。</text
         >
-        <MatchmakingForm v-model="matchmakingForm" :disabled="matchmakingLocked" />
+        <MatchmakingForm
+          :model-value="matchmakingForm"
+          :disabled="
+            matchmakingBusy ||
+            (matchmakingLocked && !saving) ||
+            (!!matchmakingPending && !matchmakingWriting)
+          "
+          @update:model-value="editMatchmaking"
+        />
       </view>
-      <button
-        :disabled="matchmakingLocked"
-        class="profile-save"
-        :loading="isPageActionPending('matchmaking-account-save')"
-        @click="runPageAction(saveMatchmaking, 'matchmaking-account-save')"
-      >
-        保存包分配资料
-      </button>
     </template>
-    <view v-if="matchmakingPending" class="card profile-card">
-      <text>上次保存结果尚未确认，请原样重试。</text>
+    <text v-if="!saving && (profilePending || matchmakingPending)" class="notice">
+      上次保存结果尚未确认，点「保存资料」可重试。
+    </text>
+    <view v-if="allowed('putMeProfile') || matchmakingForm || matchmakingPending" class="card">
+      <text class="muted">修改后自动保存，也可手动保存两类资料。</text>
+      <text v-if="saving" class="muted">正在保存资料…</text>
+      <text v-else-if="hasUnsavedChanges" class="muted">有改动尚未保存</text>
       <button
-        :disabled="matchmakingBusy || matchmakingWriting"
-        :loading="isPageActionPending('matchmaking-account-retry')"
-        @click="
-          runPageAction(() => matchmakingPage.retry(loadMatchmaking), 'matchmaking-account-retry')
-        "
+        :disabled="busy || writing || selectingAvatar || matchmakingBusy || matchmakingWriting"
+        :loading="isPageActionPending('settings-save-profile')"
+        @click="runPageAction(() => act(), 'settings-save-profile')"
       >
-        原样重试上次操作
+        保存资料
       </button>
     </view>
     <button
@@ -637,7 +767,6 @@ onPullDownRefresh(async () => {
       重新读取包分配资料
     </button>
     <AppNotice :message="matchmakingError" kind="error" />
-    <AppNotice :message="matchmakingNotice" kind="success" />
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
     <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>

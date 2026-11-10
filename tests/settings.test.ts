@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { matchmakingID, matchmakingMbtis } from '../src/utils/matchmaking.ts'
 import type { UserInfo } from '../src/types/api.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
@@ -119,12 +119,17 @@ async function setup(
   const prompts: string[] = []
   const navigation: string[] = []
   let matchmakingReads = 0
+  const savedPreferences = reactive({ age: 0 })
+  const matchmakingForm = ref({ ...savedPreferences })
+  const matchmakingDirty = computed(() => matchmakingForm.value.age !== savedPreferences.age)
+  const matchmakingError = ref('')
+  let failMatchmaking = false
   const config = { useMock: false }
   const runtime = await loadRuntime(
     pageScript(page) +
       (page === blacklistPage
         ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
-        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity }'),
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,editMatchmaking }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
@@ -132,7 +137,27 @@ async function setup(
       matchmakingID,
       matchmakingMbtis,
       useMatchmakingProfile: () => ({
-        page: { busy: ref(false), writing: ref(false), pending: ref(null) },
+        page: {
+          busy: ref(false),
+          writing: ref(false),
+          pending: ref(null),
+          error: matchmakingError,
+        },
+        dirty: matchmakingDirty,
+        form: matchmakingForm,
+        save: async () => {
+          if (!matchmakingDirty.value) return
+          calls.push({
+            url: '/matchmaking/profile',
+            method: 'PUT',
+            data: { ...matchmakingForm.value },
+          })
+          if (failMatchmaking) matchmakingError.value = '合成保存失败'
+          else {
+            matchmakingError.value = ''
+            savedPreferences.age = matchmakingForm.value.age
+          }
+        },
         load: async () => {
           matchmakingReads++
         },
@@ -197,6 +222,9 @@ async function setup(
     prompts,
     navigation,
     matchmakingReads,
+    failMatchmaking: () => {
+      failMatchmaking = true
+    },
     config,
     workspace,
     chooseImage: (image: PickedImage, type = 'png', width = 256, height = 256) => {
@@ -228,7 +256,7 @@ function setupBlacklist(query: Record<string, string> = {}, useRealSession = fal
   return setup(query, useRealSession, blacklistPage)
 }
 
-test('REQ-002/014：资料按本人版本提交，显式发送 false，成功从共享状态重新读取', async () => {
+test('REQ-002/014：资料按本人版本提交，显式发送 false，成功采用服务端回执', async () => {
   const s = await setup()
   const r = s.runtime
   assert.equal(r.allowed('putMeProfile'), true) // 普通资料不额外要求学生认证。
@@ -250,6 +278,8 @@ test('REQ-002/014：资料按本人版本提交，显式发送 false，成功从
   assert.equal(r.nickname.value, '新昵称')
   assert.equal(r.currentMe.value.version, 20)
   assert.equal(r.hidden.value, false)
+  assert.equal(s.user.user?.version, 20)
+  assert.deepEqual(s.prompts, [])
 })
 test('REQ-014/018：隐藏字段缺省不擅自填充，空白昵称拒绝，无本地持久化', async () => {
   const s = await setup()
@@ -395,47 +425,80 @@ test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作
   await r.act('unblock', r.rows.value[0])
   assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
-test('REQ-014：取消、离页后的确认、重复点击均不产生额外写入', async () => {
-  const cancelled = await setup()
-  cancelled.cancel()
-  await cancelled.runtime.act()
-  assert.equal(
-    cancelled.calls.some((x) => x.method && x.method !== 'GET'),
-    false,
-  )
-  const s = await setup()
-  s.delay()
-  const pending = s.runtime.act()
-  await s.runtime.act()
-  s.hooks.hide()
-  s.confirm()
-  await pending
-  assert.equal(
-    s.calls.some((x) => x.method && x.method !== 'GET'),
-    false,
-  )
-  assert.equal(s.runtime.nickname.value, '')
-})
-test('REQ-014/018：409 和不确定结果只重读不重发，后续人工操作使用新幂等键', async () => {
+test('个人资料连续编辑自动合并，手动保存同时提交两区改动', async () => {
   const s = await setup()
   const r = s.runtime
+  r.nickname.value = '第一次编辑'
+  r.queueSave()
+  r.nickname.value = '第二次编辑'
+  r.queueSave()
+  assert.equal(s.calls.length, 0)
+  await new Promise((resolve) => setTimeout(resolve, 650))
+  assert.equal(s.calls.length, 1)
+  assert.equal(s.calls[0]?.data?.nickname, '第二次编辑')
+  r.hidden.value = false
+  r.editMatchmaking({ age: 20 })
+  s.transport(async (input) => ({ ...actor, ...input.data, version: 21 }))
+  assert.equal(await r.act(), true)
+  assert.deepEqual(
+    s.calls.slice(1).map((call) => call.url),
+    ['/me/profile', '/matchmaking/profile'],
+  )
+  assert.equal(s.calls[1]?.data?.expected_version, 20)
+  assert.deepEqual(s.prompts, [])
+})
+test('保存期间再次编辑昵称，旧回执保留新输入并用新版本保存', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let finish!: (result: UserInfo) => void
   s.transport(async (input) => {
-    if (input.method && input.method !== 'GET')
-      throw new RequestError('合成冲突', 409, 'VERSION_CONFLICT', '', 409)
-    return { items: [], next_cursor: null }
+    if (input.data?.expected_version === 19)
+      return new Promise((resolve) => {
+        finish = resolve
+      })
+    return { ...actor, ...input.data, version: 21 }
   })
-  await r.act()
-  assert.match(r.notice.value, /版本或状态已变化/)
-  assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
-  s.transport(async (input) => {
-    if (input.method && input.method !== 'GET') throw new Error('合成网络超时')
-    return { items: [], next_cursor: null }
+  r.nickname.value = '第一次编辑'
+  const saving = r.act()
+  r.nickname.value = '第二次编辑'
+  r.queueSave()
+  assert.equal(await r.act(), false)
+  finish({ ...actor, version: 20, nickname: '第一次编辑' })
+  await saving
+  assert.equal(r.nickname.value, '第二次编辑')
+  assert.equal(await r.act(), true)
+  assert.equal(s.calls.length, 2)
+  assert.equal(s.calls[1]?.data?.expected_version, 20)
+  assert.equal(s.calls[1]?.data?.nickname, '第二次编辑')
+})
+test('保存两区时包分配失败保留草稿，已保存账号资料不再重复提交', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.nickname.value = '新的昵称'
+  r.editMatchmaking({ age: 20 })
+  s.failMatchmaking()
+  assert.equal(await r.act(), false)
+  assert.equal(r.currentMe.value.nickname, '新的昵称')
+  assert.equal(await r.act(), false)
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    ['/me/profile', '/matchmaking/profile', '/matchmaking/profile'],
+  )
+})
+test('资料超时保留原请求，自动保存不重发，手动保存原样重试', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.nickname.value = '新的昵称'
+  s.transport(async () => {
+    throw new Error('合成网络超时')
   })
-  await r.act()
-  assert.match(r.notice.value, /结果尚未确认/)
-  const writes = s.calls.filter((x) => x.method && x.method !== 'GET')
-  assert.equal(writes.length, 2)
-  assert.notEqual(writes[0].header!['Idempotency-Key'], writes[1].header!['Idempotency-Key'])
+  assert.equal(await r.act(), false)
+  assert.match(r.error.value, /结果尚未确认/)
+  assert.equal(await r.act(false), false)
+  assert.equal(s.calls.length, 1)
+  s.transport(async (input) => ({ ...actor, ...input.data, version: 20 }))
+  assert.equal(await r.act(), true)
+  assert.deepEqual(s.calls[0], s.calls[1])
 })
 test('REQ-018：账号变化及晚到响应清理旧昵称与写权限', async () => {
   const s = await setup()
@@ -447,6 +510,7 @@ test('REQ-018：账号变化及晚到响应清理旧昵称与写权限', async (
         resolve = done
       }),
   )
+  r.nickname.value = '未完成的编辑'
   const pending = r.act()
   await settle()
   s.user.user = { ...actor, id: 'synthetic-new' }
@@ -789,12 +853,12 @@ test('活动与个人中心共用设置页，活动参数只接受有效活动�
   assert.equal(fromActivity.runtime.activity.value, activity)
   assert.equal(fromActivity.runtime.currentMe.value.nickname, actor.nickname)
   assert.equal(fromActivity.matchmakingReads, 1)
-  fromActivity.runtime.returnToActivity()
+  await fromActivity.runtime.returnToActivity()
   assert.deepEqual(fromActivity.navigation, [`/pages/matchmaking/detail?id=${activity}`])
 
   const fromCenter = await setup({ activity: '../../other' })
   assert.equal(fromCenter.runtime.activity.value, '')
   assert.equal(fromCenter.matchmakingReads, 1)
-  fromCenter.runtime.returnToActivity()
+  await fromCenter.runtime.returnToActivity()
   assert.deepEqual(fromCenter.navigation, [])
 })
