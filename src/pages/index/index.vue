@@ -104,6 +104,14 @@ onPullDownRefresh(async () => {
         ><text class="entry-caption">{{ entry.caption }}</text>
       </view>
     </view>
+    <navigator url="/pages/matchmaking/index" class="matchmaking-entry">
+      <AppIcon name="heart" :size="48" />
+      <view
+        ><text class="section-title">包分配活动</text
+        ><text>填写期待，随活动认识一位新朋友</text></view
+      >
+      <text class="small-link">查看 ›</text>
+    </navigator>
     <view
       role="button"
       class="kindness-strip"
@@ -183,3 +191,21 @@ onPullDownRefresh(async () => {
     <text class="page-footnote">许愿有人应，心事有人听。</text>
   </AppPage>
 </template>
+<style scoped>
+.matchmaking-entry {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  margin-bottom: 24rpx;
+  padding: 26rpx;
+  border-radius: 24rpx;
+  background: var(--theme-mint);
+  color: var(--theme-ink);
+}
+.matchmaking-entry view {
+  flex: 1;
+  display: grid;
+  gap: 8rpx;
+  font-size: 24rpx;
+}
+</style>

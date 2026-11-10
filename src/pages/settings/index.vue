@@ -402,6 +402,9 @@ onPullDownRefresh(async () => {
 <template>
   <AppPage>
     <text class="title">个人资料与隐私</text>
+    <navigator v-if="user.isLoggedIn" url="/pages/matchmaking/profile" class="card small-link"
+      >人格标签与包分配报名资料 ›</navigator
+    >
 
     <text v-if="busy">加载中…</text>
     <view v-if="currentMe" class="card">

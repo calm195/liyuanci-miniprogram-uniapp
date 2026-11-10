@@ -41,6 +41,7 @@ const groups = [
     { label: '通知中心', icon: 'bell', url: '/pages/inbox/index' },
     { label: '聊天', icon: 'chat', url: '/pages/inbox/index?view=conversations' },
     { label: '我的应愿', icon: 'send', url: '/pages/applications/index' },
+    { label: '包分配活动', icon: 'heart', url: '/pages/matchmaking/index' },
     { label: '身份认证', icon: 'shield', url: '/pages/verification/index' },
   ],
   [

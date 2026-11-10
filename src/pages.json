@@ -248,6 +248,26 @@
         "navigationBarTitleText": "悄悄话设置",
         "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/matchmaking/index",
+      "style": {
+        "navigationBarTitleText": "包分配",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/matchmaking/profile",
+      "style": {
+        "navigationBarTitleText": "个人资料"
+      }
+    },
+    {
+      "path": "pages/matchmaking/detail",
+      "style": {
+        "navigationBarTitleText": "包分配活动",
+        "enablePullDownRefresh": true
+      }
     }
   ],
   "globalStyle": {
