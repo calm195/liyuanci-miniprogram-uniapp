@@ -38,6 +38,27 @@ test('特质规范化去重，限制字数与数量，旧请求省略字段不�
   assert.throws(() => parseTraitSuggestions({ items: [{ id: 'invalid', name: '真诚', heat: 1 }] }))
 })
 
+test('码点校验完整拦截控制与格式字符，保留中文和辅助平面可见字符', () => {
+  // 属性正则仅作为现代Node测试中的独立分类依据，生产代码不依赖该语法。
+  const hidden = /[\p{Cc}\p{Cf}]/u
+  for (let point = 0; point <= 0x10ffff; point++) {
+    const character = String.fromCodePoint(point)
+    if (hidden.test(character)) {
+      assert.throws(() => parseIdealTraits([`真${character}诚`]), `码点 ${point.toString(16)}`)
+    }
+  }
+  assert.deepEqual(parseIdealTraits(['真诚', '开朗😀', '𠮷祥']), ['真诚', '开朗😀', '𠮷祥'])
+  for (const purpose of ['personal_traits', 'ideal_traits']) {
+    assert.deepEqual(
+      parseMatchmakingPreferences({ ...preferences, [purpose]: ['真诚'] })[
+        purpose as 'personal_traits' | 'ideal_traits'
+      ],
+      ['真诚'],
+    )
+    assert.throws(() => parseMatchmakingPreferences({ ...preferences, [purpose]: ['真\u200b诚'] }))
+  }
+})
+
 test('标签编辑新增删除与上限，迟到推荐在隐藏后不能回填', async () => {
   const props = reactive({
     modelValue: [] as string[],

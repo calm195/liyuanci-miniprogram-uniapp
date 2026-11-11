@@ -419,12 +419,47 @@ export function matchmakingKey(): string {
   return `matchmaking-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+// 与后端 Unicode Cc/Cf 分类一致，使用码点范围避免微信引擎不支持属性正则。
+// 三元组为起点、终点、步长；包含辅助平面的格式字符，普通表情不受影响。
+const traitHiddenCharacterRanges: ReadonlyArray<readonly [number, number, number]> = [
+  [0x0, 0x1f, 1],
+  [0x7f, 0x9f, 1],
+  [0xad, 0x600, 1363],
+  [0x601, 0x605, 1],
+  [0x61c, 0x6dd, 193],
+  [0x70f, 0x890, 385],
+  [0x891, 0x8e2, 81],
+  [0x180e, 0x200b, 2045],
+  [0x200c, 0x200f, 1],
+  [0x202a, 0x202e, 1],
+  [0x2060, 0x2064, 1],
+  [0x2066, 0x206f, 1],
+  [0xfeff, 0xfff9, 250],
+  [0xfffa, 0xfffb, 1],
+  [0x110bd, 0x110cd, 16],
+  [0x13430, 0x1343f, 1],
+  [0x1bca0, 0x1bca3, 1],
+  [0x1d173, 0x1d17a, 1],
+  [0xe0001, 0xe0020, 31],
+  [0xe0021, 0xe007f, 1],
+]
+
+function isTraitHiddenCharacter(character: string): boolean {
+  const point = character.codePointAt(0)
+  return (
+    point !== undefined &&
+    traitHiddenCharacterRanges.some(
+      ([start, end, step]) => point >= start && point <= end && (point - start) % step === 0,
+    )
+  )
+}
+
 // 标签输入先规范化再校验，保存时由服务端再次去重和审核。
 export function parseIdealTraits(value: unknown): string[] {
   const labels = array(value, 10).map((item) => {
     if (typeof item !== 'string') invalid()
     const name = item.normalize('NFKC').trim()
-    if (!name || [...name].length > 20 || /[\p{Cc}\p{Cf}]/u.test(name))
+    if (!name || [...name].length > 20 || [...name].some(isTraitHiddenCharacter))
       throw new Error('每个特质需为1～20字，不可包含控制或隐形字符。')
     return name
   })
