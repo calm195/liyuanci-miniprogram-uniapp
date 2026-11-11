@@ -2,6 +2,7 @@ import { request, RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
 import {
   matchmakingID,
+  parseTraitSuggestions,
   parseMatchmakingDetail,
   parseMatchmakingAccountProfile,
   parseMatchmakingPage,
@@ -88,5 +89,14 @@ export async function writeMatchmaking(command: MatchmakingCommand) {
   if (!matchmakingID(command.taskId)) throw new Error('任务标识无效。')
   return parseMatchmakingReceipt(
     await call(`${base}/tasks/${command.taskId}/open`, 'POST', {}, command.key),
+  )
+}
+
+export async function suggestMatchmakingTraits(
+  query: string,
+  purpose: 'ideal' | 'personal' = 'ideal',
+) {
+  return parseTraitSuggestions(
+    await call(`/matchmaking/traits?q=${encodeURIComponent(query)}&purpose=${purpose}&limit=10`),
   )
 }

@@ -40,6 +40,8 @@ export interface MatchmakingProfile {
   weight_max: number
   wechat: string
   introduction: string
+  ideal_traits?: string[]
+  personal_traits?: string[]
   consent: boolean
 }
 
@@ -52,7 +54,22 @@ export type MatchmakingPreferences = Omit<
   'name' | 'gender' | 'campus' | 'grade' | 'mbti' | 'consent'
 >
 
+export interface MatchmakingTraitSelection {
+  purpose: 'ideal' | 'personal'
+  id: string
+  name: string
+  status: 'approved' | 'pending' | 'rejected'
+  reason: string
+}
+
+export interface MatchmakingTraitSuggestion {
+  id: string
+  name: string
+  heat: number
+}
+
 export interface MatchmakingAccountProfile {
+  trait_selections?: MatchmakingTraitSelection[]
   account_version: number
   profile?: MatchmakingProfileDraft
   version: number
@@ -68,6 +85,9 @@ export interface MatchmakingEnrollment {
 }
 
 export interface MatchmakingScore {
+  traits?: number
+  personal_to_ideal?: string[]
+  ideal_to_personal?: string[]
   mbti: number
   age: number
   campus: number

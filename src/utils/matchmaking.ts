@@ -11,6 +11,8 @@ import type {
   MatchmakingPreferences,
   MatchmakingScore,
   MatchmakingTask,
+  MatchmakingTraitSelection,
+  MatchmakingTraitSuggestion,
 } from '../types/matchmaking.ts'
 
 export const matchmakingMbtis = [
@@ -158,7 +160,9 @@ export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
     weight_max: integer(v.weight_max, 50, 500),
     wechat: string(v.wechat, 64),
     introduction: string(v.introduction, 500),
+    ...(v.ideal_traits === undefined ? {} : { ideal_traits: parseIdealTraits(v.ideal_traits) }),
     consent: bool(v.consent),
+    personal_traits: v.personal_traits === undefined ? [] : parseIdealTraits(v.personal_traits),
   }
   if (
     out.age_min > out.age_max ||
@@ -188,6 +192,10 @@ export function parseMatchmakingPreferences(value: unknown): MatchmakingPreferen
     weight_max: numeric('weight_max', 50, 500),
     wechat: string(v.wechat, 64),
     introduction: string(v.introduction, 500),
+    ...(v.ideal_traits === undefined ? {} : { ideal_traits: parseIdealTraits(v.ideal_traits) }),
+    ...(v.personal_traits === undefined
+      ? {}
+      : { personal_traits: parseIdealTraits(v.personal_traits) }),
   }
   for (const field of ['age', 'height', 'weight'] as const) {
     const min = draft[`${field}_min`]
@@ -200,6 +208,7 @@ export function parseMatchmakingPreferences(value: unknown): MatchmakingPreferen
 function parseMatchmakingProfileDraft(v: Record<string, unknown>): MatchmakingProfileDraft {
   return {
     ...parseMatchmakingPreferences(v),
+    personal_traits: v.personal_traits === undefined ? [] : parseIdealTraits(v.personal_traits),
     name: string(v.name, 40),
     gender: option(v.gender, ['', 'male', 'female']),
     grade: string(v.grade, 32),
@@ -211,13 +220,38 @@ function parseMatchmakingProfileDraft(v: Record<string, unknown>): MatchmakingPr
 
 export function parseMatchmakingAccountProfile(value: unknown): MatchmakingAccountProfile {
   const v = record(value)
+  const trait_selections =
+    v.trait_selections === undefined
+      ? undefined
+      : array(v.trait_selections, 20).map((value): MatchmakingTraitSelection => {
+          const item = record(value)
+          return {
+            id: id(item.id),
+            purpose:
+              item.purpose === undefined ? 'ideal' : option(item.purpose, ['ideal', 'personal']),
+            name: string(item.name, 20),
+            status: option(item.status, ['approved', 'pending', 'rejected']),
+            reason: string(item.reason ?? '', 500),
+          }
+        })
+  if (trait_selections) {
+    if (
+      new Set(trait_selections.map((item) => `${item.purpose}:${item.id}`)).size !==
+      trait_selections.length
+    )
+      invalid()
+    for (const purpose of ['ideal', 'personal']) {
+      if (trait_selections.filter((item) => item.purpose === purpose).length > 10) invalid()
+    }
+  }
+  const selections = trait_selections === undefined ? {} : { trait_selections }
   const version = integer(v.version)
   const account_version = integer(v.account_version, 1)
-  if (version === 0 && v.profile == null) return { version, account_version }
+  if (version === 0 && v.profile == null) return { version, account_version, ...selections }
   if (version === 0 || v.profile == null) invalid()
   const profile = parseMatchmakingProfileDraft(record(v.profile))
   if (profile.consent) invalid()
-  return { version, account_version, profile }
+  return { version, account_version, profile, ...selections }
 }
 
 export function matchmakingProfileProblem(profile: MatchmakingProfileDraft): string {
@@ -273,6 +307,11 @@ function score(value: unknown): MatchmakingScore {
     campus: points('campus', 25),
     height: points('height', 15),
     weight: points('weight', 10),
+    traits: v.traits === undefined ? 0 : integer(v.traits, 0, 100),
+    personal_to_ideal:
+      v.personal_to_ideal === undefined ? [] : parseIdealTraits(v.personal_to_ideal),
+    ideal_to_personal:
+      v.ideal_to_personal === undefined ? [] : parseIdealTraits(v.ideal_to_personal),
   }
 }
 function pair(value: unknown): MatchmakingPair {
@@ -281,7 +320,7 @@ function pair(value: unknown): MatchmakingPair {
     id: id(v.id),
     version: integer(v.version, 1),
     status: option(v.status, ['draft', 'published', 'ended']),
-    score: integer(v.score, 0, 100),
+    score: integer(v.score, 0, 200),
     score_details: score(v.score_details),
     algorithm: string(v.algorithm, 80),
     accessible: bool(v.accessible),
@@ -378,4 +417,25 @@ export function canEditMatchmaking(detail: MatchmakingDetail): boolean {
 }
 export function matchmakingKey(): string {
   return `matchmaking-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+// 标签输入先规范化再校验，保存时由服务端再次去重和审核。
+export function parseIdealTraits(value: unknown): string[] {
+  const labels = array(value, 10).map((item) => {
+    if (typeof item !== 'string') invalid()
+    const name = item.normalize('NFKC').trim()
+    if (!name || [...name].length > 20 || /[\p{Cc}\p{Cf}]/u.test(name))
+      throw new Error('每个特质需为1～20字，不可包含控制或隐形字符。')
+    return name
+  })
+  return [...new Set(labels)]
+}
+
+export function parseTraitSuggestions(value: unknown): MatchmakingTraitSuggestion[] {
+  return unique(
+    array(record(value).items, 10).map((value) => {
+      const item = record(value)
+      return { id: id(item.id), name: string(item.name, 20), heat: integer(item.heat) }
+    }),
+  )
 }

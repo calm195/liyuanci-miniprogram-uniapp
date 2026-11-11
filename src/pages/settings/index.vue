@@ -531,6 +531,8 @@ onHide(() => {
 onUnload(leave)
 const {
   page: matchmakingPage,
+  traitSelections: matchmakingTraitSelections,
+  personalTraitSelections: matchmakingPersonalTraitSelections,
   form: matchmakingForm,
   locked: matchmakingLocked,
   dirty: matchmakingDirty,
@@ -730,6 +732,8 @@ onPullDownRefresh(async () => {
         >
         <MatchmakingForm
           :model-value="matchmakingForm"
+          :trait-selections="matchmakingTraitSelections"
+          :personal-trait-selections="matchmakingPersonalTraitSelections"
           :disabled="
             matchmakingBusy ||
             (matchmakingLocked && !saving) ||

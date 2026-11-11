@@ -36,6 +36,7 @@ const profile: MatchmakingProfile = {
   weight_max: 180,
   wechat: 'synthetic-wechat',
   introduction: '合成自我介绍',
+  personal_traits: [],
   consent: true,
 }
 function sample(): MatchmakingDetail {
@@ -91,7 +92,16 @@ function paired(): MatchmakingDetail {
     version: 2,
     status: 'published',
     score: 55,
-    score_details: { mbti: 18, age: 12, campus: 12.5, height: 7.5, weight: 5 },
+    score_details: {
+      mbti: 18,
+      age: 12,
+      campus: 12.5,
+      height: 7.5,
+      weight: 5,
+      traits: 0,
+      personal_to_ideal: [],
+      ideal_to_personal: [],
+    },
     algorithm: 'legacy-fixed-v1',
     accessible: true,
     peer: { ...profile, name: '合成对方' },
@@ -662,4 +672,24 @@ test('活动列表处理空态和重复翻页；游客不请求，通知落到�
     }).modules[0].module,
     'matchmaking',
   )
+})
+
+test('标签双向加分允许总分超过100，旧分数缺少标签明细时兼容为零', () => {
+  const data = paired()
+  data.pair!.score = 155
+  data.pair!.score_details.traits = 100
+  data.pair!.score_details.personal_to_ideal = ['真诚']
+  data.pair!.score_details.ideal_to_personal = ['开朗']
+  assert.equal(contract.parseMatchmakingDetail(data).pair?.score, 155)
+  assert.deepEqual(contract.parseMatchmakingDetail(data).pair?.score_details.personal_to_ideal, [
+    '真诚',
+  ])
+  delete data.pair!.score_details.traits
+  delete data.pair!.score_details.personal_to_ideal
+  delete data.pair!.score_details.ideal_to_personal
+  const legacy = contract.parseMatchmakingDetail(data)
+  assert.equal(legacy.pair?.score_details.traits, 0)
+  assert.deepEqual(legacy.pair?.score_details.ideal_to_personal, [])
+  data.pair!.score = 201
+  assert.throws(() => contract.parseMatchmakingDetail(data))
 })

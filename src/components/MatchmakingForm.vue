@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import type { MatchmakingPreferences } from '@/types/matchmaking'
+import MatchmakingTraits from '@/components/MatchmakingTraits.vue'
+import type { MatchmakingPreferences, MatchmakingTraitSelection } from '@/types/matchmaking'
 const props = defineProps<{
   modelValue: MatchmakingPreferences
   disabled: boolean
+  traitSelections?: MatchmakingTraitSelection[]
+  personalTraitSelections?: MatchmakingTraitSelection[]
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: MatchmakingPreferences] }>()
 type TextField = 'wechat' | 'introduction'
@@ -88,6 +91,20 @@ function numeric(key: NumberField, event: unknown) {
         />
       </view>
     </view>
+    <MatchmakingTraits
+      purpose="personal"
+      :model-value="modelValue.personal_traits ?? []"
+      :selections="personalTraitSelections ?? []"
+      :disabled="disabled"
+      @update:model-value="emit('update:modelValue', { ...modelValue, personal_traits: $event })"
+    />
+    <MatchmakingTraits
+      purpose="ideal"
+      :model-value="modelValue.ideal_traits ?? []"
+      :selections="traitSelections ?? []"
+      :disabled="disabled"
+      @update:model-value="emit('update:modelValue', { ...modelValue, ideal_traits: $event })"
+    />
     <text class="section-title">认识彼此</text>
     <label class="field"
       ><text>微信号（选填）</text

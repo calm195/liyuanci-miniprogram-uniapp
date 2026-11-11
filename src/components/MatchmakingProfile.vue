@@ -14,6 +14,14 @@ defineProps<{ profile: MatchmakingProfile; gradeLabel: string; own?: boolean }>(
       <text>{{ profile.age }} 岁</text><text>{{ profile.height }} cm</text
       ><text>{{ profile.weight }} 斤</text><text v-if="profile.mbti">{{ profile.mbti }}</text>
     </view>
+    <view v-if="profile.personal_traits?.length" class="profile-facts">
+      <text>个人特质</text
+      ><text v-for="trait in profile.personal_traits" :key="trait">{{ trait }}</text>
+    </view>
+    <view v-if="profile.ideal_traits?.length" class="profile-facts">
+      <text>理想型特质</text
+      ><text v-for="trait in profile.ideal_traits" :key="trait">{{ trait }}</text>
+    </view>
     <text class="profile-introduction">{{ profile.introduction }}</text>
     <text v-if="profile.wechat" user-select>微信号：{{ profile.wechat }}</text>
     <text v-if="own" class="profile-note"
