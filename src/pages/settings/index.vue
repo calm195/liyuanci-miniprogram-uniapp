@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
-import MatchmakingForm from '@/components/MatchmakingForm.vue'
-import { useMatchmakingProfile } from '@/composables/use-matchmaking-profile'
 import { matchmakingID, matchmakingMbtis } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
@@ -11,22 +9,23 @@ import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
+import { useProfileDraftStore } from '@/stores/profile-drafts'
 import { RequestError } from '@/utils/request'
 import { whisperKey } from '@/utils/whispers'
 import { updateProfile } from '@/api/settings'
-import type { MatchmakingPreferences } from '@/types/matchmaking'
 import type { ProfileUpdate } from '@/types/settings'
 import type { UserInfo } from '@/types/api'
 import { campuses, genders } from '@/types/wish'
 import type { IdentityTags } from '@/types/wish'
 const user = useUserStore()
+const drafts = useProfileDraftStore()
 const activity = ref('')
 onLoad((query) => {
   if (matchmakingID(query?.activity)) activity.value = query.activity
 })
 async function returnToActivity() {
   if (!activity.value) return
-  if (hasUnsavedChanges.value && !(await act())) return
+  if ((hasUnsavedChanges.value || gradeNumberError.value) && !(await act())) return
   uni.navigateBack({
     fail: () => uni.redirectTo({ url: `/pages/matchmaking/detail?id=${activity.value}` }),
   })
@@ -69,10 +68,78 @@ const avatarError = ref('')
 const avatarPending = ref<{ path: string; version: number; key: string } | null>(null)
 const identityCampus = ref<IdentityTags['campus']>('any')
 const identityGrade = ref('')
+const enrollmentYear = ref(0)
+const educationLevel = ref<NonNullable<ProfileUpdate['education_level']>>('')
+const gradeOverride = ref('')
+const gradeNumberError = ref('')
+const educationOptions = [
+  { code: '', label: '未填写' },
+  { code: 'undergraduate', label: '本科' },
+  { code: 'master', label: '硕士研究生' },
+  { code: 'doctor', label: '博士研究生' },
+] as const
+function currentAcademicYear() {
+  const date = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  return date.getUTCFullYear() - (date.getUTCMonth() < 8 ? 1 : 0)
+}
+const academicYear = ref(currentAcademicYear())
+const enrollmentYears = computed(() =>
+  Array.from({ length: academicYear.value - 1949 }, (_, index) => academicYear.value - index),
+)
+function selectYear(event: { detail: { value: string | number } }) {
+  enrollmentYear.value = enrollmentYears.value[Number(event.detail.value)] ?? 0
+  queueSave()
+}
+function selectEducation(event: { detail: { value: string | number } }) {
+  const selected = educationOptions[Number(event.detail.value)]?.code
+  if (!selected) return
+  educationLevel.value = selected
+  gradeOverride.value = ''
+  gradeNumberError.value = ''
+  queueSave()
+}
+function adjustGradeNumber(event: unknown) {
+  if (busy.value || writing.value || !allowed('putMeProfile')) return
+  const raw = (event as { detail?: { value?: unknown } }).detail?.value
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  if (!value) {
+    restoreAutomaticGrade()
+    return
+  }
+  const year = Number(value)
+  if (!Number.isSafeInteger(year) || year < 1 || year > 100) {
+    cancelSave()
+    gradeNumberError.value = '手动年级须为1–100之间的整数。'
+    error.value = gradeNumberError.value
+    return
+  }
+  const prefix = educationLevel.value === 'doctor' ? 'doctoral' : educationLevel.value
+  if (!prefix) return
+  gradeOverride.value = `${prefix}_${year}`
+  gradeNumberError.value = ''
+  queueSave()
+}
+function restoreAutomaticGrade() {
+  gradeOverride.value = ''
+  gradeNumberError.value = ''
+  queueSave()
+}
+
 const gradeOptions = computed(() => [
   { code: '', label: '未填写' },
-  ...(currentMe.value?.grade_options ?? []),
+  ...(currentMe.value?.grade_options ?? []).filter(
+    (item) =>
+      !educationLevel.value ||
+      item.code.startsWith(
+        educationLevel.value === 'doctor' ? 'doctoral_' : `${educationLevel.value}_`,
+      ),
+  ),
 ])
+const automaticGradePreview = computed(() => {
+  if (!enrollmentYear.value || !educationLevel.value) return ''
+  const label = educationOptions.find((item) => item.code === educationLevel.value)?.label
+  return `${label}第${academicYear.value - enrollmentYear.value + 1}学年`
+})
 const identityGender = ref<IdentityTags['gender']>('undisclosed')
 // 字段缺省时保持未知，禁止把省略擅自解释成公开或隐藏。
 const hidden = ref<boolean | null>(null)
@@ -110,9 +177,10 @@ function selectTag(
   if (busy.value || !allowed('putMeProfile')) return
   const index = Number(event.detail.value)
   if (kind === 'campus') identityCampus.value = campuses[index]?.value || 'any'
-  else if (kind === 'grade')
-    identityGrade.value = gradeOptions.value[index]?.code ?? identityGrade.value
-  else identityGender.value = genders[index]?.value || 'undisclosed'
+  else if (kind === 'grade') {
+    gradeOverride.value = gradeOptions.value[index]?.code ?? gradeOverride.value
+    gradeNumberError.value = ''
+  } else identityGender.value = genders[index]?.value || 'undisclosed'
   queueSave()
 }
 function clear() {
@@ -130,6 +198,10 @@ function clear() {
   avatarPending.value = null
   identityCampus.value = 'any'
   identityGrade.value = ''
+  enrollmentYear.value = 0
+  educationLevel.value = ''
+  gradeOverride.value = ''
+  gradeNumberError.value = ''
   identityGender.value = 'undisclosed'
   hidden.value = null
   readEpoch.value = -1
@@ -165,9 +237,27 @@ async function load() {
     mbti.value = result.mbti ?? ''
     identityCampus.value = result.identity_tags?.campus || 'any'
     identityGrade.value = result.identity_tags?.grade ?? ''
+    enrollmentYear.value = result.enrollment_year ?? 0
+    educationLevel.value = result.education_level ?? ''
+    gradeOverride.value = result.grade_override ?? ''
+    gradeNumberError.value = ''
     identityGender.value = result.identity_tags?.gender || 'undisclosed'
     hidden.value = typeof result.hide_identity_tags === 'boolean' ? result.hide_identity_tags : null
     readEpoch.value = epoch
+    const draft = drafts.readCommon()
+    if (draft) {
+      const values = draft.values
+      nickname.value = values.nickname ?? nickname.value
+      mbti.value = values.mbti ?? mbti.value
+      hidden.value = values.hide_identity_tags ?? hidden.value
+      identityCampus.value = values.identity_tags?.campus ?? identityCampus.value
+      identityGender.value = values.identity_tags?.gender ?? identityGender.value
+      enrollmentYear.value = values.enrollment_year ?? enrollmentYear.value
+      educationLevel.value = values.education_level ?? educationLevel.value
+      gradeOverride.value = values.grade_override ?? gradeOverride.value
+      profilePending.value = draft.pending
+      drafts.saveCommon(null)
+    }
   } catch {
     if (active()) {
       clear()
@@ -341,7 +431,9 @@ const profileDirty = computed(() => {
     (nickname.value !== (snapshot.nickname ?? '') ||
       mbti.value !== (snapshot.mbti ?? '') ||
       identityCampus.value !== (snapshot.identity_tags?.campus || 'any') ||
-      identityGrade.value !== (snapshot.identity_tags?.grade ?? '') ||
+      enrollmentYear.value !== (snapshot.enrollment_year ?? 0) ||
+      educationLevel.value !== (snapshot.education_level ?? '') ||
+      gradeOverride.value !== (snapshot.grade_override ?? '') ||
       identityGender.value !== (snapshot.identity_tags?.gender || 'undisclosed') ||
       hidden.value !== (snapshot.hide_identity_tags ?? null))
   )
@@ -357,16 +449,20 @@ function queueSave() {
     if (!writing.value && !selectingAvatar.value) void act(false)
   }, 600)
 }
-function editMatchmaking(draft: MatchmakingPreferences) {
-  matchmakingForm.value = draft
-  queueSave()
-}
 function editVisibility(value: boolean) {
   hidden.value = value
   queueSave()
 }
 
 async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: number) {
+  if (!profilePending.value && gradeNumberError.value) {
+    error.value = gradeNumberError.value
+    return
+  }
+  if (!profilePending.value && !!enrollmentYear.value !== !!educationLevel.value) {
+    error.value = '请同时选择入学年份与学历层级。'
+    return
+  }
   const hiddenValue = hidden.value
   if (
     !profilePending.value &&
@@ -379,12 +475,14 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
     input: {
       nickname: nickname.value,
       mbti: mbti.value,
+      ...(enrollmentYear.value ? { enrollment_year: enrollmentYear.value } : {}),
+      ...(educationLevel.value ? { education_level: educationLevel.value } : {}),
+      ...(gradeOverride.value !== (snapshot.grade_override ?? '')
+        ? { grade_override: gradeOverride.value }
+        : {}),
       identity_tags: {
         campus: identityCampus.value,
         gender: identityGender.value,
-        ...(identityGrade.value !== (snapshot.identity_tags?.grade ?? '')
-          ? { grade: identityGrade.value }
-          : {}),
       },
       hide_identity_tags: hiddenValue as boolean,
       expected_version: snapshot.version,
@@ -406,6 +504,7 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
     if (!updated) return
     me.value = { ...updated, allowed_actions: [...updated.allowed_actions] }
     profilePending.value = null
+    drafts.saveCommon(null)
     // 只用服务端值同步仍等于提交值的字段，保留请求期间的新编辑。
     if (nickname.value === command.input.nickname) nickname.value = updated.nickname ?? ''
     if (mbti.value === command.input.mbti) mbti.value = updated.mbti ?? ''
@@ -415,11 +514,13 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
       identityCampus.value = updated.identity_tags?.campus || 'any'
     if (identityGender.value === command.input.identity_tags?.gender)
       identityGender.value = updated.identity_tags?.gender || 'undisclosed'
-    if (
-      identityGrade.value ===
-      (command.input.identity_tags?.grade ?? snapshot.identity_tags?.grade ?? '')
-    )
-      identityGrade.value = updated.identity_tags?.grade ?? ''
+    identityGrade.value = updated.identity_tags?.grade ?? ''
+    if (enrollmentYear.value === command.input.enrollment_year)
+      enrollmentYear.value = updated.enrollment_year ?? 0
+    if (educationLevel.value === command.input.education_level)
+      educationLevel.value = updated.education_level ?? ''
+    if (gradeOverride.value === command.input.grade_override)
+      gradeOverride.value = updated.grade_override ?? ''
   } catch (failure) {
     if (!active()) return
     if (
@@ -445,6 +546,10 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
 
 async function act(manual = true) {
   if (!visible || busy.value || writing.value || selectingAvatar.value) return false
+  if (gradeNumberError.value && !profilePending.value) {
+    error.value = gradeNumberError.value
+    return false
+  }
   cancelSave()
   const snapshot = currentMe.value
   const current = generation
@@ -457,7 +562,7 @@ async function act(manual = true) {
   error.value = ''
   notice.value = ''
   try {
-    // 两类资料各自有版本和幂等键。一侧失败时仍提交另一侧可保存的改动。
+    // 保存请求保留版本与幂等键，结果未知时原样重试。
     const saveCommon = async () => {
       if (!snapshot || !allowed('putMeProfile')) return
       const retrying = !!profilePending.value
@@ -473,9 +578,10 @@ async function act(manual = true) {
       )
         await saveProfile(currentMe.value, active, epoch)
     }
-    await Promise.all([saveCommon(), saveMatchmaking(manual)])
+    await saveCommon()
     if (!active()) return false
-    const saved = !hasUnsavedChanges.value && !error.value && !matchmakingError.value
+    if (gradeNumberError.value && !error.value) error.value = gradeNumberError.value
+    const saved = !hasUnsavedChanges.value && !error.value
     if (saved && manual) notice.value = '资料已保存。'
     return saved
   } finally {
@@ -486,7 +592,33 @@ async function act(manual = true) {
     }
   }
 }
+function preserveDraft() {
+  const snapshot = currentMe.value
+  if (!snapshot) return
+  const values: Partial<ProfileUpdate> = {}
+  if (nickname.value !== (snapshot.nickname ?? '')) values.nickname = nickname.value
+  if (mbti.value !== (snapshot.mbti ?? '')) values.mbti = mbti.value
+  if (hidden.value !== snapshot.hide_identity_tags && hidden.value !== null)
+    values.hide_identity_tags = hidden.value
+  if (
+    identityCampus.value !== (snapshot.identity_tags?.campus || 'any') ||
+    identityGender.value !== (snapshot.identity_tags?.gender || 'undisclosed')
+  )
+    values.identity_tags = { campus: identityCampus.value, gender: identityGender.value }
+  if (enrollmentYear.value !== (snapshot.enrollment_year ?? 0))
+    values.enrollment_year = enrollmentYear.value
+  if (educationLevel.value !== (snapshot.education_level ?? ''))
+    values.education_level = educationLevel.value
+  if (gradeOverride.value !== (snapshot.grade_override ?? ''))
+    values.grade_override = gradeOverride.value
+  drafts.saveCommon(
+    Object.keys(values).length || profilePending.value
+      ? { values, pending: profilePending.value }
+      : null,
+  )
+}
 function leave() {
+  preserveDraft()
   visible = false
   generation++
   clear()
@@ -508,16 +640,15 @@ watch(
   { flush: 'sync' },
 )
 onShow(() => {
+  academicYear.value = currentAcademicYear()
   visible = true
   if (avatarPickerHid || selectingAvatar.value) {
     avatarPickerHid = false
     finishAvatarPicker?.()
     finishAvatarPicker = undefined
-    void Promise.resolve().then(loadMatchmaking)
     return
   }
-  // 先刷新本人会话，再读取同账号的私有报名资料。
-  void load().then(loadMatchmaking)
+  void load()
 })
 onHide(() => {
   // 微信原生相册或相机临时遮住页面，选图回调仍需在当前会话校验并提交。
@@ -529,33 +660,7 @@ onHide(() => {
   }
 })
 onUnload(leave)
-const {
-  page: matchmakingPage,
-  traitSelections: matchmakingTraitSelections,
-  personalTraitSelections: matchmakingPersonalTraitSelections,
-  form: matchmakingForm,
-  locked: matchmakingLocked,
-  dirty: matchmakingDirty,
-  save: saveMatchmaking,
-  refreshDraft: refreshMatchmakingDraft,
-  load: loadMatchmaking,
-} = useMatchmakingProfile()
-const {
-  busy: matchmakingBusy,
-  writing: matchmakingWriting,
-  pending: matchmakingPending,
-  gate: matchmakingGate,
-  error: matchmakingError,
-} = matchmakingPage
-const hasUnsavedChanges = computed(
-  () =>
-    !!(
-      profileDirty.value ||
-      profilePending.value ||
-      matchmakingDirty.value ||
-      matchmakingPending.value
-    ),
-)
+const hasUnsavedChanges = computed(() => !!(profileDirty.value || profilePending.value))
 async function refreshProfileDraft() {
   if (busy.value || writing.value || selectingAvatar.value) return
   const snapshot = currentMe.value
@@ -573,7 +678,9 @@ async function refreshProfileDraft() {
     edit(hidden, snapshot?.hide_identity_tags ?? null),
     edit(identityCampus, snapshot?.identity_tags?.campus || 'any'),
     edit(identityGender, snapshot?.identity_tags?.gender || 'undisclosed'),
-    edit(identityGrade, snapshot?.identity_tags?.grade ?? ''),
+    edit(enrollmentYear, snapshot?.enrollment_year ?? 0),
+    edit(educationLevel, snapshot?.education_level ?? ''),
+    edit(gradeOverride, snapshot?.grade_override ?? ''),
   ]
   const epoch = session.getEpoch()
   await load()
@@ -583,7 +690,6 @@ onPullDownRefresh(async () => {
   try {
     if (writing.value || selectingAvatar.value) return
     await refreshProfileDraft()
-    await refreshMatchmakingDraft()
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -594,11 +700,11 @@ onPullDownRefresh(async () => {
     <text class="title">个人资料与隐私</text>
     <button
       v-if="activity"
-      :disabled="matchmakingWriting || writing"
+      :disabled="writing"
       :loading="isPageActionPending('settings-return-to-activity')"
       @click="runPageAction(returnToActivity, 'settings-return-to-activity')"
     >
-      返回包分配活动
+      保存并返回上一页
     </button>
     <navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="card small-link">
       微信登录 ›
@@ -666,25 +772,82 @@ onPullDownRefresh(async () => {
           >性别 {{ genders.find((item) => item.value === identityGender)?.label }}</view
         ></picker
       >
+      <text class="section-title">学籍与当前年级</text>
+      <picker
+        :range="enrollmentYears"
+        :value="Math.max(0, enrollmentYears.indexOf(enrollmentYear))"
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        @change="selectYear"
+      >
+        <view>入学年份 {{ enrollmentYear || '请选择' }}</view>
+      </picker>
+      <picker
+        :range="educationOptions"
+        range-key="label"
+        :value="
+          Math.max(
+            0,
+            educationOptions.findIndex((item) => item.code === educationLevel),
+          )
+        "
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        @change="selectEducation"
+      >
+        <view
+          >学历层级 {{ educationOptions.find((item) => item.code === educationLevel)?.label }}</view
+        >
+      </picker>
+      <text class="muted">每年9月自动升一个年级。手动调整不会改变入学年份和学历层级。</text>
+      <text v-if="automaticGradePreview" class="muted"
+        >自动计算预览：{{ automaticGradePreview }}</text
+      >
+      <text v-if="!enrollmentYear || !educationLevel" class="muted"
+        >旧年级已保留，请补全入学年份与学历层级。</text
+      >
+      <text
+        >当前年级：{{
+          gradeOptions.find((item) => item.code === identityGrade)?.label ||
+          identityGrade ||
+          '未填写'
+        }}（{{ gradeOverride ? '手动调整' : '自动计算' }}）</text
+      >
       <picker
         :range="gradeOptions"
         range-key="label"
         :value="
           Math.max(
             0,
-            gradeOptions.findIndex((item) => item.code === identityGrade),
+            gradeOptions.findIndex((item) => item.code === gradeOverride),
           )
         "
         :disabled="
-          busy || (writing && !saving) || !allowed('putMeProfile') || gradeOptions.length < 2
+          busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
         "
-        @change="runPageAction(() => selectTag('grade', $event))"
+        @change="selectTag('grade', $event)"
       >
         <view
-          >年级
-          {{ gradeOptions.find((item) => item.code === identityGrade)?.label || '暂不可选' }}</view
+          >手动调整年级：{{
+            gradeOptions.find((item) => item.code === gradeOverride)?.label || '跟随自动计算'
+          }}</view
         >
       </picker>
+      <text>按年级序号调整（选填，1–100）</text>
+      <input
+        type="number"
+        :value="gradeOverride ? gradeOverride.split('_').slice(-1)[0] : ''"
+        :disabled="
+          busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
+        "
+        placeholder="例如输入 2 表示二年级，留空恢复自动"
+        @input="adjustGradeNumber"
+      />
+      <button
+        v-if="gradeOverride"
+        :disabled="busy || writing || !allowed('putMeProfile')"
+        @click="restoreAutomaticGrade"
+      >
+        恢复自动计算
+      </button>
       <text>MBTI（选填）</text>
       <picker
         :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
@@ -722,55 +885,21 @@ onPullDownRefresh(async () => {
       </button>
       <text v-if="!allowed('putMeProfile')">当前账号没有修改资料的权限。</text>
     </view>
-    <text v-if="matchmakingBusy" class="notice">正在读取包分配资料…</text>
-    <text v-if="user.isLoggedIn && matchmakingGate" class="notice">{{ matchmakingGate }}</text>
-    <template v-if="matchmakingForm">
-      <view class="card profile-card">
-        <text class="section-title">包分配报名资料</text>
-        <text class="muted"
-          >保存后可在活动中确认报名。以下资料用于报名审核，并按报名确认的范围展示给配对对象。</text
-        >
-        <MatchmakingForm
-          :model-value="matchmakingForm"
-          :trait-selections="matchmakingTraitSelections"
-          :personal-trait-selections="matchmakingPersonalTraitSelections"
-          :disabled="
-            matchmakingBusy ||
-            (matchmakingLocked && !saving) ||
-            (!!matchmakingPending && !matchmakingWriting)
-          "
-          @update:model-value="editMatchmaking"
-        />
-      </view>
-    </template>
-    <text v-if="!saving && (profilePending || matchmakingPending)" class="notice">
-      上次保存结果尚未确认，点「保存资料」可重试。
-    </text>
-    <view v-if="allowed('putMeProfile') || matchmakingForm || matchmakingPending" class="card">
-      <text class="muted">修改后自动保存，也可手动保存两类资料。</text>
+    <text v-if="profilePending && !saving" class="notice"
+      >上次保存结果尚未确认，点「保存资料」可原样重试。</text
+    >
+    <view v-if="allowed('putMeProfile')" class="card">
+      <text class="muted">修改后自动保存，也可手动保存。</text>
       <text v-if="saving" class="muted">正在保存资料…</text>
       <text v-else-if="hasUnsavedChanges" class="muted">有改动尚未保存</text>
       <button
-        :disabled="busy || writing || selectingAvatar || matchmakingBusy || matchmakingWriting"
+        :disabled="busy || writing || selectingAvatar"
         :loading="isPageActionPending('settings-save-profile')"
         @click="runPageAction(() => act(), 'settings-save-profile')"
       >
         保存资料
       </button>
     </view>
-    <button
-      v-if="user.isLoggedIn && !matchmakingForm && !matchmakingBusy"
-      :loading="isPageActionPending('settings-reload-matchmaking')"
-      @click="
-        runPageAction(
-          () => (currentMe ? loadMatchmaking() : load().then(loadMatchmaking)),
-          'settings-reload-matchmaking',
-        )
-      "
-    >
-      重新读取包分配资料
-    </button>
-    <AppNotice :message="matchmakingError" kind="error" />
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
     <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>

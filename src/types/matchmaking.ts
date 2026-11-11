@@ -26,6 +26,7 @@ export interface MatchmakingActivity {
 export interface MatchmakingProfile {
   name: string
   gender: 'male' | 'female'
+  grade_label?: string
   grade: string
   campus: string
   mbti: string
@@ -42,6 +43,11 @@ export interface MatchmakingProfile {
   introduction: string
   ideal_traits?: string[]
   personal_traits?: string[]
+  preferred_campuses?: string[]
+  preferred_mbti?: string[]
+  enrollment_year?: number
+  education_level?: string
+  grade_override?: string
   consent: boolean
 }
 
@@ -51,7 +57,16 @@ export type MatchmakingProfileDraft = Omit<MatchmakingProfile, 'gender'> & {
 
 export type MatchmakingPreferences = Omit<
   MatchmakingProfileDraft,
-  'name' | 'gender' | 'campus' | 'grade' | 'mbti' | 'consent'
+  | 'name'
+  | 'gender'
+  | 'campus'
+  | 'grade'
+  | 'grade_label'
+  | 'mbti'
+  | 'consent'
+  | 'enrollment_year'
+  | 'education_level'
+  | 'grade_override'
 >
 
 export interface MatchmakingTraitSelection {
@@ -85,6 +100,8 @@ export interface MatchmakingEnrollment {
 }
 
 export interface MatchmakingScore {
+  preferred_campus?: number
+  preferred_mbti?: number
   traits?: number
   personal_to_ideal?: string[]
   ideal_to_personal?: string[]

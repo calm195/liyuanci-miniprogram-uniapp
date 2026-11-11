@@ -6,6 +6,9 @@ export interface UserInfo {
   avatar_url?: string
   avatar_id?: string
   grade_options?: { code: string; label: string }[]
+  enrollment_year?: number
+  education_level?: 'undergraduate' | 'master' | 'doctor' | ''
+  grade_override?: string
   identity_tags?: import('./wish').IdentityTags
   mbti?: string
   nickname?: string

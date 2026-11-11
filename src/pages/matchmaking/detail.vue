@@ -60,7 +60,11 @@ const profileProblem = computed(() => {
   if (!profile) return '请先完善个人资料。'
   const problem = matchmakingProfileProblem({ ...profile, consent: true })
   if (problem) return problem
-  if (!grades.value.some((item) => item.code === profile.grade)) return '请选择当前可用的年级。'
+  if (
+    !grades.value.some((item) => item.code === profile.grade) &&
+    !/^(undergraduate|master|doctoral)_[1-9]\d*$/.test(profile.grade)
+  )
+    return '请选择当前可用的年级。'
   return ''
 })
 const preview = computed(() => {
@@ -87,7 +91,13 @@ const pairText = computed(() => {
   return '你们已配对，开始认识彼此吧。'
 })
 function gradeLabel(code: string) {
-  return grades.value.find((item) => item.code === code)?.label ?? code
+  const configured = grades.value.find((item) => item.code === code)?.label
+  if (configured) return configured
+  const match = /^(undergraduate|master|doctoral)_([1-9]\d*)$/.exec(code)
+  if (!match) return code
+  const level =
+    match[1] === 'undergraduate' ? '本科' : match[1] === 'master' ? '硕士研究生' : '博士研究生'
+  return `${level}${match[2]}年级`
 }
 async function load() {
   await page.read(async (active) => {
@@ -332,7 +342,7 @@ onPullDownRefresh(async () => {
         <text v-else class="muted">{{ profileProblem }}</text>
         <navigator
           v-if="!locked"
-          :url="`/pages/settings/index?activity=${id}`"
+          :url="`/pages/matchmaking/profile?activity=${id}`"
           class="small-link profile-editor-link"
           >{{ preview ? '编辑个人资料' : '去完善个人资料' }} ›</navigator
         >

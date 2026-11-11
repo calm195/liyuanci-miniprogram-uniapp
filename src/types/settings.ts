@@ -1,4 +1,7 @@
 export interface ProfileUpdate {
+  enrollment_year?: number
+  education_level?: 'undergraduate' | 'master' | 'doctor' | ''
+  grade_override?: string
   identity_tags?: import('./wish').IdentityTags
   mbti?: string
   nickname: string

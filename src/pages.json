@@ -259,7 +259,8 @@
     {
       "path": "pages/matchmaking/profile",
       "style": {
-        "navigationBarTitleText": "个人资料"
+        "enablePullDownRefresh": true,
+        "navigationBarTitleText": "包分配资料"
       }
     },
     {

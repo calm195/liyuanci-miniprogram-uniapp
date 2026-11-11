@@ -91,6 +91,33 @@ function array(value: unknown, max: number): unknown[] {
   if (!Array.isArray(value) || value.length > max) invalid()
   return value
 }
+function education(v: Record<string, unknown>) {
+  return {
+    ...(v.enrollment_year === undefined
+      ? {}
+      : { enrollment_year: integer(v.enrollment_year, 0, 9999) }),
+    ...(v.education_level === undefined
+      ? {}
+      : { education_level: option(v.education_level, ['', 'undergraduate', 'master', 'doctor']) }),
+    ...(v.grade_override === undefined ? {} : { grade_override: string(v.grade_override, 32) }),
+  }
+}
+function preferences(v: Record<string, unknown>) {
+  const selections = (value: unknown, choices: readonly string[]) => {
+    if (value == null) return []
+    const items = array(value, choices.length).map((item) => option(item, choices))
+    if (new Set(items).size !== items.length) invalid()
+    return items
+  }
+  return {
+    ...(v.preferred_campuses == null
+      ? {}
+      : { preferred_campuses: selections(v.preferred_campuses, campusCodes) }),
+    ...(v.preferred_mbti == null
+      ? {}
+      : { preferred_mbti: selections(v.preferred_mbti, matchmakingMbtis) }),
+  }
+}
 function unique<T extends { id: string }>(items: T[]): T[] {
   if (new Set(items.map((item) => item.id)).size !== items.length) invalid()
   return items
@@ -161,6 +188,9 @@ export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
     wechat: string(v.wechat, 64),
     introduction: string(v.introduction, 500),
     ...(v.ideal_traits === undefined ? {} : { ideal_traits: parseIdealTraits(v.ideal_traits) }),
+    ...preferences(v),
+    ...education(v),
+    ...(v.grade_label === undefined ? {} : { grade_label: string(v.grade_label, 64) }),
     consent: bool(v.consent),
     personal_traits: v.personal_traits === undefined ? [] : parseIdealTraits(v.personal_traits),
   }
@@ -181,6 +211,7 @@ export function parseMatchmakingPreferences(value: unknown): MatchmakingPreferen
   const numeric = (key: string, min: number, max: number) =>
     v[key] === 0 ? 0 : integer(v[key], min, max)
   const draft: MatchmakingPreferences = {
+    ...preferences(v),
     age: numeric('age', 18, 80),
     age_min: numeric('age_min', 18, 80),
     age_max: numeric('age_max', 18, 80),
@@ -214,6 +245,9 @@ function parseMatchmakingProfileDraft(v: Record<string, unknown>): MatchmakingPr
     grade: string(v.grade, 32),
     campus: option(v.campus, ['', ...campusCodes]),
     mbti: option(v.mbti, ['', ...matchmakingMbtis]),
+    ...preferences(v),
+    ...education(v),
+    ...(v.grade_label === undefined ? {} : { grade_label: string(v.grade_label, 64) }),
     consent: bool(v.consent),
   }
 }
@@ -302,6 +336,10 @@ function score(value: unknown): MatchmakingScore {
     return n
   }
   return {
+    ...(v.preferred_campus === undefined
+      ? {}
+      : { preferred_campus: points('preferred_campus', 5) }),
+    ...(v.preferred_mbti === undefined ? {} : { preferred_mbti: points('preferred_mbti', 10) }),
     mbti: points('mbti', 30),
     age: points('age', 20),
     campus: points('campus', 25),
@@ -320,7 +358,16 @@ function pair(value: unknown): MatchmakingPair {
     id: id(v.id),
     version: integer(v.version, 1),
     status: option(v.status, ['draft', 'published', 'ended']),
-    score: integer(v.score, 0, 200),
+    score: (() => {
+      if (
+        typeof v.score !== 'number' ||
+        !Number.isSafeInteger(v.score * 2) ||
+        v.score < 0 ||
+        v.score > 215
+      )
+        invalid()
+      return v.score
+    })(),
     score_details: score(v.score_details),
     algorithm: string(v.algorithm, 80),
     accessible: bool(v.accessible),

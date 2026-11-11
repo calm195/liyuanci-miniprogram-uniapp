@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import type { MatchmakingProfile } from '@/types/matchmaking'
 import { campuses, genders } from '@/types/wish'
-defineProps<{ profile: MatchmakingProfile; gradeLabel: string; own?: boolean }>()
+const props = defineProps<{ profile: MatchmakingProfile; gradeLabel: string; own?: boolean }>()
+function preferredCampusLabel() {
+  return props.profile.preferred_campuses?.length
+    ? props.profile.preferred_campuses
+        .map((code) => campuses.find((item) => item.value === code)?.label || code)
+        .join('、')
+    : '不限校区'
+}
 </script>
 <template>
   <view class="match-profile">
     <text class="profile-name">{{ profile.name }}</text>
     <text
       >{{ genders.find((item) => item.value === profile.gender)?.label }} ·
-      {{ campuses.find((item) => item.value === profile.campus)?.label }} · {{ gradeLabel }}</text
+      {{ campuses.find((item) => item.value === profile.campus)?.label }} ·
+      {{ profile.grade_label || gradeLabel }}</text
     >
     <view class="profile-facts">
       <text>{{ profile.age }} 岁</text><text>{{ profile.height }} cm</text
@@ -22,6 +30,11 @@ defineProps<{ profile: MatchmakingProfile; gradeLabel: string; own?: boolean }>(
       <text>理想型特质</text
       ><text v-for="trait in profile.ideal_traits" :key="trait">{{ trait }}</text>
     </view>
+    <text v-if="own" class="profile-note"
+      >期望校区：{{ preferredCampusLabel() }}；期望 MBTI：{{
+        profile.preferred_mbti?.length ? profile.preferred_mbti.join('、') : '不限'
+      }}。</text
+    >
     <text class="profile-introduction">{{ profile.introduction }}</text>
     <text v-if="profile.wechat" user-select>微信号：{{ profile.wechat }}</text>
     <text v-if="own" class="profile-note"

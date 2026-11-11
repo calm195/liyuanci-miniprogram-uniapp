@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { campuses } from '@/types/wish'
+import { matchmakingMbtis } from '@/utils/matchmaking'
 import MatchmakingTraits from '@/components/MatchmakingTraits.vue'
 import type { MatchmakingPreferences, MatchmakingTraitSelection } from '@/types/matchmaking'
 const props = defineProps<{
@@ -8,6 +10,16 @@ const props = defineProps<{
   personalTraitSelections?: MatchmakingTraitSelection[]
 }>()
 const emit = defineEmits<{ 'update:modelValue': [value: MatchmakingPreferences] }>()
+function togglePreference(key: 'preferred_campuses' | 'preferred_mbti', code: string) {
+  if (props.disabled) return
+  const current = props.modelValue[key] ?? []
+  const selected = !code
+    ? []
+    : current.includes(code)
+      ? current.filter((item) => item !== code)
+      : [...current, code]
+  emit('update:modelValue', { ...props.modelValue, [key]: selected })
+}
 type TextField = 'wechat' | 'introduction'
 type NumberField =
   | 'age'
@@ -91,6 +103,49 @@ function numeric(key: NumberField, event: unknown) {
         />
       </view>
     </view>
+    <view class="preference-group">
+      <text class="section-title">期望匹配校区</text>
+      <text class="form-help">可多选，不限表示任意校区均满足期望。</text>
+      <view class="preference-options">
+        <button
+          :disabled="disabled"
+          :class="{ selected: !modelValue.preferred_campuses?.length }"
+          @click="togglePreference('preferred_campuses', '')"
+        >
+          不限校区
+        </button>
+        <template v-for="campus in campuses" :key="campus.value">
+          <button
+            v-if="campus.value !== 'any'"
+            :disabled="disabled"
+            :class="{ selected: modelValue.preferred_campuses?.includes(campus.value) }"
+            @click="togglePreference('preferred_campuses', campus.value)"
+          >
+            {{ campus.label }}
+          </button>
+        </template>
+      </view>
+      <text class="section-title">期望 MBTI</text>
+      <text class="form-help">可多选，不限表示任意 MBTI 均满足期望。</text>
+      <view class="preference-options">
+        <button
+          :disabled="disabled"
+          :class="{ selected: !modelValue.preferred_mbti?.length }"
+          @click="togglePreference('preferred_mbti', '')"
+        >
+          不限
+        </button>
+        <button
+          v-for="type in matchmakingMbtis"
+          :key="type"
+          :disabled="disabled"
+          :class="{ selected: modelValue.preferred_mbti?.includes(type) }"
+          @click="togglePreference('preferred_mbti', type)"
+        >
+          {{ type }}
+        </button>
+      </view>
+    </view>
     <MatchmakingTraits
       purpose="personal"
       :model-value="modelValue.personal_traits ?? []"
@@ -128,6 +183,23 @@ function numeric(key: NumberField, event: unknown) {
   </view>
 </template>
 <style scoped>
+.preference-group {
+  display: grid;
+  gap: 18rpx;
+}
+.preference-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.preference-options button {
+  margin: 0;
+  font-size: 24rpx;
+}
+.preference-options .selected {
+  color: var(--theme-primary);
+  border: 2rpx solid var(--theme-primary);
+}
 .match-form {
   display: grid;
   gap: 24rpx;

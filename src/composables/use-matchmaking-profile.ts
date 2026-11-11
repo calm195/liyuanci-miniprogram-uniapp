@@ -1,10 +1,22 @@
 import { computed, ref } from 'vue'
+import { onHide, onUnload } from '@dcloudio/uni-app'
+import { useProfileDraftStore } from '@/stores/profile-drafts'
 import { getMatchmakingAccountProfile } from '@/api/matchmaking'
 import { useMatchmakingPage } from '@/composables/use-matchmaking-page'
 import { matchmakingKey, parseMatchmakingPreferences } from '@/utils/matchmaking'
 import type { MatchmakingPreferences, MatchmakingTraitSelection } from '@/types/matchmaking'
 
 export function useMatchmakingProfile() {
+  const drafts = useProfileDraftStore()
+  // 先留存最新输入，再尝试提交；请求进行中或校验未通过时也不能丢掉草稿。
+  function preserveDraft() {
+    if (form.value && dirty.value) drafts.saveMatchmaking(form.value)
+  }
+  onHide(() => {
+    preserveDraft()
+    void save(false)
+  })
+  onUnload(preserveDraft)
   const profileScope = 'account-profile'
   const version = ref(0)
   const saved = ref('')
@@ -35,6 +47,8 @@ export function useMatchmakingProfile() {
 
   function initialPreferences(): MatchmakingPreferences {
     return {
+      preferred_campuses: [],
+      preferred_mbti: [],
       age: 0,
       age_min: 18,
       age_max: 30,
@@ -67,7 +81,7 @@ export function useMatchmakingProfile() {
       const command = pending.value
       if (command?.kind === 'profile') {
         version.value = command.input.expected_version
-        form.value = { ...command.input.profile }
+        form.value = drafts.readMatchmaking() ?? { ...command.input.profile }
         return
       }
       const result = await getMatchmakingAccountProfile()
@@ -92,11 +106,18 @@ export function useMatchmakingProfile() {
         form.value.personal_traits ??= []
       }
       saved.value = JSON.stringify(form.value)
+      const draft = drafts.readMatchmaking()
+      if (draft) {
+        form.value = withoutRejected(draft)
+        // 成功回填后由当前表单持有草稿，避免随后显式重新读取又恢复旧缓存。
+        drafts.saveMatchmaking(null)
+      }
     })
   }
   async function refreshDraft() {
     if (locked.value) return
     const draft = dirty.value ? form.value : null
+    if (draft) drafts.saveMatchmaking(draft)
     const active = page.actionTicket()
     await load()
     if (active() && form.value && draft && !pending.value) form.value = withoutRejected(draft)
@@ -105,6 +126,8 @@ export function useMatchmakingProfile() {
     const active = page.actionTicket()
     async function reloadAfterSave(submitted: string) {
       const newer = JSON.stringify(form.value) !== submitted ? form.value : null
+      // 提交成功不代表回读必然成功，先保留请求期间的新输入再刷新比较基线。
+      drafts.saveMatchmaking(newer)
       await load()
       if (active() && form.value && newer) form.value = withoutRejected(newer)
     }

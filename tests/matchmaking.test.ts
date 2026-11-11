@@ -690,6 +690,44 @@ test('标签双向加分允许总分超过100，旧分数缺少标签明细时�
   const legacy = contract.parseMatchmakingDetail(data)
   assert.equal(legacy.pair?.score_details.traits, 0)
   assert.deepEqual(legacy.pair?.score_details.ideal_to_personal, [])
-  data.pair!.score = 201
+  data.pair!.score = 216
+  assert.throws(() => contract.parseMatchmakingDetail(data))
+})
+
+test('期望校区与MBTI集合保留不限语义，拒绝非法和重复代码', () => {
+  const profile = paired().enrollment!.profile!
+  assert.deepEqual(
+    contract.parseMatchmakingPreferences({ ...profile, preferred_campuses: [], preferred_mbti: [] })
+      .preferred_campuses,
+    [],
+  )
+  const saved = contract.parseMatchmakingPreferences({
+    ...profile,
+    preferred_campuses: ['wushan'],
+    preferred_mbti: ['INFP', 'ENFJ'],
+  })
+  assert.deepEqual(saved.preferred_mbti, ['INFP', 'ENFJ'])
+  assert.throws(() =>
+    contract.parseMatchmakingPreferences({ ...profile, preferred_campuses: ['any'] }),
+  )
+  assert.throws(() =>
+    contract.parseMatchmakingPreferences({ ...profile, preferred_mbti: ['INFP', 'INFP'] }),
+  )
+  assert.throws(() =>
+    contract.parseMatchmakingPreferences({ ...profile, preferred_mbti: ['UNKNOWN'] }),
+  )
+})
+test('偏好半分参与总分，兼容旧明细并拒绝不合法精度', () => {
+  const data = paired()
+  data.pair!.score = 202.5
+  data.pair!.score_details.preferred_campus = 2.5
+  data.pair!.score_details.preferred_mbti = 5
+  const result = contract.parseMatchmakingDetail(data)
+  assert.equal(result.pair!.score, 202.5)
+  assert.equal(result.pair!.score_details.preferred_campus, 2.5)
+  data.pair!.score = 202.25
+  assert.throws(() => contract.parseMatchmakingDetail(data))
+  data.pair!.score = 202.5
+  data.pair!.score_details.preferred_campus = 6
   assert.throws(() => contract.parseMatchmakingDetail(data))
 })

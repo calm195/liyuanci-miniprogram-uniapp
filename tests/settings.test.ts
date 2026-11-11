@@ -6,7 +6,7 @@ import { matchmakingID, matchmakingMbtis } from '../src/utils/matchmaking.ts'
 import type { UserInfo } from '../src/types/api.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 import { session as realSession } from '../src/utils/session.ts'
-import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
+import { loadRuntime, pageScript, settle, profileDraftStore } from './support/page-runtime.ts'
 const actor = {
   id: 'synthetic-owner',
   version: 19,
@@ -129,11 +129,12 @@ async function setup(
     pageScript(page) +
       (page === blacklistPage
         ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
-        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,editMatchmaking }'),
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,enrollmentYear,educationLevel,gradeOverride,selectEducation,restoreAutomaticGrade,adjustGradeNumber }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
       useUserStore: () => user,
+      useProfileDraftStore: await profileDraftStore({ session, user }),
       matchmakingID,
       matchmakingMbtis,
       useMatchmakingProfile: () => ({
@@ -425,7 +426,7 @@ test('REQ-014/018：未校验时拒绝写入，解除只依赖当前条目动作
   await r.act('unblock', r.rows.value[0])
   assert.equal(s.calls.filter((x) => x.method && x.method !== 'GET').length, 1)
 })
-test('个人资料连续编辑自动合并，手动保存同时提交两区改动', async () => {
+test('个人资料连续编辑自动合并，手动保存仅提交通用资料', async () => {
   const s = await setup()
   const r = s.runtime
   r.nickname.value = '第一次编辑'
@@ -437,12 +438,11 @@ test('个人资料连续编辑自动合并，手动保存同时提交两区改�
   assert.equal(s.calls.length, 1)
   assert.equal(s.calls[0]?.data?.nickname, '第二次编辑')
   r.hidden.value = false
-  r.editMatchmaking({ age: 20 })
   s.transport(async (input) => ({ ...actor, ...input.data, version: 21 }))
   assert.equal(await r.act(), true)
   assert.deepEqual(
     s.calls.slice(1).map((call) => call.url),
-    ['/me/profile', '/matchmaking/profile'],
+    ['/me/profile'],
   )
   assert.equal(s.calls[1]?.data?.expected_version, 20)
   assert.deepEqual(s.prompts, [])
@@ -471,19 +471,29 @@ test('保存期间再次编辑昵称，旧回执保留新输入并用新版本�
   assert.equal(s.calls[1]?.data?.expected_version, 20)
   assert.equal(s.calls[1]?.data?.nickname, '第二次编辑')
 })
-test('保存两区时包分配失败保留草稿，已保存账号资料不再重复提交', async () => {
+test('学籍按账号版本保存，手动年级调整独立于年份与层级', async () => {
   const s = await setup()
   const r = s.runtime
-  r.nickname.value = '新的昵称'
-  r.editMatchmaking({ age: 20 })
-  s.failMatchmaking()
-  assert.equal(await r.act(), false)
-  assert.equal(r.currentMe.value.nickname, '新的昵称')
-  assert.equal(await r.act(), false)
-  assert.deepEqual(
-    s.calls.map((call) => call.url),
-    ['/me/profile', '/matchmaking/profile', '/matchmaking/profile'],
-  )
+  r.enrollmentYear.value = 2025
+  r.educationLevel.value = 'undergraduate'
+  r.gradeOverride.value = 'undergraduate_3'
+  assert.equal(await r.act(), true)
+  assert.equal(s.calls[0]?.data?.enrollment_year, 2025)
+  assert.equal(s.calls[0]?.data?.education_level, 'undergraduate')
+  assert.equal(s.calls[0]?.data?.grade_override, 'undergraduate_3')
+  r.restoreAutomaticGrade()
+  s.transport(async (input) => ({ ...actor, ...input.data, version: 21 }))
+  assert.equal(await r.act(), true)
+  assert.equal(s.calls[1]?.data?.grade_override, '')
+  assert.equal(s.calls[1]?.data?.enrollment_year, 2025)
+  assert.equal(s.calls[1]?.data?.education_level, 'undergraduate')
+})
+test('学籍未完整填写时保留草稿，不提交不完整账号更新', async () => {
+  const s = await setup()
+  s.runtime.enrollmentYear.value = 2025
+  assert.equal(await s.runtime.act(), false)
+  assert.equal(s.calls.length, 0)
+  assert.match(s.runtime.error.value, /同时选择/)
 })
 test('资料超时保留原请求，自动保存不重发，手动保存原样重试', async () => {
   const s = await setup()
@@ -847,18 +857,72 @@ test('头像对审核不支持的小尺寸和超过像素预算的素材提前�
   assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
 })
 
-test('活动与个人中心共用设置页，活动参数只接受有效活动并支持返回', async () => {
+test('通用资料页不读取包分配资料，活动参数只接受有效活动并支持返回', async () => {
   const activity = '10000000-0000-4000-8000-000000000001'
   const fromActivity = await setup({ activity })
   assert.equal(fromActivity.runtime.activity.value, activity)
   assert.equal(fromActivity.runtime.currentMe.value.nickname, actor.nickname)
-  assert.equal(fromActivity.matchmakingReads, 1)
+  assert.equal(fromActivity.matchmakingReads, 0)
   await fromActivity.runtime.returnToActivity()
   assert.deepEqual(fromActivity.navigation, [`/pages/matchmaking/detail?id=${activity}`])
 
   const fromCenter = await setup({ activity: '../../other' })
   assert.equal(fromCenter.runtime.activity.value, '')
-  assert.equal(fromCenter.matchmakingReads, 1)
+  assert.equal(fromCenter.matchmakingReads, 0)
   await fromCenter.runtime.returnToActivity()
   assert.deepEqual(fromCenter.navigation, [])
+})
+
+test('资料保存结果未知后离页重入，保留原键并合并较新学籍草稿', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.enrollmentYear.value = 2025
+  r.educationLevel.value = 'undergraduate'
+  s.transport(async () => {
+    throw new Error('合成超时')
+  })
+  await r.act()
+  r.gradeOverride.value = 'undergraduate_3'
+  s.hooks.hide!()
+  s.hooks.show!()
+  await settle()
+  assert.equal(r.gradeOverride.value, 'undergraduate_3')
+  await r.act(false)
+  assert.equal(s.calls.length, 1)
+  s.transport(async (input) => ({
+    ...actor,
+    ...input.data,
+    version: Number(input.data?.expected_version) + 1,
+  }))
+  assert.equal(await r.act(), true)
+  assert.deepEqual(s.calls[1], s.calls[0])
+  assert.equal(s.calls[2]?.data?.grade_override, 'undergraduate_3')
+  assert.equal(s.calls[2]?.data?.expected_version, 20)
+})
+
+test('手动年级超出范围时取消旧自动保存，手动保存也须先修正输入', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.enrollmentYear.value = 2025
+  r.educationLevel.value = 'undergraduate'
+  r.adjustGradeNumber({ detail: { value: '12' } })
+  r.adjustGradeNumber({ detail: { value: '123' } })
+  await new Promise((resolve) => setTimeout(resolve, 650))
+  assert.equal(s.calls.length, 0)
+  assert.equal(await r.act(), false)
+  assert.equal(s.calls.length, 0)
+  assert.match(r.error.value, /1–100/)
+  r.adjustGradeNumber({ detail: { value: '3' } })
+  assert.equal(await r.act(), true)
+  assert.equal(s.calls[0]?.data?.grade_override, 'undergraduate_3')
+})
+
+test('年级非法输入即使没有其他字段改动，保存也不能清除错误或宣称成功', async () => {
+  const s = await setup({ activity: '10000000-0000-4000-8000-000000000001' })
+  s.runtime.adjustGradeNumber({ detail: { value: '101' } })
+  assert.equal(await s.runtime.act(), false)
+  assert.equal(s.calls.length, 0)
+  assert.match(s.runtime.error.value, /1–100/)
+  await s.runtime.returnToActivity()
+  assert.deepEqual(s.navigation, [])
 })

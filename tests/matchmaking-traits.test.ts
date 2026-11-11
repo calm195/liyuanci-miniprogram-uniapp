@@ -6,7 +6,7 @@ import {
   parseMatchmakingPreferences,
   parseTraitSuggestions,
 } from '../src/utils/matchmaking.ts'
-import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
+import { loadRuntime, pageScript, settle, profileDraftStore } from './support/page-runtime.ts'
 
 const preferences = {
   age: 0,
@@ -138,6 +138,7 @@ test('本人编辑保留待审核标签并移除旧服务返回的驳回标签�
   const runtime = await loadRuntime(
     readFileSync(new URL('../src/composables/use-matchmaking-profile.ts', import.meta.url), 'utf8'),
     {
+      useProfileDraftStore: await profileDraftStore(),
       getMatchmakingAccountProfile: async () => ({
         version: 1,
         account_version: 1,
@@ -182,6 +183,7 @@ test('刷新和保存回读恢复草稿时剔除明确驳回词条，同时保�
   const runtime = await loadRuntime(
     readFileSync(new URL('../src/composables/use-matchmaking-profile.ts', import.meta.url), 'utf8'),
     {
+      useProfileDraftStore: await profileDraftStore(),
       getMatchmakingAccountProfile: async () => ({
         version: 1,
         account_version: 1,
@@ -295,6 +297,7 @@ test('个人特质草稿与理想型独立回填保存，驳回共同词条同�
   const runtime = await loadRuntime(
     readFileSync(new URL('../src/composables/use-matchmaking-profile.ts', import.meta.url), 'utf8'),
     {
+      useProfileDraftStore: await profileDraftStore(),
       getMatchmakingAccountProfile: async () => ({
         version: 1,
         account_version: 1,
