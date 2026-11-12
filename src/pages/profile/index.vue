@@ -14,9 +14,11 @@ import AppIcon from '@/components/AppIcon.vue'
 import { useThemeStore, type ThemePreference } from '@/stores/theme'
 import { useEntryStore } from '@/stores/entry'
 import { useUserStore } from '@/stores/user'
+import { useUnreadStore } from '@/stores/unread'
 import { config } from '@/config'
 import type { VerificationState } from '@/types/api'
 const user = useUserStore()
+const unread = useUnreadStore()
 const theme = useThemeStore()
 const themeOptions: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: '跟随系统' },
@@ -31,10 +33,10 @@ function cycleTheme() {
 const entry = useEntryStore()
 const states: VerificationState[] = ['unverified', 'pending', 'rejected', 'verified']
 const wishStates = [
-  { icon: 'send', state: 'pending_review', label: '待审心愿' },
-  { icon: 'chat', state: 'matching', label: '配对中的心愿' },
-  { icon: 'clock', state: 'realized', label: '已实现的心愿' },
-  { icon: 'check', state: 'fulfilled', label: '已还愿的心愿' },
+  { icon: 'send', state: 'pending_review', label: '待审' },
+  { icon: 'chat', state: 'matching', label: '配对中' },
+  { icon: 'clock', state: 'realized', label: '已实现' },
+  { icon: 'check', state: 'fulfilled', label: '已还愿' },
 ]
 const groups = [
   [
@@ -164,7 +166,7 @@ onPullDownRefresh(async () => {
             runPageAction(() => openMainPage(`/pages/wishes/index?own=1&state=${item.state}`))
           "
           ><AppIcon :name="item.icon" :size="46" /><text class="ui-text">{{
-            dictionaryLabel('wish_state', item.state, item.label)
+            dictionaryLabel('wish_state', item.state, item.label).replace(/(?:的)?心愿$/, '')
           }}</text></view
         >
       </view>
@@ -174,6 +176,11 @@ onPullDownRefresh(async () => {
         ><AppIcon :name="item.icon" :size="36" /><text class="ui-text menu-label">{{
           item.label
         }}</text
+        ><text
+          v-if="item.url === '/pages/inbox/index' && unread.label"
+          class="notification-badge"
+          :aria-label="`${unread.count}条未读通知`"
+          >{{ unread.label }}</text
         ><AppIcon name="chevron" :size="28"
       /></navigator>
     </view>
@@ -204,6 +211,17 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.notification-badge {
+  flex-shrink: 0;
+  min-width: 32rpx;
+  padding: 0 8rpx;
+  border-radius: 20rpx;
+  background: var(--theme-danger);
+  color: white;
+  font-size: 22rpx;
+  line-height: 36rpx;
+  text-align: center;
+}
 .profile-tools {
   display: flex;
   align-items: center;

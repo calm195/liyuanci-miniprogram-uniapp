@@ -90,6 +90,7 @@ test('个人中心每次点击循环切换外观偏好', async () => {
       useUserStore: () => ({}),
       useThemeStore: () => theme,
       useEntryStore: () => ({}),
+      useUnreadStore: () => ({ count: 0, label: '' }),
       onShow: () => {},
       onPullDownRefresh: () => {},
     },

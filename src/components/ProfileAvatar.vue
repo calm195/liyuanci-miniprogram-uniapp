@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
-const props = defineProps<{ src?: string }>()
+const props = withDefaults(defineProps<{ src?: string; size?: number }>(), {
+  src: '',
+  size: 126,
+})
 const defaultAvatar = '/static/illustrations/profile-koi.png'
 const failed = ref(false)
 watch(
@@ -16,6 +19,7 @@ watch(
 <template>
   <image
     class="avatar-image"
+    :style="{ width: `${size}rpx`, height: `${size}rpx` }"
     :src="(!failed && src) || defaultAvatar"
     mode="aspectFill"
     @error="failed = true"
@@ -24,8 +28,8 @@ watch(
 
 <style scoped>
 .avatar-image {
-  width: 126rpx;
-  height: 126rpx;
+  display: block;
+  flex: none;
   border-radius: 50%;
 }
 </style>

@@ -28,7 +28,11 @@ const author = computed(() =>
   <view class="wish-preview">
     <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}`">
       <view class="card-author">
-        <ProfileAvatar :src="wish.public?.author?.avatar_url" class="avatar-placeholder" />
+        <ProfileAvatar
+          :src="wish.public?.author?.avatar_url"
+          :size="68"
+          class="avatar-placeholder"
+        />
         <view class="author-copy">
           <text class="author-name">{{ author || '心愿暂不可查看' }}</text>
           <text v-if="!compact" class="author-hint">{{ wishStateLabels[wish.current_state] }}</text>

@@ -594,7 +594,7 @@ onPullDownRefresh(async () => {
           class="wish-author"
           :url="`/pages/public-profile/index?id=${encodeURIComponent(publicContent.author.id)}`"
         >
-          <ProfileAvatar :src="publicContent.author.avatar_url" />
+          <ProfileAvatar :src="publicContent.author.avatar_url" :size="76" />
           <view class="author-copy"
             ><text>{{ publicContent.author.nickname || '查看公开主页' }}</text>
             <text v-if="publicContent.author.display_id" class="subtitle"
@@ -605,7 +605,7 @@ onPullDownRefresh(async () => {
         <view
           v-if="publicContent?.author && !publicContent.author.id"
           class="wish-author anonymous-author"
-          ><ProfileAvatar /><text>{{
+          ><ProfileAvatar :size="76" /><text>{{
             publicContent.author.nickname || publicContent.author.display_id || '匿名同学'
           }}</text></view
         >
@@ -817,10 +817,6 @@ onPullDownRefresh(async () => {
   align-items: center;
   gap: 20rpx;
   margin: 12rpx 0 24rpx;
-}
-.wish-author :deep(.avatar-image) {
-  width: 76rpx;
-  height: 76rpx;
 }
 .author-copy {
   display: flex;

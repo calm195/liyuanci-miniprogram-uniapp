@@ -1,7 +1,7 @@
 import { RequestError, request } from '@/utils/request'
 import { isPublicContent } from '@/utils/story'
 import { matchesSchema } from '@/utils/whispers-schema'
-import { whisperSchemas } from '@/utils/whispers-contract'
+import { whisperSchemas } from '@/utils/whispers-contract-extensions'
 import type { HotContentKind } from '@/types/content'
 import type { WishPublicContent } from '@/types/wish'
 import type { PublicPost } from '@/types/whispers'
