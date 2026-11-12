@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
+import ContentStats from '@/components/ContentStats.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import ContentSearchBar from '@/components/ContentSearchBar.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
@@ -50,7 +51,7 @@ const {
       @search="search"
     />
     <view v-for="item in items" :key="item.id" class="whisper-preview">
-      <WhisperContent :content="item" />
+      <WhisperContent :content="item" /><ContentStats :views="item.view_count" />
       <view class="card-footer">
         <view class="meta-item">
           <button

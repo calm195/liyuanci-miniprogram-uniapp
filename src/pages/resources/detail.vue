@@ -27,12 +27,16 @@ import {
 } from '@/api/resource-file'
 import { beijingTime } from '@/utils/capsules'
 import AppPage from '@/components/AppPage.vue'
+import ContentStats from '@/components/ContentStats.vue'
+import FavoriteButton from '@/components/FavoriteButton.vue'
+import { useContentView } from '@/composables/use-content-view'
 import { getResource, getResourceDownload, putResourceFeedback } from '@/api/resources'
 import { useResourcePage } from '@/composables/use-resource-page'
 import { RequestError } from '@/utils/request'
 import { resourceCommandKey, resourceFeedbackCodes } from '@/utils/resources'
 import type { ResourceDetail, ResourceFeedbackInput, ResourceFeedbackKind } from '@/types/resource'
 const id = ref('')
+const recordView = useContentView('resource')
 const detail = ref<ResourceDetail | null>(null)
 const downloadProgress = ref(0)
 const downloaded = ref<{ path: string; name: string } | null>(null)
@@ -65,6 +69,7 @@ async function load() {
     if (active()) {
       downloaded.value = file && path ? { path, name: file.name } : null
       detail.value = result
+      void recordView(result.id)
       choice.value = result.my_feedback?.kind ?? ''
     }
   })
@@ -277,8 +282,13 @@ onPullDownRefresh(async () => {
 
     <template v-if="visible && detail">
       <view class="card">
-        <text class="title">{{ detail.title }}</text
-        ><text>{{ detail.category.name }}</text>
+        <text class="title">{{ detail.title }}</text>
+        <ContentStats :views="detail.view_count" />
+        <FavoriteButton
+          kind="resource"
+          :target-id="detail.id"
+          :favorited="detail.favorited"
+        /><text>{{ detail.category.name }}</text>
         <text class="resource-text">{{ detail.description || '暂无简介' }}</text>
         <text>更新时间：{{ beijingTime(detail.updated_at) }}（北京时间）</text>
         <template v-if="detail.file">

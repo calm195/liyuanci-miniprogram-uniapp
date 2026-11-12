@@ -2,6 +2,11 @@
 import { computed } from 'vue'
 import WishSupportButton from '@/components/WishSupportButton.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import ProfileAvatar from '@/components/ProfileAvatar.vue'
+import IdentityTags from '@/components/IdentityTags.vue'
+import ContentStats from '@/components/ContentStats.vue'
+import WishImages from '@/components/WishImages.vue'
+import { displayTime } from '@/utils/time'
 import { categories, campuses, rewards } from '@/types/wish'
 import type { WishResult } from '@/types/wish'
 import { publicWishBody, ownWishBody, wishStateLabels } from '@/utils/wish'
@@ -23,7 +28,7 @@ const author = computed(() =>
   <view class="wish-preview">
     <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}`">
       <view class="card-author">
-        <view class="avatar-placeholder"><AppIcon name="fish" :size="38" /></view>
+        <ProfileAvatar :src="wish.public?.author?.avatar_url" class="avatar-placeholder" />
         <view class="author-copy">
           <text class="author-name">{{ author || '心愿暂不可查看' }}</text>
           <text v-if="!compact" class="author-hint">{{ wishStateLabels[wish.current_state] }}</text>
@@ -37,7 +42,22 @@ const author = computed(() =>
         </text>
       </view>
       <text v-if="content" class="section-title">{{ content.title || '未命名心愿' }}</text>
+      <IdentityTags :tags="wish.public?.author?.identity_tags" />
       <text class="wish-body">{{ body || '内容暂不可查看' }}</text>
+      <WishImages
+        v-if="wish.public?.images?.length"
+        :images="wish.public.images"
+        :wish-id="wish.id"
+        compact
+      />
+      <text v-if="wish.expires_at || wish.public?.expires_at" class="expiry-date"
+        >到期 {{ displayTime(wish.expires_at || wish.public?.expires_at || '') }}</text
+      >
+      <ContentStats
+        :applications="wish.public?.application_count ?? wish.application_count"
+        :comments="wish.public?.comment_count ?? wish.comment_count"
+        :views="wish.public?.view_count ?? wish.view_count"
+      />
       <text v-if="body && wish.public?.school_related" class="notice">{{
         wish.public.notice_text || '未经证实'
       }}</text>
@@ -69,6 +89,12 @@ const author = computed(() =>
 </template>
 
 <style scoped>
+.expiry-date {
+  display: block;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  margin-top: 16rpx;
+}
 .wish-link {
   margin-left: auto;
   color: var(--theme-teal);

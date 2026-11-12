@@ -20,4 +20,6 @@ export default defineConfig({
     }),
   ],
   resolve: { alias: { '@': resolve(projectRoot, 'src') } },
+  // H5本地联调与管理端使用同源代理，小程序仍直连配置的API。
+  server: { proxy: { '/api/v1': { target: 'http://127.0.0.1:18080', changeOrigin: false } } },
 })

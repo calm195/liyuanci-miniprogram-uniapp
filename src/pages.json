@@ -269,6 +269,13 @@
         "navigationBarTitleText": "包分配活动",
         "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/favorites/index",
+      "style": {
+        "navigationBarTitleText": "我的收藏",
+        "enablePullDownRefresh": true
+      }
     }
   ],
   "globalStyle": {

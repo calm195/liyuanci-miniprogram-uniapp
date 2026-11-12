@@ -40,14 +40,14 @@ export function createNoticeQueue(
     const timer = timers.get(id)
     if (timer) cancel(timer.handle)
     items = [...items.filter((item) => item.id !== id), { id, message, kind }]
-    while (items.length > 3) dismiss(items[0]!.id)
+    while (items.length > 1) dismiss(items[0]!.id)
     const current = ++generation
     if (kind !== 'progress')
       timers.set(id, {
         generation: current,
         handle: schedule(() => {
           if (timers.get(id)?.generation === current) dismiss(id)
-        }, { success: 3000, warning: 5000, error: 6000, uncertain: 8000, info: 4000 }[kind]),
+        }, { success: 1500, warning: 3000, error: 3000, uncertain: 4000, info: 2000 }[kind]),
       })
     update([...items])
     return id

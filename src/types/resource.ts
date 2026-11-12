@@ -25,6 +25,8 @@ export interface ResourceFeedbackSummary {
   total: number
 }
 export interface ResourceSummary {
+  view_count?: number
+  favorited?: boolean
   feedback_summary?: ResourceFeedbackSummary
   file?: ResourceFile | null
 

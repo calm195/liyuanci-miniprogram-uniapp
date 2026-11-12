@@ -74,7 +74,8 @@ export function useWhisperPostEditor() {
     body.value = result.body ?? ''
     const identity = result.identity_input
     mode.value = identity?.mode ?? 'anonymous'
-    if (identity?.mode === 'semi') tags.value = { ...identity.tags }
+    if (identity?.mode === 'semi')
+      tags.value = { campus: '', gender: '', grade: '', ...identity.tags }
     notice.value = whisperStates[result.status]
   }
   async function load(preserveDraft = false) {

@@ -77,6 +77,8 @@ async function setup() {
   }
   const request = async (options: Transport) => {
     calls.push(JSON.parse(JSON.stringify(options)))
+    if (!options.method && /^\/wishes\/[^/?]+$/.test(options.url))
+      return structuredClone(rows.find((row) => options.url.endsWith(row.id)))
     return options.method
       ? command(options)
       : {
@@ -122,7 +124,7 @@ async function setup() {
   const names =
     'listWishes, createWish, updateWish, deleteWishDraft, submitWishReview, publishWish, getWish, config, useUserStore, useWishStore, useHiddenWishes, canMeAction, canWishAction, session, RequestError, categories, campuses, rewards, genders, emptyWish, validateWish, wishStateLabels, publicWishBody, ownWishBody, defineProps, defineExpose'
   const page = await moduleFrom(
-    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, search, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state, show, leave, refresh };`,
+    `const { ${names} } = globalThis.__wishPage;\n${stripImports(script)}\nexport { own, load, search, items, edit, save, act, form, selectFormOption, error, editing, writing, rows, category, state, show, leave, refresh, pendingWrite, retryWrite, cancelEdit, imagesBusy, imagesPicking };`,
   )
   let query: Record<string, string> | undefined
   hooks.load = ((next: Record<string, string>) => {
@@ -179,7 +181,7 @@ test('B14 / I2-A01：默认入口关闭，缺失/错误投影/跨目标和会话
   await page.act(wish, 'publish')
   assert.equal(writes(calls).length, 0)
 })
-test('实际页面提交心愿标题和自定义报答，不提供身份标签编辑', async () => {
+test('实际页面提交心愿标题和自定义报答，未选身份标签保持省略', async () => {
   const { page, config, calls } = await setup()
   config.wishWritesReady = true
   page.edit()
@@ -406,4 +408,61 @@ test('同会话下拉重读列表时保留已有行，完成后替换为新结�
   assert.equal(page.rows.value[0]?.id, sample.id)
   await pending
   assert.equal(page.rows.value[0]?.id, 'new-wish')
+})
+
+// 详情返回的新对象与列表中同ID对象引用不同，仍应进入编辑并保留90天。
+test('详情进入已有列表心愿编辑，替换最新对象且取消不改业务状态', async () => {
+  const s = await setup()
+  s.config.wishWritesReady = true
+  s.setRows([
+    {
+      ...sample,
+      current_state: 'published',
+      own_content: { ...emptyWish(), title: '九十天心愿', body: '测试正文', duration_days: 90 },
+    },
+  ])
+  await s.page.show({ own: '1', edit: sample.id })
+  assert.equal(s.page.editing.value, true)
+  assert.equal(s.page.form.value.duration_days, 90)
+  assert.equal(s.page.form.value.title, '九十天心愿')
+  assert.equal(s.page.items.value[0].current_state, 'published')
+  assert.equal(writes(s.calls).length, 0)
+})
+
+test('心愿保存超时保留照片草稿，原样重试正文、资源版本与幂等键', async () => {
+  const s = await setup()
+  s.config.wishWritesReady = true
+  s.page.edit(s.page.items.value[0])
+  s.page.form.value.image_ids = ['image-a', 'image-b']
+  s.page.form.value.identity_tags = { campus: 'wushan' }
+  s.setCommand(async () => {
+    throw new Error('timeout')
+  })
+  await s.page.save()
+  assert.equal(s.page.editing.value, true)
+  assert.deepEqual(s.page.form.value.image_ids, ['image-a', 'image-b'])
+  assert.ok(s.page.pendingWrite.value)
+  s.page.form.value.body = '不能替换已发出的正文'
+  s.page.form.value.image_ids.push('image-c')
+  await s.page.save()
+  assert.equal(writes(s.calls).length, 1)
+  s.setCommand(async () => sample)
+  await s.page.retryWrite()
+  assert.deepEqual(writes(s.calls)[0], writes(s.calls)[1])
+  assert.equal(s.page.pendingWrite.value, null)
+  assert.equal(s.page.editing.value, false)
+})
+
+test('取消带上传状态的草稿后，新编辑不会继承图片忙状态', async () => {
+  const s = await setup()
+  s.config.wishWritesReady = true
+  s.page.edit(s.page.items.value[0])
+  s.page.imagesBusy.value = true
+  s.page.imagesPicking.value = true
+  s.page.cancelEdit()
+  assert.equal(s.page.imagesBusy.value, false)
+  assert.equal(s.page.imagesPicking.value, false)
+  s.page.edit(s.page.items.value[0])
+  await s.page.save()
+  assert.equal(writes(s.calls).length, 1)
 })

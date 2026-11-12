@@ -6,7 +6,7 @@ import type {
   OwnerComment,
   Tags,
 } from '../types/whispers.ts'
-import { whisperSchemas } from './whispers-contract.ts'
+import { whisperSchemas } from './whispers-contract-extensions.ts'
 import { matchesSchema } from './whispers-schema.ts'
 
 export type WhisperTagsDraft = {
@@ -58,11 +58,14 @@ export function identityFor(
     if (!nickname?.active) throw new Error('请先设置并等待树洞昵称审核通过。')
     return { mode, nickname_version: nickname.active.nickname_version }
   }
-  if (!semiReady(config) || !config.grade_dictionary.items.some((item) => item.code === tags.grade))
+  if (
+    !semiReady(config) ||
+    (tags.grade && !config.grade_dictionary.items.some((item) => item.code === tags.grade))
+  )
     throw new Error('受控年级资料不可用，请选择可用的匿名方式。')
   const input = {
     mode: 'semi',
-    tags: { ...tags },
+    tags: Object.fromEntries(Object.entries(tags).filter(([, value]) => value)),
     dictionary_version: config.grade_dictionary.version!,
   }
   if (!matchesSchema(whisperSchemas.IdentityInput!, input, whisperSchemas))

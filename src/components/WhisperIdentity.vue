@@ -37,15 +37,15 @@ function tag(field: keyof WhisperTagsDraft, value: string) {
   if (!props.disabled) emit('update:tags', { ...props.tags, [field]: value })
 }
 function pick(field: keyof WhisperTagsDraft, event: { detail: { value: string | number } }) {
-  const index = Number(event.detail.value)
-  if (!Number.isInteger(index) || index < 0) return
+  const index = Number(event.detail.value) - 1
+  if (!Number.isInteger(index) || index < -1) return
   const value =
     field === 'campus'
       ? identityCampuses[index]?.value
       : field === 'gender'
         ? genders[index]?.value
         : props.config?.grade_dictionary.items[index]?.code
-  if (value) tag(field, value)
+  tag(field, value ?? '')
 }
 </script>
 <template>
@@ -76,38 +76,34 @@ function pick(field: keyof WhisperTagsDraft, event: { detail: { value: string | 
     <text v-if="!nickname?.active">仅已审昵称可用，待审候选不能用于发布。</text>
     <text v-if="!nickname?.active">可以到个人中心的悄悄话设置中管理昵称。</text>
     <view v-if="mode === 'semi' && semi">
-      <text>标签全部由本人选择，不从学生认证资料推断。</text>
+      <text>可只选择校区等一项标签，其余选择不公开，不从认证资料推断。</text>
       <picker
         :disabled="disabled"
-        :range="identityCampuses"
+        :range="[{ value: '', label: '不公开' }, ...identityCampuses]"
         range-key="label"
         @change="runPageAction(() => pick('campus', $event))"
         ><text
-          >校区：{{
-            campuses.find((item) => item.value === tags.campus)?.label || '请选择校区'
-          }}</text
+          >校区：{{ campuses.find((item) => item.value === tags.campus)?.label || '不公开' }}</text
         ></picker
       >
       <picker
         :disabled="disabled"
-        :range="genders"
+        :range="[{ value: '', label: '不公开' }, ...genders]"
         range-key="label"
         @change="runPageAction(() => pick('gender', $event))"
         ><text
-          >性别：{{
-            genders.find((item) => item.value === tags.gender)?.label || '请选择性别'
-          }}</text
+          >性别：{{ genders.find((item) => item.value === tags.gender)?.label || '不公开' }}</text
         ></picker
       >
       <picker
         :disabled="disabled"
-        :range="config?.grade_dictionary.items || []"
+        :range="[{ code: '', label: '不公开' }, ...(config?.grade_dictionary.items || [])]"
         range-key="label"
         @change="runPageAction(() => pick('grade', $event))"
         ><text
           >年级：{{
             config?.grade_dictionary.items.find((item) => item.code === tags.grade)?.label ||
-            '请选择年级'
+            '不公开'
           }}</text
         ></picker
       >

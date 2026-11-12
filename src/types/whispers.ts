@@ -1,4 +1,4 @@
-// 从悄悄鲤契约 whispers-v1-r2 生成；使用 scripts/sync_whispers_contract.py 同步，勿手工修改。
+// 悄悄鲤基础契约类型与内容互动增量字段。
 export type BlockAck = { accepted: true }
 export type BlockCreate = { source: SourceRef }
 export type BlockEntry = {
@@ -50,12 +50,20 @@ export type CapsuleSummary = {
   preview: string | null
 }
 export type CommentCreate = {
+  root_comment_id?: string | null
+  reply_to_comment_id?: string | null
+  reply_to_label?: string
+  reply_count?: number
   expected_post_version: number
   expected_comments_epoch: number
   body: string
   identity: IdentityInput
 }
 export type CommentUpdate = {
+  root_comment_id?: string | null
+  reply_to_comment_id?: string | null
+  reply_to_label?: string
+  reply_count?: number
   expected_version: number
   expected_post_version: number
   expected_comments_epoch: number
@@ -129,6 +137,10 @@ export type Notification = {
 }
 export type NotificationPage = { items: Notification[]; next_cursor: string | null }
 export type OwnerComment = {
+  root_comment_id?: string | null
+  reply_to_comment_id?: string | null
+  reply_to_label?: string
+  reply_count?: number
   id: string
   version: number
   content_version: number
@@ -192,6 +204,10 @@ export type PostUpdate = {
   title?: string
 }
 export type PublicComment = {
+  root_comment_id?: string | null
+  reply_to_comment_id?: string | null
+  reply_to_label?: string
+  reply_count?: number
   id: string
   version: number
   content_version: number
@@ -214,6 +230,8 @@ export type PublicIdentity = {
   is_author: boolean
 }
 export type PublicPost = {
+  view_count?: number
+  favorited?: boolean
   id: string
   version: number
   content_version: number
@@ -237,7 +255,11 @@ export type PublicPost = {
 export type PublicPostPage = { items: PublicPost[]; next_cursor: string | null }
 export type ReportAck = { id: string; status: 'pending' }
 export type ReportCreate = {
-  source: { kind: 'whisper_post' | 'whisper_comment'; id: string; content_version: number }
+  source: {
+    kind: 'whisper_post' | 'whisper_comment'
+    id: string
+    content_version: number
+  }
   type_code: string
   description?: string
 }
@@ -248,12 +270,16 @@ export type ReviewResult = {
   revision_suggestion: string | null
 }
 export type SourceRef =
-  | { kind: 'whisper_post' | 'whisper_comment'; id: string; content_version: number }
+  | {
+      kind: 'whisper_post' | 'whisper_comment' | 'wish' | 'story'
+      id: string
+      content_version: number
+    }
   | { kind: 'public_profile'; id: string }
 export type Tags = {
-  campus: 'wushan' | 'university_town' | 'international'
-  grade: string
-  gender: 'male' | 'female' | 'undisclosed'
+  campus?: 'wushan' | 'university_town' | 'international'
+  grade?: string
+  gender?: 'male' | 'female' | 'undisclosed'
 }
 export type VersionCommand = { expected_version: number }
 export type Workspace = {
@@ -267,7 +293,10 @@ export interface WhisperInputs {
   whisperHelpGet: Record<string, never>
   whisperPostsList: { query?: { limit?: number; cursor?: string } }
   whisperPostGet: { path: { post_id: string } }
-  whisperCommentsList: { path: { post_id: string }; query?: { limit?: number; cursor?: string } }
+  whisperCommentsList: {
+    path: { post_id: string }
+    query?: { limit?: number; cursor?: string; root_comment_id?: string }
+  }
   whisperCommentCreate: { path: { post_id: string }; data: CommentCreate; key: string }
   whisperWorkspaceGet: Record<string, never>
   whisperOwnPostsList: { query?: { limit?: number; cursor?: string } }

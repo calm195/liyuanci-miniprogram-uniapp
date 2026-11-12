@@ -36,7 +36,11 @@ for (const name of ['DownloadInfo', 'ResourceDetail', 'ResourceSummary']) {
       file: { oneOf: [{ $ref: '#/components/schemas/ResourceFile' }, { type: 'null' }] },
       ...(name === 'DownloadInfo'
         ? {}
-        : { feedback_summary: { $ref: '#/components/schemas/FeedbackSummary' } }),
+        : {
+            feedback_summary: { $ref: '#/components/schemas/FeedbackSummary' },
+            view_count: { type: 'integer', minimum: 0, maximum: 9007199254740991 },
+            favorited: { type: 'boolean' },
+          }),
     },
   }
 }

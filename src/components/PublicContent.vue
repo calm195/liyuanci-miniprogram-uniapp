@@ -17,7 +17,7 @@ defineProps<{
     </view>
     <view v-if="content.author" class="content-meta">
       <navigator
-        v-if="!readOnly"
+        v-if="!readOnly && content.author.id && content.author.profile_available !== false"
         class="content-author"
         :url="`/pages/public-profile/index?id=${encodeURIComponent(content.author.id)}`"
         >{{ content.author.nickname || '查看公开主页' }}</navigator

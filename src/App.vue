@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { refreshDictionaries } from '@/features/dictionaries/load'
-import { onShow, onThemeChange } from '@dcloudio/uni-app'
+import { onShow, onHide, onThemeChange } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useEntryStore } from '@/stores/entry'
 import { useDeletionStore } from '@/stores/deletion'
 import { useThemeStore } from '@/stores/theme'
+import { useUnreadStore } from '@/stores/unread'
 const theme = useThemeStore()
+const unread = useUnreadStore()
+onHide(unread.stop)
 onThemeChange(({ theme: systemMode }) => theme.updateSystemMode(systemMode))
 onShow(() => {
   theme.updateSystemMode()
+  unread.start()
   if (!config.useMock)
     void refreshDictionaries().catch(() => {
       /* 保留已验证快照，首次失败显示安全占位。 */
@@ -28,6 +32,12 @@ onShow(() => {
 </script>
 <style>
 @import './styles/tailwind.css';
+/* #ifdef H5 */
+/* H5 的原生栏不支持 custom，保留应用自己的导航与未读角标。 */
+uni-tabbar {
+  display: none !important;
+}
+/* #endif */
 </style>
 <style lang="scss">
 @use './styles/index.scss';

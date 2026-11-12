@@ -54,8 +54,6 @@ export const useWishStore = defineStore('wishes', () => {
           : {}),
       }
     } else if (action === 'publish' && wish.current_state === 'ready') {
-      if (demoWishes.value.filter((item) => item.current_state === 'published').length >= 3)
-        throw new Error('合成演示：同时上架心愿已满 3 条，保持待上架')
       wish.current_state = 'published'
       wish.public = {
         id: wish.id,
@@ -74,6 +72,7 @@ export const useWishStore = defineStore('wishes', () => {
       throw new Error('当前状态不允许此操作')
     }
     wish.version++
+    if (action === 'approve') transition(id, 'publish')
   }
   return { demoWishes, save, transition }
 })

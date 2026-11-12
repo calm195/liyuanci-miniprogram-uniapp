@@ -18,8 +18,9 @@ test('T015 / REQ-003：500 Unicode 码点、默认值、期限和枚举边界', 
   input.body += ' '
   assert.ok(validateWish(input))
   input.body = '合成正文'
-  for (const days of [1, 30]) assert.equal(validateWish({ ...input, duration_days: days }), '')
-  for (const days of [0, 31, 1.5, NaN]) assert.ok(validateWish({ ...input, duration_days: days }))
+  for (const days of [1, 7, 30, 60, 90])
+    assert.equal(validateWish({ ...input, duration_days: days }), '')
+  for (const days of [0, 91, 1.5, NaN]) assert.ok(validateWish({ ...input, duration_days: days }))
   assert.ok(validateWish({ ...input, body: ' \n\t' }))
   assert.ok(validateWish({ ...input, category: 'invalid' as typeof input.category }))
   assert.ok(validateWish({ ...input, campus: 'invalid' as typeof input.campus }))
@@ -68,7 +69,7 @@ const compiled = ts.transpileModule(source, {
 const { useWishStore } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`
 )
-test('T015 / REQ-004、005、015：合成审核不直通，驳回改版重审，上架满额不误报', () => {
+test('T015 / REQ-004、005、015：合成提交须审核，批准自动上架，超过三条仍可发布', () => {
   setActivePinia(createPinia())
   const store = useWishStore()
   const input = { ...emptyWish(), title: '合成心愿', body: '合成测试心愿' }
@@ -88,16 +89,8 @@ test('T015 / REQ-004、005、015：合成审核不直通，驳回改版重审，
     store.transition(current.id, 'approve')
     assert.equal(
       store.demoWishes.find((item: WishResult) => item.id === current.id).current_state,
-      'ready',
+      'published',
     )
-    if (index < 3) store.transition(current.id, 'publish')
-    else {
-      assert.throws(() => store.transition(current.id, 'publish'), /已满 3 条/)
-      assert.equal(
-        store.demoWishes.find((item: WishResult) => item.id === current.id).current_state,
-        'ready',
-      )
-    }
   }
   config.useMock = false
   assert.throws(() => store.save(input))

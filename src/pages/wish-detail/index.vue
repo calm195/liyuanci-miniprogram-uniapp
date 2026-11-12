@@ -4,6 +4,13 @@ import { onPullDownRefresh } from '@dcloudio/uni-app'
 import ShareActions from '@/components/ShareActions.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import AppPage from '@/components/AppPage.vue'
+import ProfileAvatar from '@/components/ProfileAvatar.vue'
+import IdentityTags from '@/components/IdentityTags.vue'
+import ContentStats from '@/components/ContentStats.vue'
+import FavoriteButton from '@/components/FavoriteButton.vue'
+import WishImages from '@/components/WishImages.vue'
+import WishComments from '@/components/WishComments.vue'
+import { useContentView } from '@/composables/use-content-view'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -29,6 +36,7 @@ import { openWishActionGate, type WishActionReady } from '@/composables/use-wish
 import { isShareBrowseOnly, prepareSharedWishBackStack } from '@/utils/shared-wish-navigation'
 
 const user = useUserStore()
+const recordView = useContentView('wish')
 const hiddenWishes = useHiddenWishes()
 const menuOpen = ref(false)
 const demo = useWishStore()
@@ -51,7 +59,6 @@ const sharedApplication = ref<{ owner: string; epoch: number } | null>(null)
 let generation = 0
 let writeGeneration = 0
 let visible = false
-let pendingView = true
 type SharedAction = 'apply' | 'report' | 'block'
 let actionReturn: { action: SharedAction; target: string; ready?: WishActionReady } | null = null
 
@@ -83,13 +90,21 @@ const supportState = computed(() => {
 const publicContent = computed(() => {
   const value = currentWish.value
   if (!value || value.privacy_review_required) return null
-  return value.participant || (value.current_state === 'published' ? value.public : null)
+  return (
+    value.participant ||
+    (value.current_state === 'published'
+      ? value.public ||
+        (publicShare.value?.content_version === value.content_version ? publicShare.value : null)
+      : null)
+  )
 })
 const sharedActions = computed(
   () =>
     sharedEntry.value &&
     !config.useMock &&
     !!publicContent.value &&
+    !currentWish.value?.is_owner &&
+    !publicContent.value.is_owner &&
     publicContent.value.author?.id !== (user.validated ? user.user?.id : null),
 )
 const applicationInProgress = computed(() =>
@@ -104,6 +119,8 @@ const moderationAvailable = computed(
     !config.useMock &&
     !currentWish.value?.own_content &&
     !!publicContent.value &&
+    !currentWish.value?.is_owner &&
+    !publicContent.value.is_owner &&
     publicContent.value.author?.id !== (user.validated ? user.user?.id : null),
 )
 const contentHidden = computed(() => hiddenWishes.hidden.value.has(currentWish.value?.id || ''))
@@ -176,9 +193,7 @@ async function load() {
         targetId = resolved.target.id
       }
       if (!targetId) throw new Error('分享内容不可用')
-      const trackView = pendingView
-      pendingView = false
-      const result = await getPublicWish(targetId, trackView)
+      const result = await getPublicWish(targetId)
       if (!isCurrent()) return
       if (
         result?.id !== targetId ||
@@ -188,6 +203,7 @@ async function load() {
         !isPublicContent(result.public)
       )
         throw new Error('分享内容不可用')
+      void recordView(targetId)
       // 分享入口复用完整详情布局，只接收公开字段。
       wish.value = {
         id: result.id,
@@ -228,14 +244,14 @@ async function load() {
   try {
     if (!config.useMock && session.getToken()) await user.refresh(false, true)
     if (!isCurrent()) return
-    const trackView = pendingView
-    pendingView = false
     const result = config.useMock
       ? demo.demoWishes.find((item) => item.id === id.value)
-      : await getWish(id.value, trackView)
+      : await getWish(id.value)
     if (!isCurrent()) return
     if (!result || result.id !== id.value) throw new Error('心愿不存在或当前不可查看。')
     wish.value = result
+    if (!config.useMock && result.current_state === 'published' && !result.privacy_review_required)
+      void recordView(result.id)
     snapshotEpoch.value = epoch
     snapshotOwner.value = user.user?.id || ''
     if (
@@ -341,6 +357,8 @@ async function openSharedAction(action: SharedAction) {
       scoped.privacy_review_required ||
       scoped.own_content ||
       (scoped.public || scoped.participant)?.id !== target ||
+      scoped.is_owner === true ||
+      (scoped.public || scoped.participant)?.is_owner === true ||
       (scoped.public || scoped.participant)?.author?.id === account.id
     ) {
       actionError.value = '该心愿当前不可操作，请刷新后查看。'
@@ -360,11 +378,11 @@ async function openSharedAction(action: SharedAction) {
       await openPage(`/pages/report/index?kind=wish&id=${queryId}`)
     } else if (
       action === 'block' &&
-      author &&
+      (scoped.public || scoped.participant)?.author &&
       (scoped.public || scoped.participant)?.author?.id === author
     ) {
       await openPage(
-        `/pages/blacklist/index?targetId=${encodeURIComponent(author)}&sourceId=${queryId}&sourceKind=wish`,
+        `/pages/blacklist/index?targetId=${encodeURIComponent(author || '')}&sourceId=${queryId}&sourceKind=wish`,
       )
     } else {
       actionError.value = '当前账号或心愿状态不支持此操作。'
@@ -421,7 +439,7 @@ async function act(action: WishLifecycleAction, target?: 'matching' | 'published
     withdraw: '撤下后将不再公开，旧申请会失效。是否继续？',
     rollback:
       target === 'matching'
-        ? '恢复原应愿人与原会话；活跃心愿已满时回退会被拒绝。是否继续？'
+        ? '恢复原应愿人与原会话。是否继续？'
         : `回退将解除当前匹配，旧申请失效、旧会话只读。${refresh ? '刷新期限后需重新审核。' : '保留原截止时间，已到期时不会重新公开。'}是否继续？`,
     complete: '确认实现后聊天将只读，待审消息会取消。是否确认心愿已实现？',
     'exception-exit':
@@ -449,12 +467,9 @@ async function act(action: WishLifecycleAction, target?: 'matching' | 'published
     if (!isCurrent()) return
     clearProjection()
     if (failure instanceof RequestError && failure.statusCode === 409) {
-      const limit = failure.error_code === 'ACTIVE_WISH_LIMIT'
       await load()
       if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
-        notice.value = limit
-          ? '活跃心愿已满，请先释放额度，再手动重试。'
-          : '心愿状态已变化，已重新读取，请确认后手动操作。'
+        notice.value = '心愿状态已变化，已重新读取，请确认后手动操作。'
     } else {
       error.value = '操作未完成，请刷新当前资格和心愿后重试。'
     }
@@ -494,7 +509,6 @@ onLoad((query) => {
   reference.value = shareReference(query)
   sharedEntry.value = reference.value !== undefined || query?.shared === '1'
   id.value = typeof query?.id === 'string' ? query.id : ''
-  pendingView = true
 })
 onShow(() => void showDetail())
 onHide(leave)
@@ -575,14 +589,54 @@ onPullDownRefresh(async () => {
       </view>
       <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
       <template v-else-if="content">
-        <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
-        <text v-if="publicContent?.school_related">未经证实</text>
         <navigator
-          v-if="publicContent?.author"
+          v-if="publicContent?.author?.id && publicContent.author.profile_available !== false"
+          class="wish-author"
           :url="`/pages/public-profile/index?id=${encodeURIComponent(publicContent.author.id)}`"
         >
-          {{ publicContent.author.nickname || '查看公开主页' }}
+          <ProfileAvatar :src="publicContent.author.avatar_url" />
+          <view class="author-copy"
+            ><text>{{ publicContent.author.nickname || '查看公开主页' }}</text>
+            <text v-if="publicContent.author.display_id" class="subtitle"
+              >ID {{ publicContent.author.display_id }}</text
+            >
+          </view>
         </navigator>
+        <view
+          v-if="publicContent?.author && !publicContent.author.id"
+          class="wish-author anonymous-author"
+          ><ProfileAvatar /><text>{{
+            publicContent.author.nickname || publicContent.author.display_id || '匿名同学'
+          }}</text></view
+        >
+        <text
+          v-if="publicContent?.first_published_at || publicContent?.published_at"
+          class="subtitle"
+          >发布
+          {{
+            displayTime(publicContent.first_published_at || publicContent.published_at || '')
+          }}</text
+        >
+        <IdentityTags :tags="publicContent?.author?.identity_tags" />
+        <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
+        <WishImages
+          v-if="(publicContent?.images ?? currentWish.images)?.length"
+          :images="publicContent?.images ?? currentWish.images ?? []"
+          :wish-id="currentWish.id"
+        />
+        <ContentStats
+          :applications="publicContent?.application_count ?? currentWish.application_count"
+          :comments="publicContent?.comment_count ?? currentWish.comment_count"
+          :views="publicContent?.view_count ?? currentWish.view_count"
+        />
+        <FavoriteButton
+          v-if="currentWish.current_state === 'published'"
+          kind="wish"
+          :target-id="currentWish.id"
+          :favorited="publicContent?.favorited ?? currentWish.favorited"
+        />
+        <text v-if="publicContent?.school_related">未经证实</text>
+
         <button
           v-if="moderationAvailable"
           class="detail-icon-button"
@@ -728,6 +782,22 @@ onPullDownRefresh(async () => {
     >
       <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
     </view>
+    <WishComments
+      v-if="
+        !config.useMock &&
+        !browseOnly &&
+        currentWish?.current_state === 'published' &&
+        !currentWish.privacy_review_required
+      "
+      :key="currentWish.id + ':' + snapshotEpoch"
+      :wish-id="currentWish.id"
+      :version="currentWish.version"
+      :content-version="currentWish.content_version ?? publicContent?.content_version"
+      :comments-epoch="currentWish.comments_epoch ?? publicContent?.comments_epoch"
+      :comments-open="currentWish.comments_open ?? publicContent?.comments_open"
+      :owner="currentWish.is_owner === true || !!currentWish.own_content"
+      @refresh="load"
+    />
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="actionError" kind="error" />
     <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
@@ -742,6 +812,21 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.wish-author {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin: 12rpx 0 24rpx;
+}
+.wish-author :deep(.avatar-image) {
+  width: 76rpx;
+  height: 76rpx;
+}
+.author-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
 .detail-tags,
 .detail-actions,
 .detail-footer {

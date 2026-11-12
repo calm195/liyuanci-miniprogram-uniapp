@@ -43,7 +43,13 @@ export interface IdentityTags {
   // 省略表示未填写，与主动选择保密不同。
   gender?: (typeof genders)[number]['value']
 }
+export interface WishImage {
+  id: string
+  url: string
+}
 export interface WishInput {
+  image_ids?: string[]
+  identity_mode?: 'named' | 'semi'
   title: string
   reward_text?: string
   identity_tags?: IdentityTags
@@ -58,6 +64,16 @@ export interface WishSupport {
   supported: boolean
 }
 export interface WishResult {
+  is_owner?: boolean
+  comments_open?: boolean
+  comments_epoch?: number
+  application_count?: number
+  comment_count?: number
+  view_count?: number
+  favorited?: boolean
+  images?: WishImage[]
+  first_published_at?: string | null
+  published_at?: string | null
   support?: WishSupport
   id: string
   version: number
@@ -86,9 +102,27 @@ export interface WishResult {
   }
 }
 export interface WishPublicContent extends Partial<WishSupport> {
+  is_owner?: boolean
+  images?: WishImage[]
+  identity_mode?: 'named' | 'semi'
+  first_published_at?: string | null
+  published_at?: string | null
+  application_count?: number
+  comment_count?: number
+  view_count?: number
+  favorited?: boolean
+  comments_open?: boolean
+  comments_epoch?: number
   title?: string
   reward_text?: string
-  author?: { id: string; nickname: string; identity_tags?: IdentityTags }
+  author?: {
+    id: string
+    nickname: string
+    identity_tags?: IdentityTags
+    display_id?: string
+    avatar_url?: string
+    profile_available?: boolean
+  }
   id: string
   body: string
   content_version: number

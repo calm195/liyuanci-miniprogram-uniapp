@@ -117,6 +117,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   Object.assign(globalThis, {
     __detail: {
       ...api,
+      useContentView: () => async () => {},
       useContentShare: () => {},
       shareReference,
       isPublicContent,
@@ -164,7 +165,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden };`,
+    `const { useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -195,9 +196,9 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     },
   }
 }
-test('心愿详情每次新打开计一次浏览，刷新和返回当前页不重复计分', async () => {
+test('心愿详情统一使用新浏览入口，旧详情view参数不再发送', async () => {
   const { page, hooks, calls } = await setup()
-  assert.equal(calls[0]?.url, '/wishes/synthetic-wish?view=1')
+  assert.equal(calls[0]?.url, '/wishes/synthetic-wish')
   await page.load()
   hooks.hide!()
   hooks.show!()
@@ -209,7 +210,7 @@ test('心愿详情每次新打开计一次浏览，刷新和返回当前页不�
   hooks.load!({ id: sample.id })
   hooks.show!()
   for (let i = 0; i < 15; i++) await Promise.resolve()
-  assert.equal(calls.at(-1)?.url, '/wishes/synthetic-wish?view=1')
+  assert.equal(calls.at(-1)?.url, '/wishes/synthetic-wish')
 })
 test('REQ-004/005：回退绑定目标版本与幂等键，刷新期限由服务端决定，不本地伪造上架', async () => {
   const { page, calls } = await setup()
@@ -415,4 +416,27 @@ test('认证期间切换账号时丢弃原账号的操作意图', async () => {
   s.hooks.show!()
   for (let i = 0; i < 20; i++) await Promise.resolve()
   assert.deepEqual(s.pages, [])
+})
+
+test('半匿名心愿用内容来源进入屏蔽流程，不要求公开作者账号', async () => {
+  const target: WishResult = {
+    ...actionableWish,
+    public: { ...publicWish, author: { id: '', nickname: '匿名同学', profile_available: false } },
+  }
+  const current = await setup({ id: sample.id }, target)
+  await current.page.openSharedAction('block')
+  assert.deepEqual(current.pages, [
+    '/pages/blacklist/index?targetId=&sourceId=synthetic-wish&sourceKind=wish',
+  ])
+})
+
+test('帖主本人详情也采用已校验的公开作者投影，隐私屏障仍优先', async () => {
+  const current = await setup(
+    { id: sample.id },
+    { ...sample, current_state: 'published', content_version: publicWish.content_version },
+  )
+  assert.equal(current.page.content.value.body, '合成心愿正文')
+  assert.equal(current.page.publicContent.value.author.nickname, '公开昵称')
+  current.page.wish.value.privacy_review_required = true
+  assert.equal(current.page.publicContent.value, null)
 })

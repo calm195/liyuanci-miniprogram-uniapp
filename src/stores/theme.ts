@@ -59,6 +59,8 @@ export const useThemeStore = defineStore('theme', () => {
     uni.setNavigationBarColor({
       frontColor: dark ? '#ffffff' : '#000000',
       backgroundColor: palette.value.canvas,
+      // 首次启动时页面可能尚未建立；页面 onShow 会再次同步。
+      fail: () => {},
     })
     uni.setBackgroundColor?.({
       backgroundColor: palette.value.canvas,

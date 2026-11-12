@@ -110,6 +110,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
         url: config.apiBaseUrl.replace(/\/$/, '') + options.url,
         timeout: options.timeout ?? 15000,
         header: {
+          'X-Wish-Identity-Version': '2',
           ...(options.filePath ? {} : { 'Content-Type': 'application/json' }),
           ...options.header,
           ...(options.auth !== false && token ? { Authorization: `Bearer ${token}` } : {}),

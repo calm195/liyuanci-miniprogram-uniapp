@@ -13,6 +13,13 @@ export function emptyWish(): WishInput {
   }
 }
 export function validateWish(input: WishInput): string {
+  if (
+    input.image_ids &&
+    (input.image_ids.length > 3 || new Set(input.image_ids).size !== input.image_ids.length)
+  )
+    return '最多选择三张不同的照片'
+  if (input.identity_mode && !['named', 'semi'].includes(input.identity_mode))
+    return '请选择有效的身份展示方式'
   if (!input.title.trim()) return '请填写心愿标题'
   if (Array.from(input.title).length > 40) return '心愿标题不能超过 40 个字'
   if (input.reward_method === 'custom' && !input.reward_text?.trim()) return '请填写报答方式'
@@ -20,8 +27,8 @@ export function validateWish(input: WishInput): string {
   if (Array.from(input.reward_text || '').length > 100) return '报答方式不能超过 100 个字'
   if (!input.body.trim()) return '请填写心愿正文'
   if (Array.from(input.body).length > 500) return '心愿正文不能超过 500 个字'
-  if (!Number.isInteger(input.duration_days) || input.duration_days < 1 || input.duration_days > 30)
-    return '有效期须为 1 至 30 天的整数'
+  if (!Number.isInteger(input.duration_days) || input.duration_days < 1 || input.duration_days > 90)
+    return '有效期须为 1 至 90 天的整数'
   if (!categories.some((item) => item.value === input.category)) return '请选择有效分类'
   if (!campuses.some((item) => item.value === input.campus)) return '请选择有效校区'
   if (!rewards.some((item) => item.value === input.reward_method)) return '请选择有效报答方式'

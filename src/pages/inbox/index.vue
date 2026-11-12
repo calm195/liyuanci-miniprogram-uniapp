@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUnreadStore } from '@/stores/unread'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, ref, watch } from 'vue'
@@ -140,6 +141,7 @@ async function markRead(notification: AppNotification) {
     if (result.id !== notification.id || typeof result.read !== 'boolean')
       throw new Error('通知回执不匹配')
     notifications.value = notifications.value.map((item) => (item === notification ? result : item))
+    void useUnreadStore().refresh()
     notice.value = '通知已标记为已读。'
   } catch (failure) {
     if (!isCurrent()) return

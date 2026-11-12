@@ -91,6 +91,7 @@ async function login() {
   </view>
   <view v-else-if="!hideGuide && entry.guideVisible && entry.guide" class="prompt-shade">
     <view class="prompt-card" role="dialog" aria-label="功能使用说明">
+      <text class="guide-eyebrow">开始前的小提示</text>
       <text class="title">功能使用说明</text>
       <template v-for="(item, index) in entry.guide.modules" :key="item.module">
         <scroll-view v-if="guidePage === index" scroll-y class="guide-scroll">
@@ -118,6 +119,7 @@ async function login() {
         </button>
         <button
           v-else
+          class="guide-primary"
           :disabled="entry.busy"
           :loading="isPageActionPending('src-components-EntryPrompts.vue-action-3')"
           @click="
@@ -152,12 +154,17 @@ async function login() {
   gap: 24rpx;
 }
 .guide-scroll {
-  height: 45vh;
+  height: 40vh;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: var(--theme-bg);
 }
 .guide-count {
   text-align: center;
 }
 .guide-actions {
+  border-top: 2rpx solid var(--theme-line);
+  padding-top: 24rpx;
   display: flex;
   gap: 16rpx;
 }
@@ -170,5 +177,14 @@ async function login() {
   white-space: pre-wrap;
   line-height: 1.8;
   margin-top: 12rpx;
+}
+.guide-eyebrow {
+  color: var(--theme-teal);
+  font-size: 24rpx;
+  font-weight: 600;
+}
+.guide-actions .guide-primary {
+  background: var(--theme-teal);
+  color: white;
 }
 </style>

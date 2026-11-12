@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IdentityTags from '@/components/IdentityTags.vue'
 import type { PublicPost, PublicComment } from '@/types/whispers'
 defineProps<{ content: PublicPost | PublicComment; hideTitle?: boolean }>()
 </script>
@@ -9,10 +10,9 @@ defineProps<{ content: PublicPost | PublicComment; hideTitle?: boolean }>()
     }}</text>
     <view class="whisper-identity"
       ><text>{{ content.identity.label }}</text
-      ><text v-if="content.viewer_is_author && content.identity.is_author" class="author-tag"
-        >帖主</text
-      ></view
+      ><text v-if="content.identity.is_author" class="author-tag">帖主</text></view
     >
+    <IdentityTags :tags="content.identity.tags" />
     <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
     <text v-if="content.school_related" class="notice">{{ content.notice_text }}</text>
   </view>

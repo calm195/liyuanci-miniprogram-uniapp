@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -113,7 +114,11 @@ onPullDownRefresh(async () => {
 
     <text v-if="busy">加载中…</text>
     <view v-if="currentProfile" class="card">
+      <ProfileAvatar :src="currentProfile.avatar_url" />
       <text>{{ currentProfile.nickname }}</text>
+      <text v-if="currentProfile.display_id" class="subtitle"
+        >ID {{ currentProfile.display_id }}</text
+      >
       <navigator
         v-if="user.user && currentProfile.id !== user.user.id"
         class="moderation-link"

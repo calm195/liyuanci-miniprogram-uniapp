@@ -15,6 +15,8 @@ import type { IdentityInput, NicknameState, OwnerComment, PublicPost } from '@/t
 const module = useWhispersStore()
 const id = ref('')
 const postId = ref('')
+const rootId = ref('')
+const replyId = ref('')
 const record = ref<OwnerComment | null>(null)
 const post = ref<PublicPost | null>(null)
 const body = ref('')
@@ -52,7 +54,8 @@ function accept(result: OwnerComment) {
   record.value = result
   body.value = result.body ?? ''
   mode.value = result.identity_input?.mode ?? 'anonymous'
-  if (result.identity_input?.mode === 'semi') tags.value = { ...result.identity_input.tags }
+  if (result.identity_input?.mode === 'semi')
+    tags.value = { campus: '', gender: '', grade: '', ...result.identity_input.tags }
   notice.value = `请求已受理：${whisperStates[result.status]}；是否公开以当前审核结果为准。`
 }
 async function load(preserveDraft = false) {
@@ -74,6 +77,8 @@ async function load(preserveDraft = false) {
       if (!active()) return
       if (own.id !== id.value) throw new Error('本人暖评目标不匹配。')
       record.value = own
+      rootId.value = own.root_comment_id ?? ''
+      replyId.value = own.reply_to_comment_id ?? ''
       // 已删父帖不采用路由里的替代ID；安全候选只能另选帖子重新填写新评论。
       if (!own.post_id) {
         post.value = null
@@ -84,7 +89,8 @@ async function load(preserveDraft = false) {
       postId.value = own.post_id
       body.value = own.body ?? ''
       mode.value = own.identity_input?.mode ?? 'anonymous'
-      if (own.identity_input?.mode === 'semi') tags.value = { ...own.identity_input.tags }
+      if (own.identity_input?.mode === 'semi')
+        tags.value = { campus: '', gender: '', grade: '', ...own.identity_input.tags }
       if (
         draft &&
         own.body !== null &&
@@ -116,6 +122,9 @@ async function submit() {
       identity: identityFor(mode.value, tags.value, module.config, nickname.value),
       expected_post_version: post.value.version,
       expected_comments_epoch: post.value.comments_epoch,
+      ...(rootId.value
+        ? { root_comment_id: rootId.value, reply_to_comment_id: replyId.value }
+        : {}),
     }
     if (record.value)
       await page.write(
@@ -146,6 +155,8 @@ async function submit() {
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
   postId.value = typeof query?.postId === 'string' ? query.postId : ''
+  rootId.value = typeof query?.rootId === 'string' ? query.rootId : ''
+  replyId.value = typeof query?.replyId === 'string' ? query.replyId : ''
 })
 page.onRefresh(() => load(true))
 onShow(() => {
@@ -154,7 +165,7 @@ onShow(() => {
 </script>
 <template>
   <AppPage>
-    <text class="title">{{ id ? '修改我的暖评' : '写一条暖评' }}</text>
+    <text class="title">{{ id ? '修改我的暖评' : rootId ? '楼内回复' : '写一条暖评' }}</text>
 
     <view v-if="post" class="card"><text>当前父帖</text><WhisperContent :content="post" /></view>
     <text v-if="record">{{ whisperStates[record.status] }}</text>
@@ -183,7 +194,7 @@ onShow(() => {
         v-model="body"
         :maxlength="-1"
         :disabled="locked"
-        placeholder="单层暖评，不支持回复树或@，最多500个字"
+        placeholder="认真回应，温柔交流，最多500个字"
         placeholder-class="field-placeholder"
       />
       <text>{{ Array.from(body).length }} / 500</text>

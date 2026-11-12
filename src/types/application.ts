@@ -1,6 +1,8 @@
 import type { IdentityTags, WishPublicContent } from './wish'
 
 export interface PublicProfile {
+  avatar_url?: string
+  display_id?: string
   id: string
   nickname: string
   identity_tags?: IdentityTags

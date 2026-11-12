@@ -342,7 +342,7 @@ test('REQ-009：身份选择组件关闭未就绪档位，半匿名校区不包�
   runtime.choose('anonymous')
   assert.deepEqual(events[0], ['update:mode', 'anonymous'])
   assert.ok(runtime.identityCampuses.every((item: { value: string }) => item.value !== 'any'))
-  assert.throws(() =>
+  assert.deepEqual(
     content.identityFor(
       'semi',
       { campus: '', gender: '', grade: 'first' },
@@ -354,6 +354,7 @@ test('REQ-009：身份选择组件关闭未就绪档位，半匿名校区不包�
       } as never,
       null,
     ),
+    { mode: 'semi', tags: { grade: 'first' }, dictionary_version: 1 },
   )
   assert.match(runtime.preview.value, /跨帖/)
 })

@@ -1,6 +1,6 @@
 import { request, RequestError } from '@/utils/request'
 import { session } from '@/utils/session'
-import { whisperOperations, whisperSchemas } from '@/utils/whispers-contract'
+import { whisperOperations, whisperSchemas } from '@/utils/whispers-contract-extensions'
 import { matchesSchema } from '@/utils/whispers-schema'
 import { contentSearchParams } from '@/utils/content-search'
 import type { ContentSearch } from '@/types/content'

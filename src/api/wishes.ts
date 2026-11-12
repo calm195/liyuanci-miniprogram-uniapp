@@ -104,7 +104,11 @@ export function submitWishReview(wish: WishResult, key: string) {
   return request<WishResult>({
     url: `/wishes/${encodeURIComponent(wish.id)}/submit-review`,
     method: 'POST',
-    data: { expected_version: wish.version, content_version: wish.content_version },
+    data: {
+      expected_version: wish.version,
+      content_version: wish.content_version,
+      publish_intent: true,
+    },
     header: { 'Idempotency-Key': key },
   })
 }

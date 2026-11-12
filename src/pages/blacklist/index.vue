@@ -27,6 +27,7 @@ const targetId = ref('')
 const sourceId = ref('')
 const sourceKind = ref('')
 const targetName = ref('')
+const sourceVersion = ref(0)
 const busy = ref(false)
 const writing = ref(false)
 const error = ref('')
@@ -56,6 +57,7 @@ function clear() {
   cursor.value = null
   blocksReady.value = false
   targetName.value = ''
+  sourceVersion.value = 0
   readEpoch.value = -1
   seen.clear()
 }
@@ -136,7 +138,7 @@ async function load(more = false) {
             : '黑名单暂不可读取，请刷新后重试。'
       }
     }
-    if (!more && targetId.value && targetId.value !== owner && blockAllowed()) {
+    if (!more && (targetId.value || sourceId.value) && targetId.value !== owner && blockAllowed()) {
       try {
         let profile
         // 从当前公开投影核对作者，禁止用路由昵称或历史正文确认拉黑对象。
@@ -146,15 +148,21 @@ async function load(more = false) {
             result.id === sourceId.value &&
             result.current_state === 'published' &&
             !result.privacy_review_required
-          )
+          ) {
             profile = result.public?.author
+            sourceVersion.value = result.public?.content_version ?? 0
+          }
         } else if (sourceId.value && sourceKind.value === 'story') {
           const result = await getStory(sourceId.value)
-          if (result.id === sourceId.value) profile = result.author
+          if (result.id === sourceId.value) {
+            profile = result.author
+            sourceVersion.value = result.content_version
+          }
         } else {
           profile = (await getPublicProfile(targetId.value)).profile
         }
-        if (active() && profile?.id === targetId.value) targetName.value = profile.nickname
+        if (active() && profile && (sourceVersion.value > 0 || profile.id === targetId.value))
+          targetName.value = profile.nickname || '该内容发布者'
       } catch {
         if (active()) error.value = '目标主页暂不可读取，不能确认拉黑对象。'
       }
@@ -214,7 +222,12 @@ async function act(action: 'block' | 'unblock', entry?: BlockEntry) {
     const key = whisperKey()
     if (action === 'block') {
       await scope!.send('interactionBlockCreate', {
-        data: { source: { kind: 'public_profile', id: target } },
+        data: {
+          source:
+            sourceVersion.value > 0 && (sourceKind.value === 'wish' || sourceKind.value === 'story')
+              ? { kind: sourceKind.value, id: sourceId.value, content_version: sourceVersion.value }
+              : { kind: 'public_profile', id: target },
+        },
         key,
       })
     } else

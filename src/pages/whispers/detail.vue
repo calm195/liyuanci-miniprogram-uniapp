@@ -2,6 +2,10 @@
 import AppPage from '@/components/AppPage.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
+import WhisperReplies from '@/components/WhisperReplies.vue'
+import ContentStats from '@/components/ContentStats.vue'
+import FavoriteButton from '@/components/FavoriteButton.vue'
+import { useContentView } from '@/composables/use-content-view'
 import WhisperPostEditor from '@/components/WhisperPostEditor.vue'
 import { useWhisperPostEditor } from '@/composables/use-whisper-post-editor'
 import { ref } from 'vue'
@@ -14,6 +18,7 @@ import { mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
 import type { OwnerPost, PublicPost, PublicComment } from '@/types/whispers'
 const module = useWhispersStore()
+const recordView = useContentView('whisper_post')
 const id = ref('')
 const editing = ref(false)
 const manage = ref(false)
@@ -104,6 +109,7 @@ async function load(more = false) {
     )
       throw new Error('原帖上下文已变化，请刷新重新读取评论。')
     post.value = result
+    if (!more && !manage.value) void recordView(result.id)
     try {
       const list = await callWhisper('whisperCommentsList', {
         path: { post_id: id.value },
@@ -298,6 +304,8 @@ onShow(() => {
           屏蔽发布者
         </button>
       </view>
+      <ContentStats :views="post.view_count" :comments="post.comment_count" />
+      <FavoriteButton kind="whisper_post" :target-id="post.id" :favorited="post.favorited" />
       <text v-if="!post.comments_open">评论已关闭，已公开合规评论仅供阅读。</text>
     </view>
     <button
@@ -333,8 +341,8 @@ onShow(() => {
         >
           屏蔽发布者
         </button></view
-      ></view
-    >
+      ><WhisperReplies v-if="post" :post="post" :root="comment"
+    /></view>
     <text v-if="!editing && post && !comments.length && !busy && !commentsError"
       >当前页暂无公开暖评。</text
     >

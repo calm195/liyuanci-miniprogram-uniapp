@@ -449,6 +449,7 @@ test('头像上传的本人版本作为 multipart 文本字段发送', async () 
   assert.equal(upload.name, 'file')
   assert.deepEqual(upload.formData, { expected_version: '19' })
   assert.deepEqual(upload.header, {
+    'X-Wish-Identity-Version': '2',
     Authorization: 'Bearer synthetic-avatar-token',
     'Idempotency-Key': 'synthetic-avatar-key',
   })

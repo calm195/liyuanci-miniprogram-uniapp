@@ -8,6 +8,10 @@
 
 ## 2. 项目选项与目录结构
 
+心愿发布支持1–90天（默认7天）、最多三图和半匿名，明确提交发布后审核通过自动上架。详情包含作者信息、作者补充和两层评论，心愿/悄悄话/资料支持收藏与浏览数；“我的”底栏显示全站未读总数。既有草稿和历史ready保留手动处理入口。
+
+本地接口烟测可运行 `node --experimental-strip-types scripts/content-interactions-smoke.ts /path/to/fixture.json`。夹具需预先准备本地双学生会话及已公开心愿，结构为 `actors:[{id,token},…]`、`wishes:[id,…]`；脚本仅连接本机18080，不输出令牌，使用生产解析器核对真实响应。夹具、令牌和临时截图不得提交。
+
 包分配入口位于首页活动卡片和个人中心，页面为 `src/pages/matchmaking/index.vue` 与 `detail.vue`；通知直接定位对应活动。提供活动日程、账号资料确认报名、审核原因、配对聊天、每日任务和结束统计。人格标签可手动设置，测评入口提供官网链接。原“找个搭子”入口仍进入组队心愿。报名复用平台学生认证与受控年级选项，不重复收集学生卡；对方资料和任务以服务端当前访问权限为准，任务仅记录本人查看。
 
 技术选型为 uni-app + Vue3 + TypeScript、Pinia、SCSS 与 Tailwind CSS；使用 ESLint、Prettier、vue-tsc 和 Node 单元测试检查代码。

@@ -10,6 +10,7 @@ import { onPullDownRefresh } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import ContentStats from '@/components/ContentStats.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import ResourceContribution from '@/components/ResourceContribution.vue'
 import { listResourceCategories, listResources } from '@/api/resources'
@@ -203,7 +204,7 @@ onPullDownRefresh(async () => {
           >
         </view>
         <text class="resource-text">{{ item.description_excerpt || '暂无简介' }}</text
-        ><view class="card-footer"
+        ><ContentStats :views="item.view_count" /><view class="card-footer"
           ><text class="ui-text">查看介绍与下载信息</text><AppIcon name="arrow" :size="30"
         /></view>
       </navigator>
