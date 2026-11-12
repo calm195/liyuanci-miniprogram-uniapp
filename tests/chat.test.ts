@@ -475,7 +475,7 @@ async function setupInbox() {
   })
   const hooks: Record<string, () => void> = {}
   const calls: Transport[] = []
-  let rows = [
+  let rows: AppNotification[] = [
     {
       id: 'synthetic-notification',
       version: 6,
@@ -548,6 +548,39 @@ async function setupInbox() {
     },
   }
 }
+test('心愿发布、驳回和评论通知经列表及已读回执后均可打开对应心愿，失效目标不跳转', async () => {
+  const s = await setupInbox()
+  for (const kind of ['wish_published', 'wish_rejected', 'wish_comment']) {
+    const note: AppNotification = {
+      id: `synthetic-${kind}`,
+      version: 6,
+      kind,
+      read: false,
+      target_kind: 'wish',
+      target_ref: 'synthetic-wish?other=1',
+      ...(kind === 'wish_comment' ? { comment_id: 'synthetic-comment' } : {}),
+    }
+    s.setRows([note])
+    await s.page.load()
+    const destination = {
+      url: '/pages/wish-detail/index?id=synthetic-wish%3Fother%3D1',
+      label: '查看心愿',
+    }
+    assert.deepEqual(notificationDestination(s.page.notificationRows.value[0]), destination, kind)
+    await s.page.markRead(s.page.notificationRows.value[0])
+    assert.equal(s.page.notificationRows.value[0].read, true)
+    assert.deepEqual(notificationDestination(s.page.notificationRows.value[0]), destination, kind)
+
+    // 服务端不再提供目标时，保留通用通知，不根据通知类型或评论编号猜测入口。
+    s.setRows([{ ...note, target_kind: undefined, target_ref: undefined }])
+    await s.page.load()
+    assert.equal(notificationDestination(s.page.notificationRows.value[0]), null)
+    s.setRows([{ ...note, target_ref: '' }])
+    await s.page.load()
+    assert.equal(notificationDestination(s.page.notificationRows.value[0]), null)
+  }
+  s.hooks.unload!()
+})
 test('REQ-006/018：通知已读绑定本人列表对象与通知6而非Me99，已读不代表普通写权限', async () => {
   const s = await setupInbox()
   assert.equal(s.page.unreadCount.value, 1)

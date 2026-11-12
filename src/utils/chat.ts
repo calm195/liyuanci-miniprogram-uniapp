@@ -85,6 +85,8 @@ export function notificationDestination(notification: AppNotification) {
     return { url: '/pages/safety/index?tab=appeals', label: '查看申诉结果' }
   }
   switch (notification.target_kind) {
+    case 'wish':
+      return { url: `/pages/wish-detail/index?id=${ref}`, label: '查看心愿' }
     case 'matchmaking':
       return { url: `/pages/matchmaking/detail?id=${ref}`, label: '查看包分配活动' }
     case 'wish_applications':
