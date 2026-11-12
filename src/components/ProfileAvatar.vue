@@ -22,6 +22,7 @@ watch(
     :style="{ width: `${size}rpx`, height: `${size}rpx` }"
     :src="(!failed && src) || defaultAvatar"
     mode="aspectFill"
+    lazy-load
     @error="failed = true"
   />
 </template>
