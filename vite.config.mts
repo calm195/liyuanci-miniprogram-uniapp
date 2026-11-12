@@ -20,6 +20,11 @@ export default defineConfig({
     }),
   ],
   resolve: { alias: { '@': resolve(projectRoot, 'src') } },
-  // H5本地联调与管理端使用同源代理，小程序仍直连配置的API。
-  server: { proxy: { '/api/v1': { target: 'http://127.0.0.1:18080', changeOrigin: false } } },
+  server: {
+    // 编译链固定使用旧版 Vite，开发服务只供本机访问，禁用跨源读取。
+    host: '127.0.0.1',
+    cors: false,
+    // H5 本地联调与管理端使用同源代理，小程序仍直连配置的 API。
+    proxy: { '/api/v1': { target: 'http://127.0.0.1:18080', changeOrigin: false } },
+  },
 })

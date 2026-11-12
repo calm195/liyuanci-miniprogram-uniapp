@@ -104,6 +104,8 @@ npm run build:mp-weixin
 - SCSS 全局变量放在 `src/uni.scss`，模块按需显式导入；Tailwind 入口保持纯 CSS。
 - 业务源码修改后运行 `npm run check`；格式检查失败时运行 `npm run format`，再重跑完整检查。修改页面、样式、依赖或构建配置后还须运行 `npm run build:mp-weixin`。纯文档整理执行格式、链接、固定输入及差异检查。不得关闭规则、忽略源码或删除测试绕过检查。
 - 保持 `@dcloudio/*` 编译相关包版本一致，不单独升级 Vite/Vue 破坏官方依赖组合。
+- 当前编译链采用 [DCloud 官方 Vue3 TypeScript 稳定模板](https://github.com/dcloudio/uni-preset-vue/tree/vite-ts)的 `3.0.0-5030420261029002`，配套 Vite `5.2.8` 与 Vue `3.4.21`。升级时先核对官方模板，再同步更新编译包与锁文件，完整执行 `npm run check` 和微信构建；不要直接运行 `npm audit fix --force`，其建议可能降级 DCloud 或破坏编译器组合。
+- `package.json` 的 `overrides` 固定已验证的传递依赖安全补丁，涉及 Babel、ZIP、Express、图像解码、国际化消息解析、路径/样式解析和 WebSocket；`yaml` 显式满足新版 PostCSS 配置加载器的可选 peer。每次更新依赖使用 `npm audit --registry=https://registry.npmjs.org` 复查，待官方依赖吸收补丁后再逐项移除覆盖。Vite/esbuild、Vue 服务端渲染、vue-i18n 和 DCloud 自动化工具的旧下载器仍存在上游审计项；现有编译通过不表示这些风险已修复。H5 开发服务器仅监听 `127.0.0.1` 并关闭 CORS，不应对外暴露。
 - 禁止写入密钥、真实密码或真实用户数据；AppSecret 仅由服务端持有。新增环境变量同步 `.env.example` 与本说明。
 - 源码与 docs 的本地和远程仅保留 `develop`、`main`，日常开发均使用 `develop`；仅在用户授权范围内提交，不自动 push、发布、部署或创建远程仓库。
 - README 仅维护项目介绍、选项与目录、启动方式、开发规范与须知；本工程不保留阶段文档，现状、缺陷与后续计划在docs工程滚动维护。

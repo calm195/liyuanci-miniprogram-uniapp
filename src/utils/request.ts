@@ -81,6 +81,9 @@ function isAllowedApiBaseUrl(value: string): boolean {
 }
 // 仅向配置的接口地址发送内存会话令牌；不记录请求正文或凭据。
 export async function request<T>(options: RequestOptions): Promise<T> {
+  const epoch = session.getEpoch()
+  // 本请求引起的过期清理可以反馈；换号后的旧请求不能向新会话弹出提示。
+  let feedbackEpoch = epoch
   try {
     if (config.useMock) throw new RequestError('合成模式不发送 API 请求', -1)
     if (!isAllowedApiBaseUrl(config.apiBaseUrl))
@@ -103,8 +106,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
     if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%~.!'()*-]*$/.test(options.url) || invalidPath)
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()
-    const epoch = session.getEpoch()
-    return await new Promise<T>((resolve, reject) => {
+    const response = await new Promise<RequestResponse>((resolve, reject) => {
       const transport = {
         ...options,
         url: config.apiBaseUrl.replace(/\/$/, '') + options.url,
@@ -115,46 +117,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
           ...options.header,
           ...(options.auth !== false && token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        success: (response: RequestResponse) => {
-          const body = response.data as ApiResponse<T>
-          if (
-            response.statusCode === 401 &&
-            options.auth !== false &&
-            epoch === session.getEpoch()
-          ) {
-            session.clear()
-            uni.$emit('auth:expired')
-          }
-          if (epoch !== session.getEpoch() && response.statusCode !== 401) {
-            reject(new RequestError('会话已变化，请重新操作', -1))
-            return
-          }
-          if (options.validateResponse && !options.validateResponse(response)) {
-            reject(new RequestError('接口返回格式不符合约定，请刷新后重试', -3))
-            return
-          }
-          if (response.statusCode === 204) {
-            resolve(undefined as T)
-            return
-          }
-          if (response.statusCode < 200 || response.statusCode >= 300 || body?.code !== 0) {
-            reject(
-              new RequestError(
-                responseErrorMessage(response.statusCode, body?.error_code, pathname, options.auth),
-                body?.code || response.statusCode,
-                body?.error_code,
-                body?.request_id,
-                response.statusCode,
-              ),
-            )
-            return
-          }
-          if (!body || typeof body.request_id !== 'string' || !('data' in body)) {
-            reject(new RequestError('接口返回格式错误', -2))
-            return
-          }
-          resolve(body.data)
-        },
+        success: resolve,
         fail: () => reject(new RequestError('网络异常，请检查网络后重试', -1)),
       }
       if (options.filePath) {
@@ -181,7 +144,34 @@ export async function request<T>(options: RequestOptions): Promise<T> {
         uni.request(transport)
       }
     })
+    // 平台回调只交付响应；校验放在 Promise 之后，校验器抛错也会正常拒绝请求。
+    if (epoch !== session.getEpoch())
+      throw new RequestError('会话已变化，请重新操作', -1, 'SESSION_CHANGED')
+    const body = response.data as ApiResponse<T>
+    if (response.statusCode === 401 && options.auth !== false) {
+      session.clear()
+      feedbackEpoch = session.getEpoch()
+      uni.$emit('auth:expired')
+      // 账号订阅者会同步再次清理空会话；仍视为本次失效，不能误判成换号。
+      if (!session.getToken()) feedbackEpoch = session.getEpoch()
+    }
+    if (options.validateResponse && !options.validateResponse(response))
+      throw new RequestError('接口返回格式不符合约定，请刷新后重试', -3)
+    if (response.statusCode === 204) return undefined as T
+    if (response.statusCode < 200 || response.statusCode >= 300 || body?.code !== 0)
+      throw new RequestError(
+        responseErrorMessage(response.statusCode, body?.error_code, pathname, options.auth),
+        body?.code || response.statusCode,
+        body?.error_code,
+        body?.request_id,
+        response.statusCode,
+      )
+    if (!body || typeof body.request_id !== 'string' || !('data' in body))
+      throw new RequestError('接口返回格式错误', -2)
+    return body.data
   } catch (error) {
+    if (feedbackEpoch !== session.getEpoch())
+      throw new RequestError('会话已变化，请重新操作', -1, 'SESSION_CHANGED')
     const failure = error instanceof RequestError ? error : new RequestError('请求处理失败', -1)
     if (!options.silent) uni.$emit?.('app:notice', { message: failure.message, kind: 'error' })
     throw failure

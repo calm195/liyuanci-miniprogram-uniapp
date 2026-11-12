@@ -481,3 +481,108 @@ test('头像上传区分微信域名拒绝和超时，且不暴露原生错误�
     )
   }
 })
+
+test('换号后丢弃请求和上传的迟到成功、401及网络失败，不污染新会话通知', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  const original = { request: uni.request, uploadFile: uni.uploadFile, emit: uni.$emit }
+  let notices = 0
+  let expiredEvents = 0
+  try {
+    Object.assign(uni, {
+      $emit(event: string) {
+        if (event === 'app:notice') notices++
+        if (event === 'auth:expired') expiredEvents++
+      },
+    })
+    for (const upload of [false, true]) {
+      for (const result of [200, 401, 500, 'network'] as const) {
+        let complete: (value: unknown) => void = () => assert.fail('平台回调未注册')
+        const capture = (options: {
+          success: (value: unknown) => void
+          fail: (value: unknown) => void
+        }) => {
+          complete = result === 'network' ? options.fail : options.success
+        }
+        Object.assign(uni, { request: capture, uploadFile: capture })
+        session.setToken('synthetic-old-session')
+        const pending = request({ url: '/me', ...(upload ? { filePath: 'synthetic-file' } : {}) })
+        session.setToken('synthetic-new-session')
+        const body = { code: 0, request_id: 'synthetic-late', data: { private: true } }
+        complete(
+          result === 'network'
+            ? { errMsg: 'timeout synthetic-private-path' }
+            : { statusCode: result, data: upload ? JSON.stringify(body) : body },
+        )
+        await assert.rejects(pending, { error_code: 'SESSION_CHANGED' })
+        assert.equal(session.getToken(), 'synthetic-new-session')
+      }
+    }
+    assert.equal(notices, 0)
+    assert.equal(expiredEvents, 0)
+  } finally {
+    Object.assign(uni, {
+      request: original.request,
+      uploadFile: original.uploadFile,
+      $emit: original.emit,
+    })
+  }
+})
+
+test('异步平台回调后的校验器抛错会拒绝请求，且仅显示安全提示', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  const original = uni.request
+  try {
+    Object.assign(uni, {
+      request(options: { success: (value: unknown) => void }) {
+        queueMicrotask(() => options.success({ statusCode: 200, data: {} }))
+      },
+    })
+    await assert.rejects(
+      request({
+        url: '/me',
+        silent: true,
+        validateResponse() {
+          throw new Error('synthetic-private-response')
+        },
+      }),
+      { message: '请求处理失败' },
+    )
+  } finally {
+    Object.assign(uni, { request: original })
+  }
+})
+
+test('当前401触发账号订阅者再次清理后仍保留过期状态和安全提示', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  const original = { request: uni.request, emit: uni.$emit }
+  let notices = 0
+  try {
+    session.setToken('synthetic-current-session')
+    Object.assign(uni, {
+      request(options: { success: (value: unknown) => void }) {
+        queueMicrotask(() =>
+          options.success({
+            statusCode: 401,
+            data: { code: 401, error_code: 'UNAUTHENTICATED', request_id: 'synthetic-expired' },
+          }),
+        )
+      },
+      $emit(event: string) {
+        if (event === 'auth:expired') session.clear()
+        if (event === 'app:notice') notices++
+      },
+    })
+    await assert.rejects(request({ url: '/me' }), {
+      statusCode: 401,
+      error_code: 'UNAUTHENTICATED',
+      message: '登录已过期，请重新登录',
+    })
+    assert.equal(session.getToken(), '')
+    assert.equal(notices, 1)
+  } finally {
+    Object.assign(uni, { request: original.request, $emit: original.emit })
+  }
+})
