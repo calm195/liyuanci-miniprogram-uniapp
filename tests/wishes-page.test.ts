@@ -466,3 +466,25 @@ test('取消带上传状态的草稿后，新编辑不会继承图片忙状态',
   await s.page.save()
   assert.equal(writes(s.calls).length, 1)
 })
+
+test('选图恢复时同账号资格刷新保留编辑草稿，换号仍立即清空', async () => {
+  const s = await setup()
+  s.config.wishWritesReady = true
+  s.page.edit(s.page.items.value[0])
+  s.page.form.value.body = '选图前未保存正文'
+  s.page.imagesPicking.value = true
+  s.page.leave()
+  s.user.user = { ...s.user.user, version: 100 }
+  await s.page.show()
+  assert.equal(s.page.editing.value, true)
+  assert.equal(s.page.form.value.body, '选图前未保存正文')
+  s.page.imagesPicking.value = false
+  s.page.form.value.image_ids = ['uploaded-image']
+  s.user.user = { ...s.user.user, version: 101 }
+  await settle()
+  assert.equal(s.page.editing.value, true)
+  assert.deepEqual(s.page.form.value.image_ids, ['uploaded-image'])
+  s.user.user = { ...s.user.user, id: 'other-student' }
+  assert.equal(s.page.editing.value, false)
+  assert.deepEqual(s.page.form.value.image_ids ?? [], [])
+})

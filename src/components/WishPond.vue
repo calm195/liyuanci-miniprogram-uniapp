@@ -363,7 +363,8 @@ function leave() {
   visible.value = false
   clearProjection()
 }
-watch(() => [user.user?.id, session.getEpoch()], clearProjection, { flush: 'sync' })
+// 资格刷新会替换同一账号对象；仅在账号或会话真正变化时清理草稿。
+watch([() => user.user?.id, () => session.getEpoch()], clearProjection, { flush: 'sync' })
 function applyNavigationQuery(query: Record<string, string | undefined> | undefined) {
   // 导航参数仅选择视图，发布资格仍由最新账号动作判定。
   own.value = query?.own === '1'
