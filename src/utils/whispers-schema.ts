@@ -1,3 +1,4 @@
+import { isJsonObject } from './json-object.ts'
 // 仅解释本端固定契约使用的 schema 关键字；协议新增关键字须同步消费者。
 export interface Schema {
   $ref?: string
@@ -108,8 +109,7 @@ export function matchesSchema(
     if (schema.uniqueItems && new Set(value.map(canonical)).size !== value.length) return false
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const prototype = Object.getPrototypeOf(value)
-    if (prototype !== null && prototype !== Object.prototype) return false
+    if (!isJsonObject(value)) return false
     const object = value as Record<string, unknown>
     if (schema.required?.some((key) => !Object.prototype.hasOwnProperty.call(object, key)))
       return false

@@ -81,6 +81,11 @@ const content = computed(() => {
   if (value.participant) return value.participant
   return value.current_state === 'published' ? value.public || null : null
 })
+const detailImages = computed(() =>
+  currentWish.value?.own_content
+    ? (currentWish.value.images ?? [])
+    : (publicContent.value?.images ?? currentWish.value?.images ?? []),
+)
 const supportState = computed(() => {
   const saved = sharedSupport.value
   if (sharedEntry.value && saved?.owner === user.user?.id && saved?.epoch === session.getEpoch())
@@ -619,11 +624,7 @@ onPullDownRefresh(async () => {
         >
         <IdentityTags :tags="publicContent?.author?.identity_tags" />
         <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
-        <WishImages
-          v-if="(publicContent?.images ?? currentWish.images)?.length"
-          :images="publicContent?.images ?? currentWish.images ?? []"
-          :wish-id="currentWish.id"
-        />
+        <WishImages v-if="detailImages.length" :images="detailImages" :wish-id="currentWish.id" />
         <ContentStats
           :applications="publicContent?.application_count ?? currentWish.application_count"
           :comments="publicContent?.comment_count ?? currentWish.comment_count"

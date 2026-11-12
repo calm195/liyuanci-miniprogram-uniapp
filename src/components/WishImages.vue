@@ -25,7 +25,7 @@ async function load() {
   failed.value = result.some((item) => !item.path)
 }
 watch(
-  () => [props.images, props.wishId],
+  [() => props.images, () => props.wishId],
   () => {
     void load()
   },
@@ -47,11 +47,17 @@ function preview(path: string) {
       :src="item.path"
       mode="aspectFill"
       @click.stop="preview(item.path)"
+      @error="failed = true"
     /><button v-if="failed" class="image-retry" @click.stop="load">图片加载失败，重试</button></view
   >
 </template>
 <style scoped>
+:host {
+  display: block;
+  width: 100%;
+}
 .wish-images {
+  width: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;

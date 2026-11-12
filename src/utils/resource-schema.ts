@@ -1,3 +1,4 @@
+import { isJsonObject } from './json-object.ts'
 // 模块只解释固定协议使用的关键字，并执行规范文本和跨字段约束。
 export interface ResourceSchema {
   $ref?: string
@@ -182,7 +183,7 @@ export function matchesResourceSchema(
       return false
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if (![null, Object.prototype].includes(Object.getPrototypeOf(value))) return false
+    if (!isJsonObject(value)) return false
     const obj = value as Record<string, unknown>
     if (schema.required?.some((k) => !Object.prototype.hasOwnProperty.call(obj, k))) return false
     if (
