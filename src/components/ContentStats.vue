@@ -6,7 +6,10 @@ function count(value: number) {
 }
 </script>
 <template>
-  <view class="content-stats">
+  <view
+    v-if="applications !== undefined || comments !== undefined || views !== undefined"
+    class="content-stats"
+  >
     <text v-if="applications !== undefined">应愿 {{ count(applications) }}</text>
     <text v-if="comments !== undefined">评论 {{ count(comments) }}</text>
     <view v-if="views !== undefined" class="view-count" :aria-label="`浏览 ${views} 次`"
@@ -22,7 +25,11 @@ function count(value: number) {
   gap: 24rpx;
   color: var(--theme-muted);
   font-size: 24rpx;
-  margin-top: 16rpx;
+  min-height: 72rpx;
+  line-height: 1.5;
+}
+.content-stats text {
+  margin: 0;
 }
 .view-count {
   display: flex;

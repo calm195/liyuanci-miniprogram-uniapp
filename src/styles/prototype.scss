@@ -23,6 +23,14 @@
   justify-content: inherit;
   gap: inherit;
 }
+.content-action > .navigator-wrap,
+.hot-row > .navigator-wrap,
+.wish-author > .navigator-wrap,
+.profile-heading > .navigator-wrap {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+}
 .chip-scroll .uni-scroll-view::-webkit-scrollbar {
   display: none;
 }
@@ -221,6 +229,34 @@
   gap: 12rpx;
   padding: 28rpx 2rpx 18rpx;
 }
+.page .section-heading > text {
+  margin: 0;
+}
+.section-heading .small-link {
+  flex-shrink: 0;
+  padding: 12rpx 0 12rpx 16rpx;
+}
+.page .content-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  min-height: 72rpx;
+  margin: 0;
+  padding: 8rpx 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-teal);
+  font-size: 26rpx;
+  line-height: 1.5;
+}
+.page .content-action text {
+  margin: 0;
+}
+.page .tap-feedback {
+  opacity: 0.65;
+}
 .page .section-title {
   margin: 0;
   font-weight: 700;
@@ -260,7 +296,7 @@
 .page .author-name {
   margin: 0;
   font-weight: 600;
-  font-size: 27rpx;
+  font-size: 30rpx;
 }
 .page .author-hint {
   margin: 2rpx 0 0;
@@ -296,6 +332,10 @@
   margin-top: 18rpx;
   color: var(--theme-muted);
   font-size: 23rpx;
+}
+.card-meta text,
+.card-footer text {
+  margin-bottom: 0;
 }
 .meta-item {
   display: flex;

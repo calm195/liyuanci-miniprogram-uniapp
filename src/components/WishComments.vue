@@ -431,6 +431,8 @@ onUnmounted(() => {
               ? `回复 ${label(reply)}`
               : '写一条评论'
       }}</text
+      ><text class="comment-hint"
+        >评论审核通过后公开。希望帮助许愿人，可通过「我来应愿」提交申请。</text
       ><textarea
         v-model="body"
         :disabled="locked"
@@ -478,6 +480,10 @@ onUnmounted(() => {
   /></view>
 </template>
 <style scoped>
+.comment-hint {
+  color: var(--theme-muted);
+  font-size: 24rpx;
+}
 .wish-comments {
   display: flex;
   flex-direction: column;

@@ -30,7 +30,9 @@ async function moduleFrom(source: string) {
 }
 const strip = (source: string) =>
   source.replace(/^import\s[\s\S]*?from\s+'([^']+)'\n/gm, (_all, name) =>
-    name === 'vue' ? `import { computed, ref, watch } from '${import.meta.resolve('vue')}'\n` : '',
+    name === 'vue'
+      ? `import { computed, nextTick, ref, watch } from '${import.meta.resolve('vue')}'\n`
+      : '',
   )
 const shareRef = '01234567-89ab-cdef-0123-456789abcdef'
 const publicWish = {
@@ -63,6 +65,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   let token = 'synthetic-token'
   let row = structuredClone(initial)
   const pages: string[] = []
+  const scrolls: { selector: string; fail: () => void }[] = []
   const gates: {
     kind: string
     ready: (receipt: { owner: string; epoch: number }) => void
@@ -84,6 +87,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   const storage = new Map<string, unknown>()
   Object.assign(globalThis, {
     uni: {
+      pageScrollTo: (options: (typeof scrolls)[number]) => scrolls.push(options),
       getStorageSync: (key: string) => storage.get(key),
       setStorageSync: (key: string, value: unknown) => storage.set(key, value),
       navigateTo: (options: { url: string; success: () => void }) => {
@@ -165,7 +169,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden };`,
+    `const { useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -175,6 +179,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     hooks,
     calls,
     pages,
+    scrolls,
     gates,
     user,
     RequestError,
@@ -439,4 +444,42 @@ test('帖主本人详情也采用已校验的公开作者投影，隐私屏障�
   assert.equal(current.page.publicContent.value.author.nickname, '公开昵称')
   current.page.wish.value.privacy_review_required = true
   assert.equal(current.page.publicContent.value, null)
+})
+
+test('评论入口在公开详情加载后定位一次，刷新不打断阅读，离页不滚动', async () => {
+  const published: WishResult = {
+    ...sample,
+    current_state: 'published',
+    own_content: undefined,
+    public: publicWish,
+  }
+  const s = await setup({ id: sample.id, section: 'comments' }, published)
+  for (let i = 0; i < 25; i++) await Promise.resolve()
+  assert.equal(s.page.commentsAvailable.value, true)
+  assert.equal(s.scrolls.length, 1)
+  assert.equal(s.scrolls[0]!.selector, '#wish-comments')
+  await s.page.load()
+  assert.equal(s.scrolls.length, 1)
+  await s.page.openComments()
+  assert.equal(s.scrolls.length, 2)
+  s.scrolls[1]!.fail()
+  assert.match(s.page.actionError.value, /向下滑动/)
+  s.hooks.hide!()
+  await s.page.openComments()
+  assert.equal(s.scrolls.length, 2)
+  s.scrolls[0]!.fail()
+  assert.equal(s.page.actionError.value, '')
+})
+
+test('评论定位遵循当前状态和隐私屏障，不向不可展示的内容滚动', async () => {
+  for (const row of [
+    sample,
+    { ...sample, current_state: 'published' as const, privacy_review_required: true },
+  ]) {
+    const s = await setup({ id: sample.id, section: 'comments' }, row)
+    await s.page.openComments()
+    assert.equal(s.page.commentsAvailable.value, false)
+    assert.equal(s.scrolls.length, 0)
+    s.hooks.hide!()
+  }
 })

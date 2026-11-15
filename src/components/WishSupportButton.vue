@@ -51,7 +51,7 @@ async function toggle() {
     result.value = state
     retry.value = undefined
     uni.$emit('app:notice', {
-      message: state.supported ? '已支持心愿' : '已取消支持',
+      message: state.supported ? '已点赞' : '已取消点赞',
       kind: 'success',
     })
     emit('change')
@@ -62,7 +62,7 @@ async function toggle() {
     retry.value = unknown ? intent : undefined
     uni.$emit('app:notice', {
       message: unknown
-        ? '支持操作结果未知，点击重试'
+        ? '点赞结果未知，点击重试'
         : failure instanceof Error
           ? failure.message
           : '操作失败',
@@ -78,14 +78,14 @@ async function toggle() {
   <button
     class="wish-support"
     :class="{ supported }"
-    :aria-label="retry !== undefined ? '重试支持操作' : supported ? '取消支持' : '支持心愿'"
+    :aria-label="retry !== undefined ? '重试点赞操作' : supported ? '取消点赞' : '点赞心愿'"
     :aria-pressed="supported"
     :disabled="pending"
     :loading="isPageActionPending(`wish-support-${wishId}`)"
     @click.stop="runPageAction(toggle, `wish-support-${wishId}`)"
   >
     <AppIcon name="thumb-up" :active="supported" :size="32" />
-    <text>{{ count }}</text>
+    <text>{{ supported ? '已赞' : '赞' }} {{ count }}</text>
     <text v-if="retry !== undefined">重试</text>
   </button>
 </template>
@@ -94,14 +94,20 @@ async function toggle() {
 .wish-support {
   display: inline-flex;
   width: auto;
-  min-height: 56rpx;
+  min-height: 72rpx;
   align-items: center;
   gap: 8rpx;
-  margin: 8rpx 0;
-  padding: 0 14rpx;
+  margin: 0;
+  padding: 8rpx 0;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--theme-teal);
   font-size: 26rpx;
+  line-height: 1.5;
+}
+.wish-support text {
+  margin: 0;
 }
 .wish-support.supported {
   color: var(--theme-brand);

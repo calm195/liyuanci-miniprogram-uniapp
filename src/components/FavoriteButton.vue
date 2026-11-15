@@ -94,7 +94,7 @@ async function toggle() {
       :disabled="busy"
       :loading="isPageActionPending('favorite-toggle')"
       :aria-pressed="active"
-      @click="runPageAction(toggle, 'favorite-toggle')"
+      @click.stop="runPageAction(toggle, 'favorite-toggle')"
     >
       <AppIcon name="star" :active="active" :size="32" /><text>{{
         pending ? '原请求重试' : active ? '已收藏' : '收藏'
@@ -113,11 +113,16 @@ button.favorite-button {
   align-items: center;
   gap: 10rpx;
   margin: 0;
-  padding: 10rpx 24rpx;
-  min-height: 64rpx;
-  background: var(--theme-surface);
+  padding: 8rpx 0;
+  min-height: 72rpx;
+  background: transparent;
   color: var(--theme-teal);
-  border: 2rpx solid var(--theme-line);
+  border: 0;
+  border-radius: 0;
   font-size: 26rpx;
+  line-height: 1.5;
+}
+.favorite-button text {
+  margin: 0;
 }
 </style>
