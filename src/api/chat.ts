@@ -79,3 +79,13 @@ export const readNotification = (
     data: { expected_version: notification.version },
     header: { 'Idempotency-Key': key },
   })
+
+// 阅读位置由本人可见页面确认，重试沿用同一请求标识。
+export const readConversation = (id: string, seq: number, key: string) =>
+  request<{ id: string; last_read_seq: number }>({
+    url: `/conversations/${encodeURIComponent(id)}/read`,
+    method: 'POST',
+    silent: true,
+    data: { last_read_seq: seq },
+    header: { 'Idempotency-Key': key },
+  })

@@ -221,7 +221,7 @@ async function setup() {
   })
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/chat/index.vue', import.meta.url)) +
-      '\nexport { refresh, send, draft, attempt, afterSeq, timeline, outgoing, canSend, error, notice, sending, reading, nearBottom, scrollTarget, unreadArrival };',
+      '\nexport { refresh, send, draft, attempt, afterSeq, timeline, outgoing, canSend, error, notice, sending, reading, nearBottom, scrollTarget, unreadArrival, acknowledgeRead, scrollLatest };',
     {
       ...api,
       config: { useMock: false },
@@ -467,6 +467,7 @@ test('通知按服务端目标类型跳转，不能把目标引用作为任意�
   )
 })
 async function setupInbox() {
+  const state = reactive({ epoch: 1 })
   const user = reactive({
     user: { ...actor, verification: 'rejected' },
     isLoggedIn: true,
@@ -513,12 +514,12 @@ async function setupInbox() {
   )
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/inbox/index.vue', import.meta.url)) +
-      '\nexport { load, markRead, notificationRows, unreadCount, notice, error };',
+      '\nexport { load, markRead, openNotification, notificationRows, unreadCount, notice, error };',
     {
       ...api,
       useUserStore: () => user,
       config: { useMock: false },
-      session: { getEpoch: () => 1, getToken: () => 'synthetic-token' },
+      session: { getEpoch: () => state.epoch, getToken: () => 'synthetic-token' },
       RequestError,
       notificationDestination,
       onShow: (fn: () => void) => {
@@ -540,6 +541,9 @@ async function setupInbox() {
     hooks,
     user,
     RequestError,
+    changeSession: () => {
+      state.epoch++
+    },
     setRows: (value: typeof rows) => {
       rows = value
     },
@@ -715,4 +719,134 @@ test('REQ-007：静默空轮询复用列表，上翻时新消息不抢滚动位�
   assert.equal(s.page.scrollTarget.value, '')
   assert.equal(s.page.unreadArrival.value, true)
   assert.equal(s.page.draft.value, '正在输入')
+})
+
+test('聊天已读只确认可见末条：上翻和后台新消息保持未读，超时复用请求', async () => {
+  const s = await setup()
+  s.setTarget({ ...conversation, last_read_seq: 0, has_unread: true })
+  let fail = true
+  s.setCommand(async (input) => {
+    assert.equal(input.url, `/conversations/${conversation.id}/read`)
+    if (fail) throw new Error('合成断网')
+    return { id: conversation.id, last_read_seq: input.data!.last_read_seq }
+  })
+  s.pages.push({ items: [deliveredRaw('first', 1)], next_after_seq: 1 })
+  await s.poll()
+  await settle()
+  const first = writes(s.calls)[0]!
+  assert.deepEqual(first.data, { last_read_seq: 1 })
+  fail = false
+  await s.page.acknowledgeRead()
+  assert.deepEqual(writes(s.calls)[1], first)
+  const count = writes(s.calls).length
+  s.page.nearBottom.value = false
+  s.setTarget({ ...conversation, last_read_seq: 1, has_unread: true })
+  s.pages.push({ items: [deliveredRaw('second', 2)], next_after_seq: 2 })
+  await s.poll()
+  assert.equal(writes(s.calls).length, count)
+  await s.page.scrollLatest()
+  assert.deepEqual(writes(s.calls).at(-1)!.data, { last_read_seq: 2 })
+  s.hooks.hide!()
+  await s.page.acknowledgeRead()
+  assert.equal(writes(s.calls).length, count + 1)
+})
+
+test('聊天读取响应在隐藏或换会话后返回，不提交阅读确认', async () => {
+  for (const leave of ['hide', 'session']) {
+    const s = await setup()
+    s.setTarget({ ...conversation, last_read_seq: 0 })
+    let finish!: (value: unknown) => void
+    s.setReads(async (input) =>
+      input.url.startsWith('/me/conversations')
+        ? { items: [{ ...conversation, last_read_seq: 0 }], next_cursor: null }
+        : new Promise((resolve) => {
+            finish = resolve
+          }),
+    )
+    const loading = s.poll()
+    await settle()
+    s.hooks.hide!()
+    if (leave === 'session') s.changeSession()
+    finish({ items: [deliveredRaw('late', 1)], next_after_seq: 1 })
+    await loading
+    assert.equal(writes(s.calls).length, 0)
+  }
+})
+
+test('通知跳转成功后自动已读，隐藏不取消确认；失败跳转和已读通知不重复写入', async () => {
+  const s = await setupInbox()
+  const row = s.page.notificationRows.value[0]
+  let succeed = false
+  Object.assign(globalThis, {
+    uni: {
+      navigateTo: (input: { url: string; success: () => void; fail: () => void }) => {
+        assert.equal(input.url, `/pages/chat/index?id=${conversation.id}`)
+        assert.equal(writes(s.calls).length, 0)
+        if (succeed) {
+          s.hooks.hide!()
+          input.success()
+        } else input.fail()
+      },
+    },
+  })
+  await s.page.openNotification(row)
+  assert.equal(writes(s.calls).length, 0)
+  assert.match(s.page.error.value, /无法打开/)
+  succeed = true
+  await s.page.openNotification(row)
+  assert.equal(writes(s.calls).length, 1)
+  assert.deepEqual(writes(s.calls)[0]!.data, { expected_version: 6 })
+  s.setRows([{ ...row, read: true, version: 7 }])
+  s.hooks.show!()
+  await settle()
+  Object.assign(globalThis, {
+    uni: { navigateTo: (input: { success: () => void }) => input.success() },
+  })
+  await s.page.openNotification(s.page.notificationRows.value[0])
+  assert.equal(writes(s.calls).length, 1)
+})
+
+test('通知跳转中换账号或令牌不产生新身份写入，未知结果重试保持原键', async () => {
+  const s = await setupInbox()
+  Object.assign(globalThis, {
+    uni: {
+      navigateTo: (input: { success: () => void }) => {
+        s.changeSession()
+        input.success()
+      },
+    },
+  })
+  await s.page.openNotification(s.page.notificationRows.value[0])
+  assert.equal(writes(s.calls).length, 0)
+  await s.page.load()
+  s.setCommand(async () => {
+    throw new Error('合成超时')
+  })
+  Object.assign(globalThis, {
+    uni: {
+      navigateTo: (input: { success: () => void }) => {
+        s.hooks.hide!()
+        input.success()
+      },
+    },
+  })
+  await s.page.openNotification(s.page.notificationRows.value[0])
+  const attempt = writes(s.calls)[0]
+  s.hooks.show!()
+  await settle()
+  await s.page.markRead(s.page.notificationRows.value[0])
+  assert.deepEqual(writes(s.calls)[1], attempt)
+})
+
+test('通知已读遇到限流不换幂等键，手动重试保留通知版本', async () => {
+  const s = await setupInbox()
+  s.setCommand(async () => {
+    const failure = new s.RequestError('合成限流')
+    failure.statusCode = 429
+    throw failure
+  })
+  await s.page.markRead(s.page.notificationRows.value[0])
+  await s.page.markRead(s.page.notificationRows.value[0])
+  assert.equal(writes(s.calls).length, 2)
+  assert.deepEqual(writes(s.calls)[0], writes(s.calls)[1])
 })

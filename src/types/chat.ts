@@ -1,4 +1,7 @@
 export interface Conversation {
+  latest_message?: { body: string; delivery_seq: number; viewer_is_sender: boolean } | null
+  last_read_seq?: number
+  has_unread?: boolean
   wish_title?: string
   id: string
   version: number

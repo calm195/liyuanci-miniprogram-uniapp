@@ -8,7 +8,13 @@ import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
-import { findConversation, listMessages, sendMessage, getMessageStatus } from '@/api/chat'
+import {
+  findConversation,
+  listMessages,
+  sendMessage,
+  getMessageStatus,
+  readConversation,
+} from '@/api/chat'
 import { canWriteConversation, mergeMessages, isMessageStatus } from '@/utils/chat'
 import { createVisiblePoller } from '@/utils/visible-poller'
 import { messageStatusLabels } from '@/types/chat'
@@ -27,13 +33,18 @@ const scrollTarget = ref('')
 const nearBottom = ref(true)
 const unreadArrival = ref(false)
 function trackScroll(event: { detail: { scrollTop: number; scrollHeight: number } }) {
+  const visit = generation
+  const epoch = session.getEpoch()
+  const owner = user.user?.id
   uni
     .createSelectorQuery()
     .select('.chat-timeline')
     .boundingClientRect((rect) => {
-      if (rect && !Array.isArray(rect))
+      if (current(visit, epoch, owner) && rect && !Array.isArray(rect)) {
         nearBottom.value =
           event.detail.scrollHeight - event.detail.scrollTop - (rect.height || 0) < 100
+        if (nearBottom.value) void acknowledgeRead()
+      }
     })
     .exec()
 }
@@ -46,6 +57,7 @@ async function scrollLatest() {
   scrollTarget.value = 'chat-end'
   unreadArrival.value = false
   nearBottom.value = true
+  await acknowledgeRead()
 }
 const sending = ref(false)
 const error = ref('')
@@ -85,6 +97,58 @@ function clearProjection() {
   scrollTarget.value = ''
   nearBottom.value = true
   unreadArrival.value = false
+}
+let readSaving = false
+let readAttempt: { seq: number; key: string; epoch: number; owner: string } | null = null
+async function acknowledgeRead() {
+  const target = currentConversation.value
+  // 旧服务端未给阅读位置时不猜测已读；上翻期间加载的新消息仍保持未读。
+  if (
+    !visible ||
+    !nearBottom.value ||
+    !target ||
+    readSaving ||
+    !Number.isSafeInteger(target.last_read_seq) ||
+    afterSeq.value <= (target.last_read_seq ?? 0)
+  )
+    return
+  const visit = generation
+  const epoch = session.getEpoch()
+  const owner = user.user?.id
+  if (!owner) return
+  if (!readAttempt || readAttempt.epoch !== epoch || readAttempt.owner !== owner)
+    readAttempt = {
+      seq: afterSeq.value,
+      key: `conversation-read-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      epoch,
+      owner,
+    }
+  const input = readAttempt
+  readSaving = true
+  try {
+    const result = await readConversation(id.value, input.seq, input.key)
+    if (!current(visit, epoch, owner)) return
+    if (
+      result.id !== id.value ||
+      !Number.isSafeInteger(result.last_read_seq) ||
+      result.last_read_seq < input.seq
+    )
+      throw new Error('阅读回执尚未确认')
+    if (conversation.value) conversation.value.last_read_seq = result.last_read_seq
+    readAttempt = null
+  } catch (failure) {
+    if (!current(visit, epoch, owner)) return
+    if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      ![408, 429].includes(failure.statusCode)
+    )
+      readAttempt = null
+    // 不影响正文阅读；网络结果未知时保留同一序号和幂等键，下一次可见轮询继续确认。
+  } finally {
+    readSaving = false
+  }
 }
 async function refresh(force = false) {
   if (reading.value || (sending.value && !force) || !visible) return
@@ -129,6 +193,9 @@ async function refresh(force = false) {
     readEpoch.value = epoch
     readOwner.value = owner
     error.value = ''
+    await nextTick()
+    if (!isCurrent()) return
+    await acknowledgeRead()
     // 本人审核状态不参与送达游标；慢审后到只会在后续增量页中按最终序号出现。
     for (const receipt of [...(store.receipts[id.value] || [])]) {
       if (!isCurrent()) return
@@ -258,6 +325,7 @@ watch(
   () => {
     // 同账号新令牌也属于新会话，消息游标、输入和重试依据不能沿用。
     generation++
+    readAttempt = null
     poller.stop()
     clearProjection()
     draft.value = ''
