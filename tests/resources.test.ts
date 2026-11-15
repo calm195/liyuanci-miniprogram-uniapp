@@ -379,8 +379,12 @@ test('REQ-023：403清空敏感详情，401清会话，投稿仅固定图且缺�
   index.hide()
   assert.equal(index.runtime.contribution.value, false)
   const home = readFileSync(new URL('../src/pages/index/index.vue', import.meta.url), 'utf8')
-  assert.match(home, /资料广场/)
-  assert.match(home, /认证后查看/)
+  assert.doesNotMatch(home, /label: '资料广场'/)
+  const { mainNavigation } = await import('../src/utils/navigation.ts')
+  assert.equal(
+    mainNavigation.find((entry) => entry.key === 'resources')?.url,
+    '/pages/resources/index',
+  )
   const requestSource = readFileSync(new URL('../src/utils/request.ts', import.meta.url), 'utf8')
   assert.match(requestSource, /validateResponse/)
 })

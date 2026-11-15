@@ -2,6 +2,9 @@
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
+import AppIcon from '@/components/AppIcon.vue'
+import IdentityTags from '@/components/IdentityTags.vue'
+import ContentStats from '@/components/ContentStats.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -9,7 +12,6 @@ import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 import { getPublicProfile } from '@/api/applications'
 import type { ProfileContents, PublicProfile } from '@/types/application'
-import { campuses, genders } from '@/types/wish'
 const user = useUserStore()
 const id = ref('')
 const profile = ref<PublicProfile | null>(null)
@@ -18,6 +20,7 @@ const cursor = ref<string | null>(null)
 const usedCursors = new Set<string>()
 const busy = ref(false)
 const error = ref('')
+const menuTarget = ref('')
 const readEpoch = ref(-1)
 let visible = false
 let generation = 0
@@ -33,6 +36,7 @@ function checkCursor(next: unknown) {
   usedCursors.add(next)
 }
 function clear() {
+  menuTarget.value = ''
   profile.value = null
   items.value = []
   cursor.value = null
@@ -110,56 +114,92 @@ onPullDownRefresh(async () => {
 </script>
 <template>
   <AppPage>
-    <text class="title">公开主页</text>
-
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentProfile" class="card">
-      <ProfileAvatar :src="currentProfile.avatar_url" />
-      <text>{{ currentProfile.nickname }}</text>
-      <text v-if="currentProfile.display_id" class="subtitle"
-        >ID {{ currentProfile.display_id }}</text
+    <text v-if="busy" class="page-footnote">加载中…</text>
+    <view v-if="currentProfile" class="card public-profile-card">
+      <view class="public-profile-heading">
+        <ProfileAvatar :src="currentProfile.avatar_url" :size="100" />
+        <view class="public-profile-copy">
+          <text class="profile-name">{{ currentProfile.nickname }}</text>
+          <text v-if="currentProfile.display_id" class="profile-id"
+            >ID {{ currentProfile.display_id }}</text
+          >
+        </view>
+        <button
+          v-if="user.user && currentProfile.id !== user.user.id"
+          class="content-action profile-more"
+          aria-label="更多用户操作"
+          :aria-expanded="menuTarget === 'profile'"
+          @click="menuTarget = menuTarget === 'profile' ? '' : 'profile'"
+        >
+          <AppIcon name="more" :size="36" />
+        </button>
+      </view>
+      <IdentityTags :tags="currentProfile.identity_tags" />
+      <view
+        v-if="menuTarget === 'profile' && user.user && currentProfile.id !== user.user.id"
+        class="profile-menu"
       >
-      <navigator
-        v-if="user.user && currentProfile.id !== user.user.id"
-        class="moderation-link"
-        :url="`/pages/blacklist/index?targetId=${encodeURIComponent(currentProfile.id)}`"
-        >屏蔽此用户</navigator
-      >
-      <text v-if="currentProfile.identity_tags?.campus"
-        >校区：{{
-          campuses.find((item) => item.value === currentProfile?.identity_tags?.campus)?.label
-        }}</text
-      >
-      <text v-if="currentProfile.identity_tags?.gender"
-        >性别：{{
-          genders.find((item) => item.value === currentProfile?.identity_tags?.gender)?.label
-        }}</text
-      >
-      <text v-if="currentProfile.identity_tags?.grade"
-        >年级：{{ currentProfile.identity_tags.grade }}</text
-      >
+        <navigator
+          class="content-action"
+          :url="`/pages/blacklist/index?targetId=${encodeURIComponent(currentProfile.id)}`"
+          >屏蔽此用户</navigator
+        >
+      </view>
     </view>
-    <view v-for="item in rows" :key="`${item.kind}-${item.content.id}`" class="card">
-      <text>{{ item.kind === 'wish' ? '公开心愿' : '还愿故事' }}</text>
-      <text>{{ item.content.body }}</text>
+    <view v-if="currentProfile" class="section-heading"
+      ><text class="section-title">公开内容</text></view
+    >
+    <view
+      v-for="item in rows"
+      :key="`${item.kind}-${item.content.id}`"
+      class="card public-content-card"
+    >
       <navigator
-        class="moderation-link"
-        :url="`/pages/report/index?kind=${item.kind}&id=${encodeURIComponent(item.content.id)}`"
-        >举报此内容</navigator
+        class="public-content-link"
+        hover-class="tap-feedback"
+        :url="
+          item.kind === 'wish'
+            ? `/pages/wish-detail/index?id=${encodeURIComponent(item.content.id)}`
+            : `/pages/stories/index?id=${encodeURIComponent(item.content.id)}`
+        "
       >
-      <text v-if="item.content.school_related">未经证实</text>
-      <navigator
-        v-if="item.kind === 'wish'"
-        :url="`/pages/wish-detail/index?id=${encodeURIComponent(item.content.id)}`"
-        >查看心愿详情</navigator
+        <view class="public-content-heading">
+          <text class="section-title">{{
+            item.content.title || (item.kind === 'wish' ? '一份心愿' : '一个还愿故事')
+          }}</text>
+          <text class="category-pill">{{ item.kind === 'wish' ? '心愿' : '还愿故事' }}</text>
+        </view>
+        <text class="public-content-body">{{ item.content.body }}</text>
+        <text v-if="item.content.school_related" class="notice">未经证实</text>
+        <view class="public-content-footer">
+          <ContentStats :comments="item.content.comment_count" :views="item.content.view_count" />
+          <text class="content-action">查看详情 ›</text>
+        </view>
+      </navigator>
+      <button
+        class="content-action profile-more"
+        aria-label="更多内容操作"
+        :aria-expanded="menuTarget === `${item.kind}-${item.content.id}`"
+        @click="
+          menuTarget =
+            menuTarget === `${item.kind}-${item.content.id}`
+              ? ''
+              : `${item.kind}-${item.content.id}`
+        "
       >
-      <navigator
-        v-if="item.kind === 'story'"
-        :url="`/pages/stories/index?id=${encodeURIComponent(item.content.id)}`"
-        >查看还愿故事</navigator
-      >
+        <AppIcon name="more" :size="32" />
+      </button>
+      <view v-if="menuTarget === `${item.kind}-${item.content.id}`" class="profile-menu">
+        <navigator
+          class="content-action"
+          :url="`/pages/report/index?kind=${item.kind}&id=${encodeURIComponent(item.content.id)}`"
+          >举报此内容</navigator
+        >
+      </view>
     </view>
-    <text v-if="currentProfile && !busy && !rows.length">暂无可展示的公开内容</text>
+    <text v-if="currentProfile && !busy && !rows.length" class="empty-state"
+      >暂无可展示的公开内容</text
+    >
     <button
       v-if="currentProfile && cursor"
       :disabled="busy"
@@ -171,3 +211,70 @@ onPullDownRefresh(async () => {
     <AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
+<style scoped>
+.public-profile-card {
+  border-top: 6rpx solid var(--theme-teal);
+}
+.public-profile-heading,
+.public-content-heading,
+.public-content-footer {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.public-profile-copy {
+  flex: 1;
+  min-width: 0;
+}
+.profile-id {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 22rpx;
+}
+.public-content-card {
+  position: relative;
+}
+.public-content-link {
+  margin: 0;
+  color: var(--theme-ink);
+}
+.public-content-heading {
+  padding-right: 64rpx;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.public-content-heading .section-title {
+  flex: 1;
+  min-width: 160rpx;
+}
+.public-content-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin: 20rpx 0 0;
+  line-height: 1.7;
+  color: var(--theme-ink);
+}
+.public-content-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 16rpx;
+  border-top: 1rpx solid var(--theme-line);
+}
+.profile-more {
+  min-width: 64rpx;
+  flex-shrink: 0;
+}
+.public-content-card > .profile-more {
+  position: absolute;
+  top: 16rpx;
+  right: 20rpx;
+}
+.profile-menu {
+  margin-top: 12rpx;
+  padding: 0 20rpx;
+  border-radius: 12rpx;
+  background: var(--theme-canvas);
+}
+</style>

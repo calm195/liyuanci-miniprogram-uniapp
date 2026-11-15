@@ -45,10 +45,9 @@ const shortcuts = [
     art: 'entry-buddy',
     url: '/pages/wishes/shortcut?category=team',
   },
-  { label: '资料广场', caption: '认证后查看', art: '', url: '/pages/resources/index' },
 ]
 function openShortcut(url: string) {
-  return url === '/pages/resources/index' ? openMainPage(url) : uni.navigateTo({ url })
+  return uni.navigateTo({ url })
 }
 onPullDownRefresh(async () => {
   try {
@@ -77,12 +76,6 @@ onPullDownRefresh(async () => {
       <view class="hero-copy">
         <text class="hero-title">{{ '把小小心愿\n交给大大的善意' }}</text>
         <text class="hero-subtitle">总有一条锦鲤，为你而来。</text>
-        <view
-          role="button"
-          class="hero-button"
-          @click="runPageAction(() => openShortcut('/pages/wishes/shortcut?compose=1'))"
-          >许个心愿 <text class="ui-text">→</text></view
-        >
       </view>
     </view>
     <view class="quick-grid">
@@ -91,15 +84,10 @@ onPullDownRefresh(async () => {
         :key="entry.label"
         role="button"
         class="quick-entry"
+        hover-class="tap-feedback"
         @click="runPageAction(() => openShortcut(entry.url))"
       >
-        <image
-          v-if="entry.art"
-          :src="`/static/illustrations/${entry.art}.png`"
-          class="entry-art"
-          mode="aspectFit"
-        />
-        <view v-else class="quick-symbol"><AppIcon name="book" :size="52" /></view>
+        <image :src="`/static/illustrations/${entry.art}.png`" class="entry-art" mode="aspectFit" />
         <text class="ui-text">{{ entry.label }}</text
         ><text class="entry-caption">{{ entry.caption }}</text>
       </view>

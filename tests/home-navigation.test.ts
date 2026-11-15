@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive, ref } from 'vue'
-import { loadRuntime, settle } from './support/page-runtime.ts'
+import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
 import { publicWishBody } from '../src/utils/wish.ts'
 import {
   mainNavigation,
@@ -176,4 +176,40 @@ test('同账号会话更新时重载首页，旧请求不能让加载状态卡�
   assert.equal(s.feed.busy.value, false)
   assert.equal(s.feed.rows.value[0].id, 'renewed-session')
   s.hooks.unload!()
+})
+
+test('个人页心愿状态进入对应筛选，游客先登录且不遗留筛选意图', async () => {
+  const user = reactive({ isLoggedIn: true, user: { id: 'synthetic-owner' } })
+  const calls: string[] = []
+  Object.assign(globalThis, {
+    uni: {
+      switchTab: ({ url, success }: { url: string; success: () => void }) => {
+        calls.push(url)
+        success()
+      },
+      navigateTo: ({ url }: { url: string }) => calls.push(url),
+    },
+  })
+  const page = await loadRuntime(
+    pageScript(new URL('../src/pages/profile/index.vue', import.meta.url)) +
+      '\nexport { openOwnWishes, wishStates }',
+    {
+      openMainPage,
+      useUserStore: () => user,
+      useThemeStore: () => ({ preference: 'system' }),
+      useEntryStore: () => ({}),
+      config: { useMock: false },
+    },
+  )
+  for (const { state } of page.wishStates) {
+    await page.openOwnWishes(state)
+    assert.equal(calls.at(-1), '/pages/wishes/index')
+    assert.deepEqual(takeMainQuery(), { own: '1', state })
+  }
+  await page.openOwnWishes()
+  assert.deepEqual(takeMainQuery(), { own: '1' })
+  user.isLoggedIn = false
+  await page.openOwnWishes('matching')
+  assert.equal(calls.at(-1), '/pages/login/index')
+  assert.equal(takeMainQuery(), null)
 })

@@ -6,7 +6,13 @@ defineProps<{ items: HotContentEntry[]; busy: boolean; error: string }>()
 
 <template>
   <view class="hot-list">
-    <navigator v-for="(item, index) in items" :key="item.id" :url="item.url" class="hot-row">
+    <navigator
+      v-for="(item, index) in items"
+      :key="item.id"
+      :url="item.url"
+      class="hot-row"
+      hover-class="tap-feedback"
+    >
       <text class="hot-rank">{{ index + 1 }}</text>
       <text class="hot-title">{{ item.title }}</text>
       <text class="hot-arrow">›</text>
@@ -29,6 +35,12 @@ defineProps<{ items: HotContentEntry[]; busy: boolean; error: string }>()
   align-items: center;
   gap: 16rpx;
   padding: 20rpx 24rpx;
+  min-height: 104rpx;
+  margin: 0;
+  line-height: 1.5;
+}
+.hot-row text {
+  margin: 0;
 }
 .hot-row + .hot-row {
   border-top: 1px solid var(--theme-line);

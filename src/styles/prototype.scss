@@ -12,6 +12,7 @@
 }
 .quick-entry > .navigator-wrap,
 .hero-button > .navigator-wrap,
+.matchmaking-entry > .navigator-wrap,
 .kindness-strip > .navigator-wrap,
 .menu-row > .navigator-wrap,
 .module-shortcuts .navigator-wrap,
@@ -125,7 +126,8 @@
   align-items: center;
   gap: 10rpx;
 }
-.page .small-link {
+.page .small-link,
+.page .small-link[role='button'] {
   margin: 0;
   padding: 0;
   border: 0;
@@ -137,7 +139,7 @@
 }
 .home-hero {
   position: relative;
-  min-height: 316rpx;
+  min-height: 252rpx;
   overflow: hidden;
   border-radius: 30rpx;
   background: #ffecdb;
@@ -179,11 +181,12 @@
 }
 .quick-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8rpx;
   padding: 28rpx 0;
 }
-.page .quick-entry {
+.page .quick-entry,
+.page .quick-entry[role='button'] {
   display: flex;
   align-items: center;
   flex-direction: column;
@@ -213,7 +216,8 @@
   font-size: 20rpx;
   font-weight: 400;
 }
-.page .kindness-strip {
+.page .kindness-strip,
+.page .kindness-strip[role='button'] {
   display: flex;
   align-items: center;
   gap: 12rpx;

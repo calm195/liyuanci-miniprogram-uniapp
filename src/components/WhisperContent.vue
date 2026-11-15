@@ -30,9 +30,12 @@ defineProps<{ content: PublicPost | PublicComment; hideTitle?: boolean }>()
   display: flex;
   align-items: center;
   gap: 14rpx;
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
   font-size: 24rpx;
   color: var(--theme-muted);
+}
+.whisper-identity text {
+  margin: 0;
 }
 .author-tag {
   padding: 4rpx 14rpx;

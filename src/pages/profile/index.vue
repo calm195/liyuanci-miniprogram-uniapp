@@ -2,8 +2,11 @@
 import { computed } from 'vue'
 import { dictionaryLabel } from '@/features/dictionaries/catalog'
 import { openMainPage } from '@/utils/navigation'
-function openOwnWishes() {
-  if (user.isLoggedIn) return openMainPage('/pages/wishes/index?own=1')
+function openOwnWishes(state = '') {
+  if (user.isLoggedIn)
+    return openMainPage(
+      `/pages/wishes/index?own=1${state ? `&state=${encodeURIComponent(state)}` : ''}`,
+    )
   uni.navigateTo({ url: '/pages/login/index' })
 }
 import { onPullDownRefresh } from '@dcloudio/uni-app'
@@ -50,7 +53,7 @@ const groups = [
   ],
   [
     { label: '悄悄话设置', icon: 'settings', url: '/pages/whispers/settings' },
-    { label: '悄悄话', icon: 'chat', url: '/pages/whispers/mine' },
+    { label: '我的心事', icon: 'chat', url: '/pages/whispers/mine' },
     { label: '时光胶囊', icon: 'clock', url: '/pages/capsules/index' },
   ],
   [
@@ -90,22 +93,25 @@ onPullDownRefresh(async () => {
 </script>
 <template>
   <AppPage tab="mine" title="我的">
-    <view class="profile-heading">
-      <ProfileAvatar :src="user.user?.avatar_url" class="profile-avatar" />
-      <view class="profile-copy">
+    <navigator
+      class="profile-heading"
+      hover-class="tap-feedback"
+      :url="user.isLoggedIn ? '/pages/settings/index' : '/pages/login/index'"
+    >
+      <!-- 横排放在原生 view 内，避免公共 navigator 块级样式覆盖微信端布局。 -->
+      <view class="profile-heading-row">
+        <view class="profile-avatar">
+          <ProfileAvatar :src="user.user?.avatar_url" :size="88" />
+        </view>
         <text class="profile-name">{{
           user.user?.nickname || (user.isLoggedIn ? '一条热心的锦鲤' : '遇见你，真好')
         }}</text>
         <text class="category-pill mint">{{
           user.isLoggedIn && !user.validated ? '资格待校验' : user.label
         }}</text>
+        <text class="profile-arrow" aria-hidden="true">→</text>
       </view>
-      <navigator
-        :url="user.isLoggedIn ? '/pages/settings/index' : '/pages/login/index'"
-        class="small-link"
-        ><AppIcon name="chevron" :size="34"
-      /></navigator>
-    </view>
+    </navigator>
     <view class="profile-tools">
       <button
         :loading="isPageActionPending('src-pages-profile-index.vue-action-1')"
@@ -118,16 +124,10 @@ onPullDownRefresh(async () => {
         {{ themeOptions[themeIndex]?.label }}
       </button>
     </view>
-    <view class="profile-banner">
-      <text class="section-title">把善意，攒成好运</text>
-      <text>{{
-        user.isLoggedIn
-          ? '每一个认真回应，都会让心愿更近一点。'
-          : '登录后，记录属于你的心愿与回响。'
-      }}</text>
-      <view role="button" @click="runPageAction(() => openOwnWishes())">{{
-        user.isLoggedIn ? '看看我的心愿 →' : '微信登录 →'
-      }}</view>
+    <view v-if="!user.isLoggedIn" class="profile-banner">
+      <text class="section-title">记录你的心愿与回响</text>
+      <text>登录后查看心愿、应愿进度和收到的回复。</text>
+      <navigator url="/pages/login/index">微信登录 →</navigator>
     </view>
     <view
       v-if="
@@ -150,10 +150,7 @@ onPullDownRefresh(async () => {
     <view class="menu-panel">
       <view class="section-heading"
         ><text class="section-title">我的心愿</text
-        ><view
-          role="button"
-          class="small-link"
-          @click="runPageAction(() => openMainPage('/pages/wishes/index?own=1'))"
+        ><view role="button" class="small-link" @click="runPageAction(() => openOwnWishes())"
           >查看全部 ›</view
         ></view
       >
@@ -162,9 +159,8 @@ onPullDownRefresh(async () => {
           v-for="item in wishStates"
           :key="item.state"
           role="button"
-          @click="
-            runPageAction(() => openMainPage(`/pages/wishes/index?own=1&state=${item.state}`))
-          "
+          hover-class="tap-feedback"
+          @click="runPageAction(() => openOwnWishes(item.state))"
           ><AppIcon :name="item.icon" :size="46" /><text class="ui-text">{{
             dictionaryLabel('wish_state', item.state, item.label).replace(/(?:的)?心愿$/, '')
           }}</text></view
@@ -211,6 +207,46 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.profile-heading {
+  margin: 0;
+  color: var(--theme-ink);
+}
+.profile-heading-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  gap: 16rpx;
+}
+.profile-heading-row .profile-avatar {
+  flex: 0 0 88rpx;
+  width: 88rpx;
+  height: 88rpx;
+}
+
+.profile-heading-row .profile-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 34rpx;
+}
+.profile-heading-row .category-pill {
+  flex-shrink: 0;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 22rpx;
+  padding: 8rpx 12rpx;
+}
+.profile-heading-row .profile-arrow {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 36rpx;
+  color: var(--theme-teal);
+}
 .notification-badge {
   flex-shrink: 0;
   min-width: 32rpx;

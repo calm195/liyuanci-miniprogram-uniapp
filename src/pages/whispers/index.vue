@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppPage from '@/components/AppPage.vue'
 import ContentStats from '@/components/ContentStats.vue'
+import ContentToolbar from '@/components/ContentToolbar.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import ContentSearchBar from '@/components/ContentSearchBar.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
@@ -27,8 +28,10 @@ const {
   <AppPage tab="whispers" title="悄悄话">
     <view class="module-hero">
       <image src="/static/illustrations/entry-whisper.png" class="module-art" mode="aspectFit" />
-      <text class="module-title">有些话，轻轻说就好</text>
-      <text class="module-subtitle">在悄悄鲤，让心事被温柔接住。</text>
+      <view class="module-copy">
+        <text class="module-title">有些话，轻轻说就好</text>
+        <text class="module-subtitle">在悄悄鲤，让心事被温柔接住。</text>
+      </view>
     </view>
     <view class="module-shortcuts">
       <navigator url="/pages/whispers/mine"
@@ -51,33 +54,43 @@ const {
       @search="search"
     />
     <view v-for="item in items" :key="item.id" class="whisper-preview">
-      <WhisperContent :content="item" /><ContentStats :views="item.view_count" />
-      <view class="card-footer">
-        <view class="meta-item">
-          <button
-            v-if="
-              !item.viewer_is_author &&
-              item.my_hug &&
-              canWhisperAction('PublicPost', item, 'whisperHugSet')
-            "
-            class="hug-button"
-            :aria-label="item.my_hug.active ? '取消抱抱' : '抱抱'"
-            :disabled="busy || writing || retryReady"
-            :loading="isPageActionPending('whisper-feed-hug:' + item.id)"
-            @click="runPageAction(() => hug(item), 'whisper-feed-hug:' + item.id)"
-          >
-            <AppIcon name="heart" :active="item.my_hug.active" :size="32" />
-            {{ item.hug_count }}
-          </button>
-          <text v-else>{{ item.hug_count }} 个抱抱</text
-          ><text class="ui-text"> · {{ item.comment_count }} 条暖评</text>
-        </view>
+      <navigator
+        class="whisper-content-link"
+        hover-class="tap-feedback"
+        :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
+      >
+        <WhisperContent :content="item" />
+      </navigator>
+      <ContentToolbar>
+        <button
+          v-if="
+            !item.viewer_is_author &&
+            item.my_hug &&
+            canWhisperAction('PublicPost', item, 'whisperHugSet')
+          "
+          class="content-action"
+          :aria-label="item.my_hug.active ? '取消抱抱' : '抱抱'"
+          :disabled="busy || writing || retryReady"
+          :loading="isPageActionPending('whisper-feed-hug:' + item.id)"
+          @click="runPageAction(() => hug(item), 'whisper-feed-hug:' + item.id)"
+        >
+          <AppIcon name="heart" :active="item.my_hug.active" :size="32" />
+          <text>抱抱 {{ item.hug_count }}</text>
+        </button>
+        <text v-else class="ui-text">抱抱 {{ item.hug_count }}</text>
         <navigator
-          class="small-link"
+          class="content-action"
+          :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
+        >
+          <AppIcon name="chat" :size="28" /><text>暖评 {{ item.comment_count }}</text>
+        </navigator>
+        <ContentStats :views="item.view_count" />
+        <navigator
+          class="content-action whisper-detail-link"
           :url="`/pages/whispers/detail?id=${encodeURIComponent(item.id)}`"
           >去听听 ›</navigator
         >
-      </view>
+      </ContentToolbar>
     </view>
     <text v-if="busy && !items.length" class="page-footnote">正在加载悄悄话…</text>
     <view v-if="ready && !items.length && !busy" class="empty-state"
@@ -108,18 +121,40 @@ const {
 </template>
 
 <style scoped>
-.meta-item button.hug-button {
-  display: inline-flex;
+.module-hero {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8rpx;
+  gap: 16rpx;
+  padding: 20rpx 0;
+}
+.module-copy {
+  flex: 1;
+  min-width: 0;
+}
+.module-art {
+  position: static;
+  order: 1;
+  flex: 0 0 88rpx;
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  opacity: 0.8;
+}
+.module-hero .module-title {
+  font-size: 34rpx;
+}
+.module-shortcuts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.module-shortcuts.module-shortcuts navigator {
+  flex-direction: row;
+  padding: 20rpx 12rpx;
+}
+.whisper-content-link {
   margin: 0;
-  min-width: 56rpx;
-  min-height: 56rpx;
-  padding: 0 12rpx;
-  font-size: 24rpx;
-  line-height: 2.2;
-  color: var(--theme-muted);
-  background: transparent;
+  color: var(--theme-ink);
+}
+.whisper-detail-link {
+  margin-left: auto;
 }
 </style>
