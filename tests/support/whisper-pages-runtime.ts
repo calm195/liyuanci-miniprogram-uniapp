@@ -5,6 +5,8 @@ import { defineStore, createPinia, setActivePinia } from 'pinia'
 import { session } from '../../src/utils/session.ts'
 import * as capsules from '../../src/utils/capsules.ts'
 import * as content from '../../src/utils/whisper-content.ts'
+import { matchesSchema } from '../../src/utils/whispers-schema.ts'
+import { whisperSchemas } from '../../src/utils/whispers-contract-extensions.ts'
 import { loadRuntime, pageScript, settle } from './page-runtime.ts'
 import { whispersRuntime, WhisperTestError as RequestError } from './whispers-runtime.ts'
 const fixture = JSON.parse(
@@ -29,7 +31,21 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
   else session.setToken('synthetic-whisper-pages')
   const user = reactive({ user: guest ? null : { id: 'synthetic-owner' }, validated: true })
   const calls: Input[] = []
-  const config = { useMock: false }
+  const config = { useMock: false, apiBaseUrl: 'https://synthetic.invalid/api/v1' }
+  const preferenceStorage = new Map<string, string>()
+  const preference = await loadRuntime(
+    readFileSync(new URL('../../src/utils/whisper-comment-preference.ts', import.meta.url), 'utf8'),
+    {
+      ...content,
+      config,
+      matchesSchema,
+      whisperSchemas,
+      uni: {
+        getStorageSync: (key: string) => preferenceStorage.get(key) ?? '',
+        setStorageSync: (key: string, value: string) => preferenceStorage.set(key, value),
+      },
+    },
+  )
   const moduleConfig = {
     ...sample('ModuleConfig'),
     server_now: String(sample('ModuleConfig').server_now),
@@ -288,6 +304,54 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       useWhisperPage: controller.useWhisperPage,
     },
   )
+  const commentEditor = await loadRuntime(
+    readFileSync(
+      new URL('../../src/composables/use-whisper-comment-editor.ts', import.meta.url),
+      'utf8',
+    ),
+    {
+      ...platform,
+      ...api,
+      ...content,
+      ...preference,
+      useUserStore: () => user,
+      session,
+      useWhispersStore: () => module,
+      useWhisperPage: controller.useWhisperPage,
+    },
+  )
+  const readyListeners = new Set<() => void>()
+  const eventBus = {
+    $on: (_event: string, fn: () => void) => readyListeners.add(fn),
+    $off: (_event: string, fn: () => void) => readyListeners.delete(fn),
+    $emit: (event: string) => {
+      if (event === 'auth:ready') for (const fn of readyListeners) fn()
+    },
+  }
+  const entryModule = await loadRuntime(
+    readFileSync(new URL('../../src/stores/entry.ts', import.meta.url), 'utf8'),
+    {
+      defineStore,
+      session,
+      RequestError,
+      useUserStore: () => user,
+      uni: eventBus,
+      getModuleGuide: async () => ({ version: 0, modules: [], acknowledged_version: 0 }),
+      acknowledgeGuide: async () => ({}),
+    },
+  )
+  const entry = entryModule.useEntryStore()
+  const login = await loadRuntime(
+    readFileSync(new URL('../../src/composables/use-login.ts', import.meta.url), 'utf8'),
+    {
+      ...platform,
+      onUnmounted: () => {},
+      useEntryStore: () => entry,
+      session,
+      useUserStore: () => user,
+      uni: eventBus,
+    },
+  )
   const exports: Record<string, string> = {
     'capsules/index': 'items,cursor,ready,load,page',
     'capsules/create': 'body,date,time,second,accepted,receipt,canCreate,load,submit,page',
@@ -297,9 +361,9 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     nickname: 'state,label,canSave,load,save,page',
     mine: 'posts,cursor,ready,load,page',
     settings:
-      'tab,state,label,canSave,comments,cursor,ready,load,switchTab,withdraw,openComment,save,page',
+      'tab,state,label,canSave,comments,cursor,ready,load,switchTab,withdraw,openComment,save,page,identityMode,identityTags,identityNotice,saveIdentity',
     detail:
-      'post,ownerPost,comments,cursor,commentsError,load,block,hug,hugCelebrating,edit,cancelEdit,editing,editor,page',
+      'post,ownerPost,comments,cursor,commentsError,load,block,hug,hugCelebrating,edit,cancelEdit,editing,editor,page,openComment,commentEditor',
     'comment-editor': 'id,postId,record,post,body,mode,tags,nickname,canSubmit,load,submit,page',
     notifications: 'items,cursor,ready,capsule,capsuleNotice,unread,load,markRead,open,page',
     help: 'directory,load,page',
@@ -313,6 +377,8 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
         import.meta.url,
       ),
     ) + `\nexport { ${exports[name]} }`
+  if (name === 'comment-editor')
+    source = `const editor = useWhisperCommentEditor(); const { ${exports[name]}, open, close, expanded, rootId, replyId } = editor; onLoad((query) => { id.value = query.id ?? ''; postId.value = query.postId ?? ''; rootId.value = query.rootId ?? ''; replyId.value = query.replyId ?? ''; }); onShow(() => { void load(); }); export { ${exports[name]}, open, close, expanded, rootId, replyId };`
   if (name === 'editor')
     source = source.replace(
       'const { id, page, load } = editor',
@@ -323,6 +389,8 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     uni: { navigateTo: ({ url }: { url: string }) => routes.push(url) },
     ...api,
     ...content,
+    ...preference,
+    useUserStore: () => user,
     ...(name.startsWith('capsules/') ? capsules : {}),
 
     session,
@@ -330,13 +398,19 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     useWhispersStore: () => module,
     useWhisperPage: controller.useWhisperPage,
     useWhisperFeed: feed.useWhisperFeed,
+    useLogin: login.useLogin,
+    useLoginRefresh: login.useLoginRefresh,
     useWhisperPostEditor: postEditor.useWhisperPostEditor,
+    useWhisperCommentEditor: commentEditor.useWhisperCommentEditor,
   })
   for (const fn of hooks.load!) fn(query)
   for (const fn of hooks.show!) fn()
   await settle()
   return {
     runtime,
+    preference,
+    preferenceStorage,
+    entry,
     routes,
     calls,
     setComment: (value: Record<string, unknown>) => {

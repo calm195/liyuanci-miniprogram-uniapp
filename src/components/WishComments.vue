@@ -2,6 +2,9 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import CommentThread from '@/components/CommentThread.vue'
+import CommentActionBar from '@/components/CommentActionBar.vue'
+import CommentReplies from '@/components/CommentReplies.vue'
+import CommentComposer from '@/components/CommentComposer.vue'
 import {
   listWishComments,
   listOwnWishComments,
@@ -11,7 +14,12 @@ import {
   setWishComments,
   interactionKey,
 } from '@/api/interactions'
-import type { WishComment, WishCommentInput } from '@/types/interactions'
+import type { WishComment } from '@/types/interactions'
+import {
+  useWishCommentCommands,
+  type CommentCommand,
+  type CommentControlCommand,
+} from '@/stores/wish-comment-commands'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 const props = defineProps<{
@@ -24,6 +32,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ refresh: [] }>()
 const user = useUserStore()
+const recovery = useWishCommentCommands()
 const roots = ref<WishComment[]>([])
 const supplements = ref<WishComment[]>([])
 const own = ref<WishComment[]>([])
@@ -31,20 +40,40 @@ const rootCursor = ref<string | null>(null)
 const supplementCursor = ref<string | null>(null)
 const ownCursor = ref<string | null>(null)
 const replies = ref<Record<string, { items: WishComment[]; cursor: string | null }>>({})
+const expandedReplies = ref<Record<string, boolean>>({})
 const busy = ref(false)
 const writing = ref(false)
 const error = ref('')
 const body = ref('')
 const kind = ref<'comment' | 'author_supplement'>('comment')
+const composerOpen = ref(false)
+const ownExpanded = ref(false)
 const reply = ref<WishComment | null>(null)
 const editing = ref<WishComment | null>(null)
-const pending = ref<{ input: WishCommentInput; key: string; id?: string; version?: number } | null>(
-  null,
-)
-type ControlCommand =
-  | { kind: 'withdraw'; comment: WishComment; key: string }
-  | { kind: 'setting'; wishId: string; version: number; open: boolean; key: string }
-const pendingControl = ref<ControlCommand | null>(null)
+const pending = ref<CommentCommand | null>(null)
+const pendingControl = ref<CommentControlCommand | null>(null)
+function rememberCommand() {
+  recovery.save(props.wishId, { pending: pending.value, control: pendingControl.value })
+}
+function restoreCommand() {
+  const saved = recovery.get(props.wishId)
+  pending.value = saved?.pending ?? null
+  pendingControl.value = saved?.control ?? null
+  if (pending.value) {
+    body.value = pending.value.input.body
+    kind.value = pending.value.input.kind
+    composerOpen.value = true
+  }
+  if (pending.value || pendingControl.value) error.value = '操作结果尚未确认，请使用原请求重试。'
+}
+function revokeOnDenied(failure: unknown) {
+  const status = (failure as { statusCode?: number }).statusCode
+  if (status !== 401 && status !== 403) return false
+  recovery.remove(props.wishId)
+  clear()
+  error.value = '当前评论访问权限已变化，请刷新后核对。'
+  return true
+}
 let generation = 0
 let readGeneration = 0
 let mounted = true
@@ -97,8 +126,9 @@ async function load() {
     own.value = results[2].items
     ownCursor.value = results[2].next_cursor
     replies.value = {}
-  } catch {
-    if (active()) error.value = '评论暂不可读取，请重试。'
+    expandedReplies.value = {}
+  } catch (failure) {
+    if (active() && !revokeOnDenied(failure)) error.value = '评论暂不可读取，请重试。'
   } finally {
     if (active()) busy.value = false
   }
@@ -130,8 +160,8 @@ async function more(section: 'comment' | 'author_supplement' | 'own') {
     if (section === 'comment') rootCursor.value = result.next_cursor
     else if (section === 'own') ownCursor.value = result.next_cursor
     else supplementCursor.value = result.next_cursor
-  } catch {
-    if (active()) error.value = '评论分页读取失败，请重试。'
+  } catch (failure) {
+    if (active() && !revokeOnDenied(failure)) error.value = '评论分页读取失败，请重试。'
   } finally {
     if (active()) busy.value = false
   }
@@ -158,14 +188,26 @@ async function expand(root: WishComment) {
       ],
       cursor: result.next_cursor,
     }
-  } catch {
-    if (active()) error.value = '楼内回复读取失败，请重试。'
+  } catch (failure) {
+    if (active() && !revokeOnDenied(failure)) error.value = '楼内回复读取失败，请重试。'
   } finally {
     if (active()) busy.value = false
   }
 }
+async function toggleReplies(root: WishComment) {
+  if (!visible || !mounted) return
+  if (expandedReplies.value[root.id]) {
+    expandedReplies.value[root.id] = false
+    return
+  }
+  if (busy.value && !replies.value[root.id]) return
+  expandedReplies.value[root.id] = true
+  // 收起只改变可见性，重新展开沿用已读内容和后续游标。
+  if (!replies.value[root.id]) await expand(root)
+}
 function prepareSupplement() {
   if (locked.value) return
+  composerOpen.value = true
   kind.value = 'author_supplement'
   reply.value = null
   editing.value = null
@@ -173,12 +215,14 @@ function prepareSupplement() {
 }
 function beginReply(item: WishComment) {
   if (locked.value) return
+  composerOpen.value = true
   reply.value = item
   kind.value = 'comment'
   editing.value = null
 }
 function beginEdit(item: WishComment) {
   if (locked.value) return
+  composerOpen.value = true
   editing.value = item
   reply.value = null
   body.value = item.body ?? ''
@@ -186,13 +230,15 @@ function beginEdit(item: WishComment) {
 }
 function cancel() {
   if (locked.value) return
+  composerOpen.value = false
   reply.value = null
   editing.value = null
   body.value = ''
   kind.value = 'comment'
 }
 async function submit() {
-  if (!visible || writing.value || pendingControl.value || !canWrite.value) return
+  if (!visible || writing.value || pendingControl.value || (!canWrite.value && !pending.value))
+    return
   error.value = ''
   if (!pending.value) {
     if (!body.value.trim() || Array.from(body.value).length > 500) {
@@ -226,6 +272,7 @@ async function submit() {
     }
   }
   const command = pending.value
+  rememberCommand()
   const active = ticket()
   writing.value = true
   try {
@@ -239,6 +286,7 @@ async function submit() {
     if (!active()) return
     own.value = [result, ...own.value.filter((item) => item.id !== result.id)]
     pending.value = null
+    rememberCommand()
     writing.value = false
     cancel()
     uni.$emit('app:notice', { message: '已提交评论，审核通过后公开', kind: 'success' })
@@ -246,8 +294,10 @@ async function submit() {
   } catch (failure) {
     if (!active()) return
     const status = (failure as { statusCode?: number }).statusCode ?? 0
-    if (status >= 400 && status < 500) {
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
       pending.value = null
+      rememberCommand()
+      revokeOnDenied(failure)
       error.value = '评论或原帖状态已变化，请刷新核对后重新提交。'
       emit('refresh')
     } else error.value = '评论结果尚未确认，请使用原请求重试。'
@@ -258,6 +308,7 @@ async function submit() {
 async function runControl() {
   if (!visible || writing.value || !pendingControl.value) return
   const command = pendingControl.value
+  rememberCommand()
   const active = ticket()
   writing.value = true
   error.value = ''
@@ -266,6 +317,7 @@ async function runControl() {
     else await setWishComments(command.wishId, command.version, command.open, command.key)
     if (!active()) return
     pendingControl.value = null
+    rememberCommand()
     uni.$emit('app:notice', {
       message:
         command.kind === 'withdraw' ? '评论已撤回' : command.open ? '评论已开放' : '评论已关闭',
@@ -276,8 +328,10 @@ async function runControl() {
   } catch (failure) {
     if (!active()) return
     const status = (failure as { statusCode?: number }).statusCode ?? 0
-    if (status >= 400 && status < 500) {
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
       pendingControl.value = null
+      rememberCommand()
+      revokeOnDenied(failure)
       error.value = '评论状态已变化，请刷新后核对。'
       emit('refresh')
     } else error.value = '操作结果尚未确认，请使用原请求重试。'
@@ -308,6 +362,7 @@ function clear() {
   supplements.value = []
   own.value = []
   replies.value = {}
+  expandedReplies.value = {}
   rootCursor.value = null
   supplementCursor.value = null
   ownCursor.value = null
@@ -317,6 +372,8 @@ function clear() {
   writing.value = false
   error.value = ''
   kind.value = 'comment'
+  composerOpen.value = false
+  ownExpanded.value = false
   body.value = ''
   reply.value = null
   editing.value = null
@@ -331,7 +388,10 @@ watch(
   ],
   () => {
     clear()
-    if (visible) void load()
+    if (visible) {
+      restoreCommand()
+      void load()
+    }
   },
   { immediate: true, flush: 'sync' },
 )
@@ -342,6 +402,7 @@ onHide(() => {
 onShow(() => {
   if (visible) return
   visible = true
+  restoreCommand()
   void load()
 })
 onUnmounted(() => {
@@ -351,7 +412,17 @@ onUnmounted(() => {
 </script>
 <template>
   <view class="card wish-comments"
+    ><text v-if="pending || pendingControl" class="comment-hint"
+      >操作结果尚未确认。请使用原请求重试，核实后再进行新操作。</text
     ><button v-if="pendingControl" :disabled="writing" @click="runControl">原请求重试</button
+    ><view class="comment-title"
+      ><text class="section-title">聊聊这个心愿</text
+      ><button v-if="canWrite || pending" @click="composerOpen = !composerOpen">
+        {{ composerOpen ? '收起输入' : '写评论' }}</button
+      ><button v-if="owner" :disabled="locked" @click="toggleOpen">
+        {{ commentsOpen === false ? '开放评论' : '关闭评论' }}
+      </button></view
+    ><text v-if="commentsOpen === false">评论已关闭，已公开评论仍可阅读。</text
     ><view v-if="supplements.length || owner" class="supplements"
       ><text class="section-title">作者补充</text
       ><CommentThread
@@ -366,12 +437,6 @@ onUnmounted(() => {
       ><button v-if="owner && canWrite" :disabled="locked" @click="prepareSupplement">
         ＋ 补充信息
       </button></view
-    ><view class="comment-title"
-      ><text class="section-title">评论</text
-      ><button v-if="owner" :disabled="locked" @click="toggleOpen">
-        {{ commentsOpen === false ? '开放评论' : '关闭评论' }}
-      </button></view
-    ><text v-if="commentsOpen === false">评论已关闭，已公开评论仍可阅读。</text
     ><CommentThread
       v-for="item in roots"
       :key="item.id"
@@ -379,80 +444,76 @@ onUnmounted(() => {
       :body="item.body"
       :author="isAuthor(item)"
       :time="item.published_at"
-      ><template #actions
-        ><button
-          v-if="canWrite && item.body && item.status !== 'withdrawn'"
-          :disabled="locked"
-          @click="beginReply(item)"
-        >
-          回复</button
-        ><button
-          v-if="item.reply_count || replies[item.id]"
-          :disabled="busy || (replies[item.id] && !replies[item.id]?.cursor)"
-          @click="expand(item)"
-        >
-          {{
-            replies[item.id]
-              ? replies[item.id]?.cursor
-                ? '更多回复'
-                : '全部回复已展开'
-              : `展开 ${item.reply_count ?? ''} 条回复`
-          }}
-        </button></template
-      ><CommentThread
-        v-for="child in replies[item.id]?.items ?? []"
-        :key="child.id"
-        nested
-        :label="label(child)"
-        :body="child.body"
-        :author="isAuthor(child)"
-        :time="child.published_at"
-        :reply-to="child.reply_to_label"
-        ><template #actions
-          ><button
-            v-if="canWrite && child.body && child.status !== 'withdrawn'"
-            :disabled="locked"
-            @click="beginReply(child)"
-          >
-            回复
-          </button></template
-        ></CommentThread
-      ></CommentThread
-    ><text v-if="!roots.length && !busy">还没有公开评论，来聊聊吧。</text
+      ><template #actions>
+        <CommentActionBar
+          :can-reply="!!(canWrite && item.body && item.status !== 'withdrawn')"
+          :reply-disabled="locked"
+          :can-expand="!!(item.reply_count || replies[item.id])"
+          :expanded="!!expandedReplies[item.id]"
+          :reply-count="item.reply_count || replies[item.id]?.items.length"
+          :expand-disabled="busy && !expandedReplies[item.id] && !replies[item.id]"
+          @reply="beginReply(item)"
+          @toggle="toggleReplies(item)"
+        />
+      </template>
+      <CommentReplies
+        :expanded="!!expandedReplies[item.id]"
+        :loading="busy"
+        :has-more="!!replies[item.id]?.cursor"
+        @more="expand(item)"
+      >
+        <CommentThread
+          v-for="child in replies[item.id]?.items ?? []"
+          :key="child.id"
+          nested
+          :label="label(child)"
+          :body="child.body"
+          :author="isAuthor(child)"
+          :time="child.published_at"
+          :reply-to="child.reply_to_label"
+          ><template #actions>
+            <CommentActionBar
+              :can-reply="!!(canWrite && child.body && child.status !== 'withdrawn')"
+              :reply-disabled="locked"
+              @reply="beginReply(child)"
+            /> </template
+        ></CommentThread>
+      </CommentReplies> </CommentThread
+    ><text v-if="!roots.length && !busy && !error">还没有公开评论，来聊聊吧。</text
     ><button v-if="rootCursor" :disabled="busy" @click="more('comment')">更多评论</button
-    ><navigator v-if="!user.isLoggedIn" url="/pages/login/index">登录后评论</navigator
-    ><view v-if="canWrite" class="comment-composer"
-      ><text>{{
+    ><LoginLink v-if="!user.isLoggedIn">登录后评论</LoginLink
+    ><CommentComposer
+      v-if="canWrite || pending"
+      v-model="body"
+      :expanded="composerOpen"
+      :title="
         editing
           ? '修改我的评论'
           : kind === 'author_supplement'
-            ? '作者补充（不改变心愿期限或应愿申请）'
+            ? '补充心愿'
             : reply
               ? `回复 ${label(reply)}`
-              : '写一条评论'
-      }}</text
-      ><text class="comment-hint"
-        >评论审核通过后公开。希望帮助许愿人，可通过「我来应愿」提交申请。</text
-      ><textarea
-        v-model="body"
-        :disabled="locked"
-        :maxlength="500"
-        placeholder="认真回应，温柔交流（最多500字）"
-      /><text>{{ Array.from(body).length }}/500</text
-      ><button
-        :disabled="writing || !!pendingControl"
-        :loading="isPageActionPending('wish-comment-submit')"
-        @click="runPageAction(submit, 'wish-comment-submit')"
-      >
-        {{ pending ? '使用原请求重试' : '提交审核' }}</button
-      ><button
-        v-if="editing || reply || kind === 'author_supplement'"
-        :disabled="locked"
-        @click="cancel"
-      >
-        取消
-      </button></view
-    ><view v-if="own.length" class="own-comments"
+              : '留下一句鼓励'
+      "
+      :disabled="locked"
+      :submit-disabled="writing || !!pendingControl"
+      :loading="isPageActionPending('wish-comment-submit')"
+      :submit-label="pending ? '核实原请求' : editing ? '保存修改' : '发送'"
+      :maxlength="500"
+      :focus="composerOpen"
+      :can-cancel="!!(editing || reply || kind === 'author_supplement')"
+      :cancel-disabled="locked"
+      @close="composerOpen = false"
+      @submit="runPageAction(submit, 'wish-comment-submit')"
+      @cancel="cancel" />
+    <button
+      v-if="own.length"
+      class="own-toggle"
+      :aria-expanded="ownExpanded"
+      @click="ownExpanded = !ownExpanded"
+    >
+      我的评论记录（{{ own.length }}）{{ ownExpanded ? '收起' : '查看' }}</button
+    ><view v-if="own.length" v-show="ownExpanded" class="own-comments"
       ><text class="section-title">我的评论记录</text
       ><view v-for="item in own" :key="item.id" class="own-comment"
         ><text
@@ -495,26 +556,22 @@ onUnmounted(() => {
   justify-content: space-between;
 }
 .comment-title button,
-.wish-comments :deep(.comment-actions button),
 .own-actions button {
   margin: 0;
   padding: 4rpx 16rpx;
   min-height: 52rpx;
   font-size: 24rpx;
-  background: var(--theme-bg);
+  border: 0;
+  background: transparent;
   color: var(--theme-teal);
 }
-.comment-composer,
 .own-comment {
   display: flex;
   flex-direction: column;
   gap: 14rpx;
   padding: 20rpx;
-  background: var(--theme-bg);
+  background: var(--theme-canvas);
   border-radius: 18rpx;
-}
-.comment-composer textarea {
-  width: 100%;
 }
 .own-comments {
   display: flex;
@@ -531,5 +588,8 @@ onUnmounted(() => {
 .supplements {
   border-bottom: 2rpx solid var(--theme-line);
   padding-bottom: 24rpx;
+}
+.own-comments[hidden] {
+  display: none !important;
 }
 </style>

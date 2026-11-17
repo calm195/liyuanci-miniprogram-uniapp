@@ -38,21 +38,42 @@ test('REQ-010：暖评500码点可提交，超长／全空白／孤立代理项�
   }
   assert.equal(s.calls.filter((x) => x.method === 'POST').length, 0)
   r.body.value = '😀'.repeat(500)
-  r.mode.value = 'named'
+  s.preference.saveCommentIdentityPreference(
+    'synthetic-owner',
+    'named',
+    { campus: '', gender: '', grade: '' },
+    s.moduleConfig,
+    s.nickname(),
+  )
+  await r.load()
   await r.submit()
   assert.deepEqual(s.calls.find((x) => x.method === 'POST')!.data?.identity, {
     mode: 'named',
     nickname_version: 3,
   })
-  r.body.value = '合成半匿名暖评'
-  r.mode.value = 'semi'
-  r.tags.value = { campus: 'baoshan', gender: 'private', grade: 'first' }
-  await r.submit()
-  // 校区枚举严格由正式契约决定，非法标签不发送。
-  assert.equal(s.calls.filter((x) => x.method === 'PUT').length, 0)
-  r.tags.value = { campus: 'wushan', gender: 'undisclosed', grade: 'first' }
-  await r.submit()
-  assert.deepEqual(s.calls.find((x) => x.method === 'PUT')!.data?.identity, {
+  const semi = await setup('comment-editor', { postId })
+  semi.runtime.body.value = '合成半匿名暖评'
+  assert.throws(() =>
+    semi.preference.saveCommentIdentityPreference(
+      'synthetic-owner',
+      'semi',
+      { campus: 'baoshan', gender: 'private', grade: 'first' },
+      semi.moduleConfig,
+      semi.nickname(),
+    ),
+  )
+  // 校区枚举严格由正式契约决定，非法标签不能保存。
+  assert.equal(semi.calls.filter((x) => x.method === 'POST').length, 0)
+  semi.preference.saveCommentIdentityPreference(
+    'synthetic-owner',
+    'semi',
+    { campus: 'wushan', gender: 'undisclosed', grade: 'first' },
+    semi.moduleConfig,
+    semi.nickname(),
+  )
+  await semi.runtime.load()
+  await semi.runtime.submit()
+  assert.deepEqual(semi.calls.find((x) => x.method === 'POST')!.data?.identity, {
     mode: 'semi',
     tags: { campus: 'wushan', gender: 'undisclosed', grade: 'first' },
     dictionary_version: 4,
@@ -345,4 +366,71 @@ test('广场卡片直接抱抱与取消，列表只采用权威回执并串行�
   await s.runtime.hug(s.runtime.items.value[0])
   assert.equal(s.runtime.items.value[0].hug_count, 70)
   assert.equal(s.runtime.items.value[0].my_hug.active, false)
+})
+
+test('详情内回复收起重开保留草稿，未知结果期间不能换回复目标', async () => {
+  const s = await setup('comment-editor', { postId })
+  const r = s.runtime
+  await r.open({ postId })
+  r.body.value = '留在当前页的回复草稿'
+  r.close()
+  assert.equal(r.expanded.value, false)
+  await r.open({ postId })
+  assert.equal(r.body.value, '留在当前页的回复草稿')
+  assert.equal(r.expanded.value, true)
+  const original = s.defaultTransport()
+  let fail = true
+  s.transport(async (input) => {
+    if (input.method === 'POST' && fail) {
+      fail = false
+      throw new RequestError('合成响应丢失', -1)
+    }
+    return original(input)
+  })
+  await r.submit()
+  assert.equal(r.page.retryReady.value, true)
+  r.close()
+  await r.open({ postId, rootId: 'another-root', replyId: 'another-reply' })
+  assert.equal(r.rootId.value, '')
+  assert.equal(r.replyId.value, '')
+  assert.equal(r.body.value, '留在当前页的回复草稿')
+  await r.page.retry()
+  const writes = s.calls.filter((input) => input.method === 'POST')
+  assert.deepEqual(writes[0], writes[1])
+  assert.deepEqual(s.routes, [])
+})
+
+test('游客点楼内回复后登录，延迟原帖读取仍展开原回复对象', async () => {
+  const s = await setup('detail', { id: postId }, true)
+  const r = s.runtime
+  await r.openComment(commentId, commentId)
+  assert.equal(s.entry.loginVisible, true)
+  assert.equal(r.commentEditor.expanded.value, false)
+  const original = s.defaultTransport()
+  let finish!: () => void
+  let delayed = false
+  s.transport(async (input) => {
+    if (input.url === `/whispers/posts/${postId}` && !delayed) {
+      delayed = true
+      await new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    }
+    return original(input)
+  })
+  session.setToken('synthetic-inline-login')
+  s.user.user = { id: 'synthetic-inline-owner' }
+  s.user.validated = true
+  const completing = s.entry.completeLogin()
+  await settle()
+  assert.equal(delayed, true)
+  assert.equal(r.commentEditor.expanded.value, false)
+  finish()
+  await completing
+  await settle()
+  assert.equal(r.commentEditor.expanded.value, true)
+  assert.equal(r.commentEditor.rootId.value, commentId)
+  assert.equal(r.commentEditor.replyId.value, commentId)
+  assert.equal(r.commentEditor.post.value.id, postId)
+  assert.deepEqual(s.routes, [])
 })

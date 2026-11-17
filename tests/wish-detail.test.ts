@@ -65,6 +65,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   let token = 'synthetic-token'
   let row = structuredClone(initial)
   const pages: string[] = []
+  let continueLogin: (() => void | Promise<void>) | undefined
   const scrolls: { selector: string; fail: () => void }[] = []
   const gates: {
     kind: string
@@ -121,6 +122,11 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   Object.assign(globalThis, {
     __detail: {
       ...api,
+      useLogin: () => ({
+        requestLogin: (after: () => void | Promise<void>) => {
+          continueLogin = after
+        },
+      }),
       useContentView: () => async () => {},
       useContentShare: () => {},
       shareReference,
@@ -169,7 +175,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
+    `const { useLogin, useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -181,6 +187,12 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     pages,
     scrolls,
     gates,
+    resumeLogin: async () => {
+      const after = continueLogin
+      continueLogin = undefined
+      await after?.()
+    },
+    loginPending: () => !!continueLogin,
     user,
     RequestError,
     storage,
@@ -366,19 +378,18 @@ test('登录后继续认证，审核未完成或取消时不打开操作，完�
   s.setToken('')
   s.user.validated = false
   await s.page.openSharedAction('apply')
-  assert.equal(s.gates[0]?.kind, 'login')
+  assert.equal(s.loginPending(), true)
+  assert.deepEqual(s.pages, [])
   const returnToDetail = async () => {
     s.hooks.show!()
     for (let i = 0; i < 20; i++) await Promise.resolve()
   }
-  s.hooks.hide!()
   s.setToken('synthetic-token')
   s.changeSession()
   s.user.user.verification = 'unverified'
   s.user.validated = true
-  s.gates[0]!.ready({ owner: s.user.user.id, epoch: 2 })
-  await returnToDetail()
-  assert.equal(s.gates[1]?.kind, 'verification')
+  await s.resumeLogin()
+  assert.equal(s.gates[0]?.kind, 'verification')
   s.hooks.hide!()
   await returnToDetail()
   assert.deepEqual(s.pages, [])
@@ -386,7 +397,7 @@ test('登录后继续认证，审核未完成或取消时不打开操作，完�
   await s.page.openSharedAction('apply')
   s.hooks.hide!()
   s.user.user.verification = 'verified'
-  s.gates[2]!.ready({ owner: s.user.user.id, epoch: 2 })
+  s.gates[1]!.ready({ owner: s.user.user.id, epoch: 2 })
   await returnToDetail()
   assert.deepEqual(s.pages, ['/pages/applications/index?wishId=synthetic-wish'])
   s.hooks.hide!()

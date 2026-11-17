@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useLogin } from '@/composables/use-login'
+const { requestLogin } = useLogin()
 import { openMainPage } from '@/utils/navigation'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import ShareActions from '@/components/ShareActions.vue'
@@ -7,7 +9,6 @@ import AppPage from '@/components/AppPage.vue'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import IdentityTags from '@/components/IdentityTags.vue'
 import ContentStats from '@/components/ContentStats.vue'
-import ContentToolbar from '@/components/ContentToolbar.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import WishImages from '@/components/WishImages.vue'
 import WishComments from '@/components/WishComments.vue'
@@ -40,6 +41,7 @@ const user = useUserStore()
 const recordView = useContentView('wish')
 const hiddenWishes = useHiddenWishes()
 const menuOpen = ref(false)
+const shareOpen = ref(false)
 const demo = useWishStore()
 const id = ref('')
 const reference = ref<string>()
@@ -367,7 +369,10 @@ async function openSharedAction(action: SharedAction) {
     }
     if (!active()) return
     if (!session.getToken()) {
-      await openGate('login')
+      requestLogin(async () => {
+        await load()
+        if (visible && currentWish.value?.id === target) await openSharedAction(action)
+      })
       return
     }
     if (!user.validated || !user.user) throw new Error('资格读取失败')
@@ -562,385 +567,569 @@ onPullDownRefresh(async () => {
 </script>
 
 <template>
-  <AppPage :hide-entry-prompts="sharedEntry">
-    <text v-if="!sharedEntry || currentWish" class="title">{{
-      content?.title || (sharedEntry ? '公开心愿' : '未命名心愿')
-    }}</text>
-    <text v-if="sharedEntry && error" class="notice">分享的心愿暂不可查看。</text>
-    <text v-if="browseOnly" class="notice">点击微信的「前往小程序」后可登录、认证和操作。</text>
-    <text v-if="!sharedEntry && config.useMock" class="notice"
-      >合成演示 · 详情只读，不发送 API</text
-    >
+  <AppPage responsive-padding :hide-entry-prompts="sharedEntry">
+    <view class="wish-experience">
+      <text v-if="sharedEntry && error" class="content-text notice">分享的心愿暂不可查看。</text>
+      <text v-if="browseOnly" class="content-text notice"
+        >点击微信的「前往小程序」后可登录、认证和操作。</text
+      >
+      <text v-if="!sharedEntry && config.useMock" class="content-text notice"
+        >合成演示 · 详情只读，不发送 API</text
+      >
 
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentWish" class="card">
-      <view class="detail-tags">
-        <text class="category-pill">{{
-          wishStateLabels[currentWish.current_state] || '未知状态'
-        }}</text>
-        <text v-if="content?.category" class="category-pill">{{
-          categories.find((item) => item.value === content?.category)?.label
-        }}</text>
-        <text v-if="content?.campus" class="category-pill mint">{{
-          campuses.find((item) => item.value === content?.campus)?.label
-        }}</text>
-        <text v-if="content?.reward_method" class="category-pill">{{
-          content.reward_text ||
-          rewards.find((item) => item.value === content?.reward_method)?.label
-        }}</text>
-        <button
-          v-if="moderationAvailable"
-          class="detail-icon-button"
-          aria-label="更多心愿操作"
-          :aria-expanded="menuOpen"
-          :disabled="busy || openingAction"
-          @click="menuOpen = !menuOpen"
-        >
-          <AppIcon name="more" :size="38" />
-        </button>
-      </view>
-      <view v-if="menuOpen && moderationAvailable" class="detail-menu">
-        <button
-          class="content-action"
-          :disabled="busy || openingAction"
-          :aria-pressed="contentHidden"
-          :loading="isPageActionPending('wish-hide-content')"
-          @click="runPageAction(toggleContentVisibility, 'wish-hide-content')"
-        >
-          {{ contentHidden ? '恢复显示此内容' : '不看此内容' }}
-        </button>
-        <button
-          :loading="isPageActionPending('wish-menu-report')"
-          :disabled="openingAction"
-          @click="runPageAction(() => openSharedAction('report'), 'wish-menu-report')"
-        >
-          举报
-        </button>
-        <button
-          v-if="publicContent?.author"
-          :loading="isPageActionPending('wish-menu-block')"
-          :disabled="openingAction"
-          @click="runPageAction(() => openSharedAction('block'), 'wish-menu-block')"
-        >
-          屏蔽此用户
-        </button>
-      </view>
-      <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
-      <template v-else-if="content">
-        <navigator
-          v-if="publicContent?.author?.id && publicContent.author.profile_available !== false"
-          class="wish-author"
-          hover-class="tap-feedback"
-          :url="`/pages/public-profile/index?id=${encodeURIComponent(publicContent.author.id)}`"
-        >
-          <ProfileAvatar :src="publicContent.author.avatar_url" :size="76" />
-          <view class="author-copy"
-            ><text class="author-name">{{ publicContent.author.nickname || '查看公开主页' }}</text>
-            <text v-if="publicContent.author.display_id" class="author-id"
-              >ID {{ publicContent.author.display_id }}</text
+      <text v-if="busy" class="content-text">加载中…</text>
+      <view v-if="currentWish" class="card wish-article">
+        <text v-if="currentWish.privacy_review_required" class="content-text">内容暂不可查看</text>
+        <template v-else-if="content">
+          <view class="article-heading">
+            <navigator
+              v-if="publicContent?.author?.id && publicContent.author.profile_available !== false"
+              class="wish-author"
+              hover-class="tap-feedback"
+              :url="`/pages/public-profile/index?id=${encodeURIComponent(publicContent.author.id)}`"
+            >
+              <ProfileAvatar :src="publicContent.author.avatar_url" :size="88" />
+              <view class="author-copy"
+                ><text class="content-text author-name">{{
+                  publicContent.author.nickname || '查看公开主页'
+                }}</text>
+                <IdentityTags :tags="publicContent.author.identity_tags" />
+                <text v-if="publicContent.author.display_id" class="content-text author-id"
+                  >ID {{ publicContent.author.display_id }}</text
+                >
+              </view>
+              <AppIcon name="chevron" :size="28" />
+            </navigator>
+            <view v-else-if="publicContent?.author" class="wish-author anonymous-author"
+              ><ProfileAvatar :src="publicContent.author.avatar_url" :size="88" /><view
+                class="author-copy"
+                ><text class="content-text author-name">{{
+                  publicContent.author.nickname || publicContent.author.display_id || '匿名同学'
+                }}</text
+                ><IdentityTags :tags="publicContent.author.identity_tags" /></view
+            ></view>
+            <text class="content-text wish-status">{{
+              wishStateLabels[currentWish.current_state] || '未知状态'
+            }}</text>
+          </view>
+          <text class="content-text wish-detail-title">{{
+            content.title || (sharedEntry ? '公开心愿' : '未命名心愿')
+          }}</text>
+          <text class="content-text whitespace-pre-wrap break-words">{{ content.body }}</text>
+          <WishImages v-if="detailImages.length" :images="detailImages" :wish-id="currentWish.id" />
+          <view class="article-meta">
+            <text v-if="content.category" class="content-text">{{
+              categories.find((item) => item.value === content?.category)?.label
+            }}</text>
+            <text v-if="content.campus" class="content-text">{{
+              campuses.find((item) => item.value === content?.campus)?.label
+            }}</text>
+            <text v-if="content.reward_method" class="content-text"
+              >报答：{{
+                content.reward_text ||
+                rewards.find((item) => item.value === content?.reward_method)?.label
+              }}</text
             >
           </view>
-          <AppIcon name="chevron" :size="28" />
-        </navigator>
-        <view v-else-if="publicContent?.author" class="wish-author anonymous-author"
-          ><ProfileAvatar :src="publicContent.author.avatar_url" :size="76" /><text
-            class="author-name"
-            >{{
-              publicContent.author.nickname || publicContent.author.display_id || '匿名同学'
+          <text
+            v-if="publicContent?.first_published_at || publicContent?.published_at"
+            class="content-text detail-time"
+            >发布
+            {{
+              displayTime(publicContent.first_published_at || publicContent.published_at || '')
             }}</text
-          ></view
-        >
-        <IdentityTags :tags="publicContent?.author?.identity_tags" />
-        <text class="whitespace-pre-wrap break-words">{{ content.body }}</text>
-        <WishImages v-if="detailImages.length" :images="detailImages" :wish-id="currentWish.id" />
-        <text
-          v-if="publicContent?.first_published_at || publicContent?.published_at"
-          class="detail-time"
-          >发布
-          {{
-            displayTime(publicContent.first_published_at || publicContent.published_at || '')
-          }}</text
-        >
-        <ContentToolbar>
-          <button
-            v-if="commentsAvailable"
-            class="content-action"
-            :loading="isPageActionPending('wish-open-comments')"
-            @click="runPageAction(openComments, 'wish-open-comments')"
           >
-            <AppIcon name="chat" :size="28" /><text
-              >评论 {{ publicContent?.comment_count ?? currentWish.comment_count ?? 0 }}</text
+
+          <text v-if="publicContent?.school_related" class="content-text">未经证实</text>
+          <text v-if="currentWish.expires_at" class="content-text detail-time"
+            >截止时间（北京时间）{{ displayTime(currentWish.expires_at) }}</text
+          >
+          <view class="detail-statistics">
+            <WishSupportButton
+              v-if="!browseOnly && supportState"
+              :wish-id="currentWish.id"
+              :count="supportState.support_count"
+              :supported="supportState.supported"
+            />
+            <ContentStats
+              :comments="publicContent?.comment_count ?? currentWish.comment_count"
+              :applications="publicContent?.application_count ?? currentWish.application_count"
+              :views="publicContent?.view_count ?? currentWish.view_count"
+            />
+          </view>
+          <view class="article-actions">
+            <FavoriteButton
+              v-if="!browseOnly && currentWish.current_state === 'published'"
+              kind="wish"
+              :target-id="currentWish.id"
+              :favorited="publicContent?.favorited ?? currentWish.favorited"
+            />
+            <button
+              v-if="sharedActions"
+              :disabled="busy || openingAction || applicationInProgress"
+              class="primary-button"
+              :loading="isPageActionPending('shared-wish-apply')"
+              @click="runPageAction(() => openSharedAction('apply'), 'shared-wish-apply')"
             >
-          </button>
-          <WishSupportButton
-            v-if="!browseOnly && supportState"
-            :wish-id="currentWish.id"
-            :count="supportState.support_count"
-            :supported="supportState.supported"
-          />
-          <FavoriteButton
-            v-if="!browseOnly && currentWish.current_state === 'published'"
+              {{ applicationInProgress ? '申请中' : '我来应愿' }}
+            </button>
+            <navigator
+              v-else-if="
+                !sharedEntry &&
+                !config.useMock &&
+                !applicationInProgress &&
+                !writing &&
+                !busy &&
+                canApplyToWish(user.user, user.validated, currentWish)
+              "
+              :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
+              class="primary-button apply-entry"
+              >我来应愿</navigator
+            >
+            <navigator
+              v-if="applicationInProgress"
+              class="primary-button apply-entry"
+              url="/pages/applications/index"
+              >查看应愿进度</navigator
+            >
+            <navigator
+              v-if="!sharedEntry && !writing && !busy && currentWish.own_content"
+              class="primary-button apply-entry"
+              :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
+              >查看应愿申请</navigator
+            >
+          </view>
+          <view class="article-secondary">
+            <button
+              v-if="!sharedEntry && shareTarget"
+              class="text-action"
+              :aria-expanded="shareOpen"
+              @click="shareOpen = !shareOpen"
+            >
+              分享心愿
+            </button>
+            <button
+              v-if="commentsAvailable"
+              class="text-action"
+              :loading="isPageActionPending('wish-open-comments')"
+              @click="runPageAction(openComments, 'wish-open-comments')"
+            >
+              查看评论
+            </button>
+            <button
+              v-if="
+                moderationAvailable ||
+                currentWish.own_content ||
+                allowed('exception-exit') ||
+                allowed('complete') ||
+                allowed('rollback')
+              "
+              class="text-action"
+              aria-label="更多心愿操作"
+              :aria-expanded="menuOpen"
+              :disabled="busy || openingAction"
+              @click="menuOpen = !menuOpen"
+            >
+              更多操作
+            </button>
+          </view>
+          <ShareActions
+            v-if="shareOpen && !sharedEntry && shareTarget"
             kind="wish"
-            :target-id="currentWish.id"
-            :favorited="publicContent?.favorited ?? currentWish.favorited"
+            :content="shareTarget"
           />
-          <ContentStats
-            :applications="publicContent?.application_count ?? currentWish.application_count"
-            :views="publicContent?.view_count ?? currentWish.view_count"
-          />
-        </ContentToolbar>
-        <text v-if="publicContent?.school_related">未经证实</text>
-        <text v-if="currentWish.expires_at" class="detail-time"
-          >截止时间（北京时间）{{ displayTime(currentWish.expires_at) }}</text
+          <view v-if="menuOpen && moderationAvailable" class="detail-menu">
+            <button
+              class="content-action"
+              :disabled="busy || openingAction"
+              :aria-pressed="contentHidden"
+              :loading="isPageActionPending('wish-hide-content')"
+              @click="runPageAction(toggleContentVisibility, 'wish-hide-content')"
+            >
+              {{ contentHidden ? '恢复显示此内容' : '不看此内容' }}
+            </button>
+            <button
+              :loading="isPageActionPending('wish-menu-report')"
+              :disabled="openingAction"
+              @click="runPageAction(() => openSharedAction('report'), 'wish-menu-report')"
+            >
+              举报
+            </button>
+            <button
+              v-if="publicContent?.author"
+              :loading="isPageActionPending('wish-menu-block')"
+              :disabled="openingAction"
+              @click="runPageAction(() => openSharedAction('block'), 'wish-menu-block')"
+            >
+              屏蔽此用户
+            </button>
+          </view>
+        </template>
+        <text v-else class="content-text">当前没有可展示的正文。</text>
+        <button
+          v-if="!content && !sharedEntry && !config.useMock"
+          class="text-action"
+          @click="menuOpen = !menuOpen"
         >
-      </template>
-      <text v-else>当前没有可展示的正文。</text>
-      <template v-if="!currentWish.privacy_review_required && currentWish.own_content">
-        <text v-if="currentWish.review_result?.reason"
-          >驳回原因：{{ currentWish.review_result.reason }}</text
-        >
-        <text v-if="currentWish.review_result?.revision_suggestion"
-          >修改建议：{{ currentWish.review_result.revision_suggestion }}</text
-        >
-      </template>
-    </view>
-    <view v-if="sharedActions" class="card detail-actions">
-      <button
-        :disabled="busy || openingAction || applicationInProgress"
-        class="primary-button"
-        :loading="isPageActionPending('shared-wish-apply')"
-        @click="runPageAction(() => openSharedAction('apply'), 'shared-wish-apply')"
-      >
-        {{ applicationInProgress ? '申请中' : '我来应愿' }}
-      </button>
-      <navigator v-if="applicationInProgress" class="content-action" url="/pages/applications/index"
-        >查看应愿进度 ›</navigator
-      >
-    </view>
-    <view v-if="!sharedEntry && currentWish && !config.useMock" class="card detail-actions">
+          更多操作
+        </button>
+        <template v-if="!currentWish.privacy_review_required && currentWish.own_content">
+          <text v-if="currentWish.review_result?.reason" class="content-text"
+            >驳回原因：{{ currentWish.review_result.reason }}</text
+          >
+          <text v-if="currentWish.review_result?.revision_suggestion" class="content-text"
+            >修改建议：{{ currentWish.review_result.revision_suggestion }}</text
+          >
+        </template>
+      </view>
       <view
-        v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
-        role="button"
-        @click="
-          runPageAction(() =>
-            openMainPage(`/pages/wishes/index?own=1&edit=${encodeURIComponent(id)}`),
-          )
+        v-if="menuOpen && !sharedEntry && currentWish && !config.useMock"
+        class="card detail-actions"
+      >
+        <view
+          v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
+          role="button"
+          @click="
+            runPageAction(() =>
+              openMainPage(`/pages/wishes/index?own=1&edit=${encodeURIComponent(id)}`),
+            )
+          "
+          >编辑心愿</view
+        >
+        <button
+          v-if="allowed('withdraw')"
+          :disabled="writing || busy"
+          :loading="isPageActionPending('pages-wish-detail-index-button-2')"
+          @click="runPageAction(() => act('withdraw'), 'pages-wish-detail-index-button-2')"
+        >
+          撤下心愿
+        </button>
+        <button
+          v-if="allowed('complete')"
+          :disabled="writing || busy"
+          :loading="isPageActionPending('pages-wish-detail-index-button-3')"
+          @click="runPageAction(() => act('complete'), 'pages-wish-detail-index-button-3')"
+        >
+          确认实现
+        </button>
+        <template v-if="allowed('rollback')">
+          <button
+            v-if="currentWish.current_state === 'realized'"
+            :disabled="writing || busy"
+            :loading="isPageActionPending('pages-wish-detail-index-button-4')"
+            @click="
+              runPageAction(() => act('rollback', 'matching'), 'pages-wish-detail-index-button-4')
+            "
+          >
+            回退为应愿中（保留原应愿人）
+          </button>
+          <template v-if="currentWish.current_state === 'matching'">
+            <view class="mt-3">
+              <text class="content-text">回退时刷新有效期（需重新审核）</text>
+              <switch
+                :checked="refreshExpiry"
+                :disabled="writing || busy"
+                @change="runPageAction(() => selectRefreshExpiry($event))"
+              />
+            </view>
+            <button
+              :disabled="writing || busy"
+              :loading="isPageActionPending('pages-wish-detail-index-button-5')"
+              @click="
+                runPageAction(
+                  () => act('rollback', 'published'),
+                  'pages-wish-detail-index-button-5',
+                )
+              "
+            >
+              回退并解除当前匹配
+            </button>
+          </template>
+        </template>
+        <button
+          v-if="allowed('exception-exit')"
+          :disabled="writing || busy"
+          :loading="isPageActionPending('pages-wish-detail-index-button-6')"
+          @click="runPageAction(() => act('exception-exit'), 'pages-wish-detail-index-button-6')"
+        >
+          异常退出
+        </button>
+      </view>
+      <navigator
+        v-if="
+          currentWish && ['matching', 'realized', 'fulfilled'].includes(currentWish.current_state)
         "
-        >编辑心愿</view
+        url="/pages/inbox/index?view=conversations"
+        >查看聊天会话</navigator
       >
       <navigator
         v-if="
-          !applicationInProgress &&
-          !writing &&
-          !busy &&
-          canApplyToWish(user.user, user.validated, currentWish)
+          currentWish?.own_content &&
+          !currentWish.privacy_review_required &&
+          ['realized', 'fulfilled'].includes(currentWish.current_state) &&
+          !config.useMock
         "
-        :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
-        class="primary-button apply-entry"
-        >我来应愿</navigator
+        :url="`/pages/story-editor/index?wishId=${encodeURIComponent(currentWish.id)}`"
+        >管理我的还愿故事</navigator
       >
-      <navigator
-        v-else-if="applicationInProgress"
-        class="content-action"
-        url="/pages/applications/index"
-        >申请中 · 查看进度 ›</navigator
+      <view v-if="commentsAvailable && currentWish" id="wish-comments" class="wish-comment-section">
+        <WishComments
+          :key="currentWish.id + ':' + snapshotEpoch"
+          :wish-id="currentWish.id"
+          :version="currentWish.version"
+          :content-version="currentWish.content_version ?? publicContent?.content_version"
+          :comments-epoch="currentWish.comments_epoch ?? publicContent?.comments_epoch"
+          :comments-open="currentWish.comments_open ?? publicContent?.comments_open"
+          :owner="currentWish.is_owner === true || !!currentWish.own_content"
+          @refresh="load"
+        />
+      </view>
+      <AppNotice :message="notice" kind="info" />
+      <AppNotice :message="actionError" kind="error" />
+      <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
+      <view
+        v-if="sharedEntry && !browseOnly"
+        class="moderation-link"
+        role="button"
+        @click="runPageAction(() => openMainPage('/pages/index/index'))"
+        >返回首页</view
       >
-      <navigator
-        v-if="!writing && !busy && currentWish.own_content"
-        :url="`/pages/applications/index?wishId=${encodeURIComponent(currentWish.id)}`"
-        >查看应愿申请</navigator
-      >
-      <button
-        v-if="allowed('withdraw')"
-        :disabled="writing || busy"
-        :loading="isPageActionPending('pages-wish-detail-index-button-2')"
-        @click="runPageAction(() => act('withdraw'), 'pages-wish-detail-index-button-2')"
-      >
-        撤下心愿
-      </button>
-      <button
-        v-if="allowed('complete')"
-        :disabled="writing || busy"
-        :loading="isPageActionPending('pages-wish-detail-index-button-3')"
-        @click="runPageAction(() => act('complete'), 'pages-wish-detail-index-button-3')"
-      >
-        确认实现
-      </button>
-      <template v-if="allowed('rollback')">
-        <button
-          v-if="currentWish.current_state === 'realized'"
-          :disabled="writing || busy"
-          :loading="isPageActionPending('pages-wish-detail-index-button-4')"
-          @click="
-            runPageAction(() => act('rollback', 'matching'), 'pages-wish-detail-index-button-4')
-          "
-        >
-          回退为应愿中（保留原应愿人）
-        </button>
-        <template v-if="currentWish.current_state === 'matching'">
-          <view class="mt-3">
-            <text>回退时刷新有效期（需重新审核）</text>
-            <switch
-              :checked="refreshExpiry"
-              :disabled="writing || busy"
-              @change="runPageAction(() => selectRefreshExpiry($event))"
-            />
-          </view>
-          <button
-            :disabled="writing || busy"
-            :loading="isPageActionPending('pages-wish-detail-index-button-5')"
-            @click="
-              runPageAction(() => act('rollback', 'published'), 'pages-wish-detail-index-button-5')
-            "
-          >
-            回退并解除当前匹配
-          </button>
-        </template>
-      </template>
-      <button
-        v-if="allowed('exception-exit')"
-        :disabled="writing || busy"
-        :loading="isPageActionPending('pages-wish-detail-index-button-6')"
-        @click="runPageAction(() => act('exception-exit'), 'pages-wish-detail-index-button-6')"
-      >
-        异常退出
-      </button>
     </view>
-    <navigator
-      v-if="
-        currentWish && ['matching', 'realized', 'fulfilled'].includes(currentWish.current_state)
-      "
-      url="/pages/inbox/index?view=conversations"
-      >查看聊天会话</navigator
-    >
-    <navigator
-      v-if="
-        currentWish?.own_content &&
-        !currentWish.privacy_review_required &&
-        ['realized', 'fulfilled'].includes(currentWish.current_state) &&
-        !config.useMock
-      "
-      :url="`/pages/story-editor/index?wishId=${encodeURIComponent(currentWish.id)}`"
-      >管理我的还愿故事</navigator
-    >
-    <view
-      v-if="
-        !sharedEntry &&
-        currentWish &&
-        !currentWish.privacy_review_required &&
-        (publicContent || shareTarget)
-      "
-      class="detail-footer"
-    >
-      <ShareActions v-if="shareTarget" kind="wish" :content="shareTarget" />
-    </view>
-    <view v-if="commentsAvailable && currentWish" id="wish-comments">
-      <WishComments
-        :key="currentWish.id + ':' + snapshotEpoch"
-        :wish-id="currentWish.id"
-        :version="currentWish.version"
-        :content-version="currentWish.content_version ?? publicContent?.content_version"
-        :comments-epoch="currentWish.comments_epoch ?? publicContent?.comments_epoch"
-        :comments-open="currentWish.comments_open ?? publicContent?.comments_open"
-        :owner="currentWish.is_owner === true || !!currentWish.own_content"
-        @refresh="load"
-      />
-    </view>
-    <AppNotice :message="notice" kind="info" />
-    <AppNotice :message="actionError" kind="error" />
-    <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
-    <view
-      v-if="sharedEntry && !browseOnly"
-      class="moderation-link"
-      role="button"
-      @click="runPageAction(() => openMainPage('/pages/index/index'))"
-      >返回首页</view
-    >
   </AppPage>
 </template>
 
 <style scoped>
-.wish-author {
+.content-text {
+  margin: 0;
+}
+.wish-experience {
+  margin: 0;
+}
+.wish-experience .card {
+  margin-top: 0;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 32rpx;
+}
+.article-heading {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  margin: 12rpx 0 24rpx;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+.wish-author {
+  margin: 0;
+  color: var(--theme-ink);
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  min-width: 0;
 }
 .author-copy {
   display: flex;
   flex-direction: column;
-  gap: 8rpx;
+  gap: 4rpx;
+  min-width: 0;
 }
-.author-copy text {
-  margin: 0;
+.author-name {
+  font-size: 28rpx;
+  font-weight: 600;
 }
 .author-id {
   font-size: 22rpx;
   color: var(--theme-muted);
   overflow-wrap: anywhere;
 }
+.wish-author :deep(.identity-tags) {
+  gap: 8rpx;
+  margin: 0;
+  font-size: 24rpx;
+}
+.wish-author :deep(.identity-tags text) {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.wish-status {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 6rpx 16rpx;
+  border-radius: 12rpx;
+  background: var(--theme-peach);
+  color: var(--theme-brand);
+  font-size: 22rpx;
+}
+.wish-detail-title {
+  display: block;
+  margin: 32rpx 0;
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.whitespace-pre-wrap {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1.8;
+  margin: 0 0 24rpx;
+}
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx 20rpx;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  margin-top: 24rpx;
+}
+.article-meta + .detail-time {
+  margin-top: 20rpx;
+}
 .detail-time {
-  margin: 16rpx 0 0;
+  display: block;
+  margin: 12rpx 0 0;
   font-size: 24rpx;
   color: var(--theme-muted);
+  line-height: 1.6;
 }
-.apply-entry {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 80rpx;
-  margin: 0;
-  padding: 12rpx 32rpx;
-  border-radius: 40rpx;
-}
-.detail-tags,
-.detail-actions,
-.detail-footer {
+.detail-statistics {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 20rpx;
+  gap: 16rpx 24rpx;
+  margin-top: 32rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid var(--theme-line);
 }
-.detail-icon-button {
-  display: inline-flex;
+.detail-statistics :deep(.content-stats) {
+  line-height: 1.6;
+  min-height: 0;
+  gap: 24rpx;
+}
+.detail-statistics :deep(.wish-support) {
+  line-height: 1.6;
+  min-height: 0;
+  padding: 0;
+  font-size: 24rpx;
+  color: var(--theme-muted);
+}
+.article-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 24rpx;
+  margin-top: 32rpx;
+}
+.article-actions > :deep(*) {
+  min-width: 0;
+}
+.article-actions :deep(.favorite-control) {
+  flex: 1;
+}
+.article-actions :deep(.favorite-button),
+.article-actions .primary-button {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 72rpx;
-  height: 72rpx;
+  flex: 1;
+  width: 100%;
   margin: 0;
-  padding: 0;
-  background: transparent;
+  min-height: 88rpx;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx;
   border: 0;
+  border-radius: 24rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
 }
-.detail-icon-button::after {
+.article-actions :deep(.favorite-button) {
+  background: var(--theme-peach);
+  color: var(--theme-brand);
+}
+.article-actions .primary-button {
+  background: var(--theme-brand);
+  color: var(--theme-surface);
+}
+.article-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  margin-top: 20rpx;
+}
+.text-action,
+.detail-menu button {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 12rpx 0;
+  min-height: 56rpx;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--theme-brand);
+}
+.text-action::after,
+.detail-menu button::after {
   border: 0;
 }
 .detail-menu {
   display: flex;
   flex-wrap: wrap;
-  gap: 12rpx;
-  margin-top: 12rpx;
+  gap: 12rpx 24rpx;
+  padding-top: 16rpx;
+  border-top: 1rpx solid var(--theme-line);
 }
-.detail-menu button {
-  margin: 0;
-  padding: 12rpx 16rpx;
-  border: 0;
-  border-radius: 12rpx;
-  background: var(--theme-canvas);
-  font-size: 26rpx;
-}
-.detail-footer {
-  justify-content: flex-end;
-  margin-top: 32rpx;
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20rpx;
 }
 .detail-actions button {
   margin: 0;
   flex: 1;
 }
-.whitespace-pre-wrap {
-  display: block;
+.wish-comment-section {
+  margin-top: 24rpx;
+}
+.wish-comment-section :deep(.wish-comments) {
+  padding: 32rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 32rpx;
+}
+.wish-comment-section :deep(.section-title) {
   font-size: 32rpx;
-  line-height: 1.8;
-  margin: 32rpx 0;
+  font-weight: 600;
+}
+.wish-comment-section :deep(.comment-title button),
+.wish-comment-section :deep(.own-actions button) {
+  background: transparent;
+  padding: 8rpx 0;
+  min-height: 48rpx;
+  border: 0;
+  border-radius: 0;
+  font-size: 24rpx;
+  color: var(--theme-brand);
+}
+.wish-comment-section :deep(.own-comment) {
+  background: var(--theme-canvas);
+}
+.wish-comment-section :deep(.own-toggle) {
+  margin: 0;
+  padding: 12rpx 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 24rpx;
+  color: var(--theme-brand);
+  text-align: left;
+}
+.wish-comment-section :deep(.own-toggle::after) {
+  border: 0;
 }
 </style>

@@ -1,14 +1,19 @@
 <script setup lang="ts">
+import { useLogin, useLoginRefresh } from '@/composables/use-login'
+import { useWhisperCommentEditor } from '@/composables/use-whisper-comment-editor'
+import WhisperCommentEditor from '@/components/WhisperCommentEditor.vue'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
 import WhisperReplies from '@/components/WhisperReplies.vue'
+import CommentThread from '@/components/CommentThread.vue'
 import ContentStats from '@/components/ContentStats.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import { useContentView } from '@/composables/use-content-view'
 import WhisperPostEditor from '@/components/WhisperPostEditor.vue'
 import { useWhisperPostEditor } from '@/composables/use-whisper-post-editor'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { session } from '@/utils/session'
 import { callWhisper } from '@/api/whispers'
@@ -17,6 +22,14 @@ import { useWhisperPage } from '@/composables/use-whisper-page'
 import { mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
 import type { OwnerPost, PublicPost, PublicComment } from '@/types/whispers'
+const { requestLogin } = useLogin()
+const commentEditor = useWhisperCommentEditor()
+let pendingComment: { id?: string; rootId?: string; replyId?: string } | null = null
+const commentLocated = computed(
+  () =>
+    commentEditor.anchor.value === `${commentEditor.rootId.value}:${commentEditor.replyId.value}`,
+)
+
 const module = useWhispersStore()
 const recordView = useContentView('whisper_post')
 const id = ref('')
@@ -144,6 +157,18 @@ async function load(more = false) {
     }
   }, more)
 }
+async function openComment(rootId = '', replyId = '', commentId = '') {
+  const target = post.value?.id
+  if (!target || editing.value) return
+  if (!session.getToken()) {
+    requestLogin(async () => {
+      await load()
+      if (post.value?.id === target) await openComment(rootId, replyId, commentId)
+    })
+    return
+  }
+  await commentEditor.open({ postId: target, rootId, replyId, id: commentId })
+}
 async function hug(active: boolean) {
   const target = post.value
   if (
@@ -212,14 +237,25 @@ async function block(comment?: PublicComment) {
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
   manage.value = query?.manage === '1'
+  if (query?.compose === '1')
+    pendingComment = {
+      id: typeof query.commentId === 'string' ? query.commentId : '',
+      rootId: typeof query.rootId === 'string' ? query.rootId : '',
+      replyId: typeof query.replyId === 'string' ? query.replyId : '',
+    }
 })
 page.onRefresh(() => (editing.value ? editor.load(true) : load()))
 onShow(() => {
-  void load()
+  void load().then(async () => {
+    const pending = pendingComment
+    pendingComment = null
+    if (pending && post.value) await openComment(pending.rootId, pending.replyId, pending.id)
+  })
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
+  <AppPage responsive-padding>
     <view v-if="hugCelebrating" class="hug-firework" aria-hidden="true">
       <text class="hug-firework-center">♥</text>
       <text
@@ -235,11 +271,15 @@ onShow(() => {
         >♥</text
       >
     </view>
-    <text v-if="editing || post || ownerPost" class="title">{{
-      (editing ? editor.record.value?.title : (post?.title ?? ownerPost?.title)) || '未命名悄悄话'
-    }}</text>
+    <PageHeading
+      v-if="editing || post || ownerPost"
+      :title="
+        (editing ? editor.record.value?.title : (post?.title ?? ownerPost?.title)) || '未命名悄悄话'
+      "
+    />
     <view v-if="editing" class="edit-section">
       <button
+        class="ui-button"
         :disabled="editor.locked.value"
         :loading="isPageActionPending('whisper-own-edit-cancel')"
         @click="runPageAction(cancelEdit, 'whisper-own-edit-cancel')"
@@ -248,32 +288,39 @@ onShow(() => {
       </button>
       <WhisperPostEditor :editor="editor" />
     </view>
-    <view v-else-if="!post && ownerPost" class="card">
-      <text>{{ whisperStates[ownerPost.status] }}</text>
-      <text v-if="ownerPost.body" class="whitespace-pre-wrap">{{ ownerPost.body }}</text>
-      <text v-if="ownerPost.review_result?.reason" class="notice">{{
+    <view v-else-if="!post && ownerPost" class="ui-section ce-group">
+      <text class="ui-copy">{{ whisperStates[ownerPost.status] }}</text>
+      <text v-if="ownerPost.body" class="ui-copy whitespace-pre-wrap">{{ ownerPost.body }}</text>
+      <text v-if="ownerPost.review_result?.reason" class="ui-meta notice">{{
         ownerPost.review_result.reason
       }}</text>
-      <text v-if="ownerPost.review_result?.revision_suggestion" class="notice">{{
+      <text v-if="ownerPost.review_result?.revision_suggestion" class="ui-meta notice">{{
         ownerPost.review_result.revision_suggestion
       }}</text>
     </view>
-    <view v-if="post && !editing" class="card"
-      ><WhisperContent :content="post" hide-title /><text
+    <view v-if="post && !editing" class="ui-section ce-group"
+      ><WhisperContent :content="post" hide-title /><text class="ui-copy"
         >暖评 {{ post.comment_count }} · 抱抱 {{ post.hug_count }}</text
       >
-      <navigator
-        v-if="post.comments_open && canWhisperAction('PublicPost', post, 'whisperCommentCreate')"
-        :url="`/pages/whispers/comment-editor?postId=${encodeURIComponent(post.id)}`"
-        >写暖评</navigator
+      <button
+        v-if="
+          post.comments_open &&
+          (canWhisperAction('PublicPost', post, 'whisperCommentCreate') || !session.getToken())
+        "
+        class="ui-button ui-button-primary"
+        :disabled="busy || writing || retryReady"
+        :loading="isPageActionPending('whisper-inline-compose')"
+        @click="runPageAction(() => openComment(), 'whisper-inline-compose')"
       >
+        写暖评
+      </button>
       <button
         v-if="
           !post.viewer_is_author &&
           post.my_hug &&
           canWhisperAction('PublicPost', post, 'whisperHugSet')
         "
-        class="hug-button"
+        class="ui-button hug-button"
         :aria-label="post.my_hug.active ? '取消抱抱' : '抱抱'"
         :disabled="busy || writing || retryReady"
         :loading="isPageActionPending('pages-whispers-detail-button-2')"
@@ -287,7 +334,7 @@ onShow(() => {
           v-if="
             !post.viewer_is_author && canWhisperAction('PublicPost', post, 'whisperReportCreate')
           "
-          class="moderation-link"
+          class="ui-link moderation-link"
           :url="`/pages/whispers/report?kind=whisper_post&id=${encodeURIComponent(post.id)}`"
           >举报</navigator
         >
@@ -306,10 +353,11 @@ onShow(() => {
       </view>
       <ContentStats :views="post.view_count" :comments="post.comment_count" />
       <FavoriteButton kind="whisper_post" :target-id="post.id" :favorited="post.favorited" />
-      <text v-if="!post.comments_open">评论已关闭，已公开合规评论仅供阅读。</text>
+      <text v-if="!post.comments_open" class="ui-copy">评论已关闭，已公开合规评论仅供阅读。</text>
     </view>
     <button
       v-if="!editing && (ownerPost?.allowed_actions.length || post?.viewer_is_author)"
+      class="ui-button"
       :disabled="busy || writing || retryReady || editor.locked.value"
       :loading="isPageActionPending('whisper-own-edit')"
       @click="runPageAction(edit, 'whisper-own-edit')"
@@ -320,34 +368,64 @@ onShow(() => {
           : '管理帖子'
       }}
     </button>
-    <view v-for="comment in editing ? [] : comments" :key="comment.id" class="card"
-      ><WhisperContent :content="comment" /><view class="moderation-actions"
-        ><navigator
-          v-if="canWhisperAction('PublicComment', comment, 'whisperReportCreate')"
-          class="moderation-link"
-          :url="`/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`"
-          >举报</navigator
-        ><button
-          v-if="
-            !comment.viewer_is_author &&
-            canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
-          "
-          class="moderation-link"
-          :disabled="busy || writing || retryReady"
-          :loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
-          @click="
-            runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
-          "
-        >
-          屏蔽发布者
-        </button></view
-      ><WhisperReplies v-if="post" :post="post" :root="comment"
-    /></view>
-    <text v-if="!editing && post && !comments.length && !busy && !commentsError"
+    <view
+      v-if="
+        !editing && commentEditor.expanded.value && commentEditor.rootId.value && !commentLocated
+      "
+      class="comment-recovery"
+    >
+      <text class="ui-meta">目标暖评暂不在当前列表，编辑内容保留在这里。</text>
+      <button
+        v-if="cursor"
+        class="ui-button"
+        :disabled="busy || writing || retryReady"
+        :loading="isPageActionPending('whisper-reply-find-root')"
+        @click="runPageAction(() => load(true), 'whisper-reply-find-root')"
+      >
+        加载更多暖评
+      </button>
+    </view>
+    <WhisperCommentEditor
+      v-if="!editing && (!commentEditor.rootId.value || !commentLocated)"
+      :editor="commentEditor"
+    />
+    <text v-if="!editing && post" class="ui-section-title comments-heading">暖评与回复</text>
+    <CommentThread
+      v-for="comment in editing ? [] : comments"
+      :key="comment.id"
+      :label="comment.identity.label"
+      :body="comment.body"
+      :author="comment.identity.is_author"
+      :time="comment.published_at"
+      :tags="comment.identity.tags"
+      ><WhisperReplies
+        v-if="post"
+        :post="post"
+        :root="comment"
+        :editor="commentEditor"
+        :report-url="
+          canWhisperAction('PublicComment', comment, 'whisperReportCreate')
+            ? `/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`
+            : undefined
+        "
+        :can-block="
+          !comment.viewer_is_author &&
+          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
+        "
+        :block-disabled="busy || writing || retryReady"
+        :block-loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
+        @reply="(rootId, replyId) => openComment(rootId, replyId)"
+        @block="
+          runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
+        "
+      ></WhisperReplies
+    ></CommentThread>
+    <text v-if="!editing && post && !comments.length && !busy && !commentsError" class="ui-copy"
       >当前页暂无公开暖评。</text
     >
     <button
       v-if="cursor"
+      class="ui-button"
       :disabled="busy || writing || retryReady"
       :loading="isPageActionPending('pages-whispers-detail-button-5')"
       @click="runPageAction(() => load(true), 'pages-whispers-detail-button-5')"
@@ -356,6 +434,7 @@ onShow(() => {
     ><AppNotice :message="commentsError" kind="error" />
     <button
       v-if="retryReady"
+      class="ui-button"
       :disabled="writing"
       :loading="isPageActionPending('pages-whispers-detail-button-6')"
       @click="runPageAction(page.retry, 'pages-whispers-detail-button-6')"
@@ -365,7 +444,14 @@ onShow(() => {
   </AppPage>
 </template>
 <style scoped>
-.card button.hug-button {
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+
+.ui-button.hug-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -373,7 +459,7 @@ onShow(() => {
   background: #ffbd59;
   color: #532c00;
 }
-.card button.hug-button[disabled] {
+.ui-button.hug-button[disabled] {
   background: var(--theme-warning);
   color: var(--theme-warning-ink);
 }
@@ -444,5 +530,8 @@ onShow(() => {
 }
 .edit-section {
   margin-top: 24rpx;
+}
+.comments-heading {
+  margin: 32rpx 0 20rpx;
 }
 </style>

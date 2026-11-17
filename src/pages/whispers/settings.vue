@@ -1,15 +1,28 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
+import WhisperIdentity from '@/components/WhisperIdentity.vue'
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
 import { session } from '@/utils/session'
+import { useUserStore } from '@/stores/user'
+import {
+  readCommentIdentityPreference,
+  saveCommentIdentityPreference,
+} from '@/utils/whisper-comment-preference'
+import type { WhisperTagsDraft } from '@/utils/whisper-content'
 import { useWhispersStore } from '@/stores/whispers'
 import { useWhisperPage } from '@/composables/use-whisper-page'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
 import { whisperText, mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
-import type { NicknameState, OwnerComment } from '@/types/whispers'
+import type { IdentityInput, NicknameState, OwnerComment } from '@/types/whispers'
 const module = useWhispersStore()
+const user = useUserStore()
+const identityMode = ref<IdentityInput['mode']>('anonymous')
+const identityTags = ref<WhisperTagsDraft>({ campus: '', gender: '', grade: '' })
+const identityNotice = ref('')
 const tab = ref<'nickname' | 'comments'>('nickname')
 const state = ref<NicknameState | null>(null)
 const label = ref('')
@@ -24,6 +37,9 @@ const page = useWhisperPage(() => {
   cursor.value = null
   ready.value = false
   seen.clear()
+  identityMode.value = 'anonymous'
+  identityTags.value = { campus: '', gender: '', grade: '' }
+  identityNotice.value = ''
 })
 const { busy, writing, error, notice, retryReady } = page
 const locked = computed(() => busy.value || writing.value || retryReady.value)
@@ -51,7 +67,22 @@ async function load(more = false) {
     if (!module.config?.enabled) throw new Error('悄悄话尚未开放或当前不可用。')
     if (selected === 'nickname') {
       const result = await callWhisper('whisperNicknameGet', {})
-      if (active()) state.value = result
+      if (active()) {
+        state.value = result
+        const saved = readCommentIdentityPreference(
+          user.validated ? user.user?.id : undefined,
+          module.config,
+          result,
+        )
+        identityMode.value = saved.identity.mode
+        identityTags.value = {
+          campus: '',
+          gender: '',
+          grade: '',
+          ...(saved.identity.mode === 'semi' ? saved.identity.tags : {}),
+        }
+        identityNotice.value = saved.notice
+      }
     } else {
       const result = await callWhisper('whisperOwnCommentsList', {
         query: { limit: 20, ...(previous ? { cursor: previous } : {}) },
@@ -64,6 +95,23 @@ async function load(more = false) {
     }
     ready.value = true
   }, more)
+}
+function saveIdentity() {
+  if (locked.value || !user.validated || !session.getToken() || !state.value) return
+  try {
+    saveCommentIdentityPreference(
+      user.user?.id,
+      identityMode.value,
+      identityTags.value,
+      module.config,
+      state.value,
+    )
+    identityNotice.value = ''
+    notice.value = '评论身份已保存到本机。'
+    error.value = ''
+  } catch (failure) {
+    error.value = failure instanceof Error ? failure.message : '评论身份未保存，请重试。'
+  }
 }
 async function switchTab(value: 'nickname' | 'comments') {
   if (locked.value || tab.value === value) return
@@ -138,20 +186,23 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">悄悄话设置</text>
+  <AppPage responsive-padding>
+    <PageHeading title="悄悄话设置" description="设置评论身份，管理昵称与暖评。" />
     <view class="settings-tabs">
       <button
+        class="ui-button"
         :class="{ selected: tab === 'nickname' }"
         :disabled="locked"
         :loading="isPageActionPending('whisper-settings-tab-nickname')"
         @click="runPageAction(() => switchTab('nickname'), 'whisper-settings-tab-nickname')"
       >
-        昵称管理
+        身份与昵称
       </button>
       <button
+        class="ui-button"
         :class="{ selected: tab === 'comments' }"
         :disabled="locked"
         :loading="isPageActionPending('whisper-settings-tab-comments')"
@@ -160,18 +211,40 @@ onShow(() => {
         我的评论
       </button>
     </view>
-    <view v-if="tab === 'nickname' && state" class="card">
-      <text class="field-label">当前昵称</text>
-      <text class="current-nickname">{{ state.active?.label || '暂未设置' }}</text>
+    <view v-if="tab === 'nickname' && state" class="identity-settings">
+      <text class="ui-section-title">评论身份</text>
+      <text class="ui-meta">用于此设备上的新评论；已发布内容保持原有身份。</text>
+      <WhisperIdentity
+        v-model:mode="identityMode"
+        v-model:tags="identityTags"
+        :config="module.config"
+        :nickname="state"
+        :disabled="locked"
+      />
+      <AppNotice :message="identityNotice" kind="info" />
+      <button
+        class="ui-button ui-button-primary"
+        :disabled="locked"
+        :loading="isPageActionPending('whisper-settings-identity')"
+        @click="runPageAction(saveIdentity, 'whisper-settings-identity')"
+      >
+        保存评论身份
+      </button>
+    </view>
+    <view v-if="tab === 'nickname' && state" class="ui-section ce-group">
+      <text class="ui-copy field-label">当前昵称</text>
+      <text class="ui-copy current-nickname">{{ state.active?.label || '暂未设置' }}</text>
       <view v-if="state.candidate" class="notice"
-        ><text>{{ state.candidate.label }} · {{ candidateLabels[state.candidate.status] }}</text
-        ><text v-if="state.candidate.review_result?.reason">{{
+        ><text class="ui-copy"
+          >{{ state.candidate.label }} · {{ candidateLabels[state.candidate.status] }}</text
+        ><text v-if="state.candidate.review_result?.reason" class="ui-copy">{{
           state.candidate.review_result.reason
         }}</text></view
       >
       <input
         v-if="canSave"
         v-model="label"
+        class="ui-input"
         :maxlength="-1"
         :disabled="locked"
         placeholder="输入新昵称，2至20个字"
@@ -179,29 +252,42 @@ onShow(() => {
       />
       <button
         v-if="canSave"
+        class="ui-button ui-button-primary"
         :disabled="locked"
         :loading="isPageActionPending('whisper-settings-nickname')"
         @click="runPageAction(save, 'whisper-settings-nickname')"
       >
         提交新昵称
       </button>
-      <text class="notice">新昵称审核通过后使用，旧心事中的昵称保持原样。</text>
+      <text class="ui-meta notice">新昵称审核通过后使用，旧心事中的昵称保持原样。</text>
     </view>
     <view v-if="tab === 'comments'">
-      <view v-for="comment in comments" :key="comment.id" class="card">
-        <text class="comment-state">{{ whisperStates[comment.status] }}</text>
+      <view v-for="comment in comments" :key="comment.id" class="ui-section ce-group">
+        <text class="ui-meta comment-state">{{ whisperStates[comment.status] }}</text>
         <text
           v-if="comment.body"
-          class="whitespace-pre-wrap"
+          class="ui-copy whitespace-pre-wrap"
           @click="runPageAction(() => openComment(comment), 'whisper-settings-open:' + comment.id)"
           >{{ comment.body }}</text
         >
-        <text v-if="comment.review_result?.reason" class="notice">{{
+        <text v-if="comment.review_result?.reason" class="ui-meta notice">{{
           comment.review_result.reason
         }}</text>
-        <text v-if="!comment.post_id" class="notice">原帖已关闭或当前不可查看。</text>
-        <view class="comment-actions">
+        <text v-if="comment.review_result?.revision_suggestion" class="ui-meta">{{
+          comment.review_result.revision_suggestion
+        }}</text>
+        <text v-if="!comment.post_id" class="ui-meta notice">原帖已关闭或当前不可查看。</text>
+        <view class="comment-actions"
+          ><navigator
+            v-if="
+              comment.post_id && canWhisperAction('OwnerComment', comment, 'whisperCommentUpdate')
+            "
+            :url="`/pages/whispers/detail?id=${encodeURIComponent(comment.post_id)}&compose=1&commentId=${encodeURIComponent(comment.id)}`"
+            class="ui-button"
+            >编辑暖评</navigator
+          >
           <button
+            class="ui-button"
             :disabled="locked"
             :loading="isPageActionPending('whisper-settings-open:' + comment.id)"
             @click="
@@ -212,6 +298,7 @@ onShow(() => {
           </button>
           <button
             v-if="canWhisperAction('OwnerComment', comment, 'whisperCommentWithdraw')"
+            class="ui-button"
             :disabled="locked"
             :loading="isPageActionPending('whisper-settings-withdraw:' + comment.id)"
             @click="
@@ -222,9 +309,12 @@ onShow(() => {
           </button>
         </view>
       </view>
-      <text v-if="ready && !comments.length && !busy">还没有评论记录。</text>
+      <text v-if="ready && !comments.length && !busy && !error" class="ui-copy"
+        >还没有评论记录。</text
+      >
       <button
         v-if="cursor"
+        class="ui-button"
         :disabled="locked"
         :loading="isPageActionPending('whisper-settings-more')"
         @click="runPageAction(() => load(true), 'whisper-settings-more')"
@@ -234,6 +324,7 @@ onShow(() => {
     </view>
     <button
       v-if="retryReady"
+      class="ui-button ui-button-primary"
       :disabled="writing"
       :loading="isPageActionPending('whisper-settings-retry')"
       @click="runPageAction(page.retry, 'whisper-settings-retry')"
@@ -244,6 +335,22 @@ onShow(() => {
   </AppPage>
 </template>
 <style scoped>
+.identity-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin: 28rpx 0;
+}
+.identity-settings :deep(.ui-section) {
+  margin: 0;
+}
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+
 .settings-tabs,
 .comment-actions {
   display: flex;
