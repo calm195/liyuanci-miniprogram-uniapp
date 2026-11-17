@@ -8,7 +8,18 @@ async function setup() {
   let resolve!: () => void
   let calls = 0
   let navigations = 0
-  const entry = reactive({ loginVisible: true, clear() {}, async showGuide() {} })
+  const entry = reactive({
+    loginVisible: true,
+    clear() {},
+    async showGuide() {},
+    cancelLogin() {
+      entry.loginVisible = false
+    },
+    async completeLogin() {
+      entry.loginVisible = false
+      return false
+    },
+  })
   const user = reactive({
     busy: false,
     isLoggedIn: false,

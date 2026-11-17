@@ -3,6 +3,18 @@ import ts from 'typescript'
 
 // 执行实际页面脚本及API适配器，仅替换平台、会话与传输边界。
 export async function loadRuntime(source: string, context: Record<string, unknown>) {
+  if (
+    source.includes('const recovery = useWishCommentCommands()') &&
+    !context.useWishCommentCommands
+  ) {
+    const { createPinia, defineStore } = await import('pinia')
+    const module = await loadRuntime(
+      readFileSync(new URL('../../src/stores/wish-comment-commands.ts', import.meta.url), 'utf8'),
+      { defineStore, session: context.session, useUserStore: context.useUserStore },
+    )
+    const store = module.useWishCommentCommands(createPinia())
+    context.useWishCommentCommands = () => store
+  }
   context = {
     ...(source.includes('const recordView = useContentView')
       ? { useContentView: () => async () => {} }
@@ -10,6 +22,9 @@ export async function loadRuntime(source: string, context: Record<string, unknow
     ...(source.includes('export const useUnreadStore')
       ? {}
       : { useUnreadStore: () => ({ refresh: async () => {} }) }),
+    ...(source.includes('export function useLogin')
+      ? {}
+      : { useLoginRefresh: () => {}, useLogin: () => ({ requestLogin() {} }) }),
     onHide: () => {},
     onUnload: () => {},
     onPullDownRefresh: () => {},

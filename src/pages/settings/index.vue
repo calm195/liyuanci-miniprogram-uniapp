@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onLoad, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { matchmakingID, matchmakingMbtis } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
@@ -210,11 +212,14 @@ async function load() {
   if (busy.value || writing.value || selectingAvatar.value) return
   const current = ++generation
   const epoch = session.getEpoch()
-  const owner = user.user?.id
+  let owner = user.user?.id
   const active = () =>
-    visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
+    visible &&
+    current === generation &&
+    epoch === session.getEpoch() &&
+    (!owner || owner === user.user?.id)
   error.value = ''
-  if (config.useMock || !session.getToken() || !owner) {
+  if (config.useMock || !session.getToken()) {
     clear()
     error.value = config.useMock ? '个人设置需连接真实服务。' : '请登录后管理个人资料。'
     return
@@ -224,6 +229,7 @@ async function load() {
     await user.refresh(false, true)
     if (!active()) return
     const result = user.user
+    if (!owner && result) owner = result.id
     if (
       !user.validated ||
       !result ||
@@ -630,7 +636,9 @@ function leave() {
 }
 watch(
   [() => user.user?.id, () => session.getEpoch()],
-  () => {
+  ([next, nextEpoch], [previous, previousEpoch]) => {
+    // 首次恢复身份仍属于当前读取，换账号或令牌代次才清除当前展示与编辑状态。
+    if (nextEpoch === previousEpoch && !previous && next) return
     generation++
     clear()
     busy.value = false
@@ -694,205 +702,233 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">个人资料与隐私</text>
+  <AppPage responsive-padding>
+    <PageHeading
+      title="个人资料与隐私"
+      description="基础资料用于公开身份与活动报名，隐私设置由你决定。"
+    />
     <button
       v-if="activity"
+      class="ui-button"
       :disabled="writing"
       :loading="isPageActionPending('settings-return-to-activity')"
       @click="runPageAction(returnToActivity, 'settings-return-to-activity')"
     >
       保存并返回上一页
     </button>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="card small-link">
-      微信登录 ›
-    </navigator>
+    <LoginLink v-if="!user.isLoggedIn" class="ui-section small-link"> 微信登录 › </LoginLink>
 
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentMe" class="card">
-      <text class="section-title">账号资料与公开设置</text>
-      <view class="avatar-settings">
-        <ProfileAvatar :src="avatarDraft || currentMe.avatar_url" class="profile-avatar" />
-        <view v-if="allowed('putMeProfile')" class="avatar-actions">
-          <button
-            :disabled="busy || writing || selectingAvatar"
-            :loading="isPageActionPending('settings-select-avatar')"
-            @click="runPageAction(chooseAvatar, 'settings-select-avatar')"
-          >
-            {{ avatarDraft ? '重新选图' : '选择头像' }}
-          </button>
-          <button
-            v-if="avatarDraft && (!writing || isPageActionPending('settings-save-avatar'))"
-            :disabled="busy || writing || selectingAvatar"
-            :loading="isPageActionPending('settings-save-avatar')"
-            @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
-          >
-            重试头像上传
-          </button>
-          <button
-            v-else-if="!avatarDraft && (currentMe.avatar_id || currentMe.avatar_url)"
-            :disabled="busy || writing || selectingAvatar"
-            :loading="isPageActionPending('settings-remove-avatar')"
-            @click="runPageAction(() => changeAvatar(true), 'settings-remove-avatar')"
-          >
-            {{ avatarPending && !writing ? '重试恢复默认头像' : '恢复默认头像' }}
-          </button>
+    <text v-if="busy" class="ui-copy">加载中…</text>
+    <template v-if="currentMe"
+      ><view class="ui-section settings-group">
+        <text class="ui-section-title">账号资料与公开设置</text>
+        <view class="avatar-settings">
+          <ProfileAvatar
+            :src="avatarDraft || currentMe.avatar_url"
+            :size="96"
+            class="profile-avatar"
+          />
+          <view v-if="allowed('putMeProfile')" class="avatar-actions">
+            <button
+              class="ui-button"
+              :disabled="busy || writing || selectingAvatar"
+              :loading="isPageActionPending('settings-select-avatar')"
+              @click="runPageAction(chooseAvatar, 'settings-select-avatar')"
+            >
+              {{ avatarDraft ? '重新选图' : '选择头像' }}
+            </button>
+            <button
+              v-if="avatarDraft && (!writing || isPageActionPending('settings-save-avatar'))"
+              class="ui-button"
+              :disabled="busy || writing || selectingAvatar"
+              :loading="isPageActionPending('settings-save-avatar')"
+              @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
+            >
+              重试头像上传
+            </button>
+            <button
+              v-else-if="!avatarDraft && (currentMe.avatar_id || currentMe.avatar_url)"
+              class="ui-button"
+              :disabled="busy || writing || selectingAvatar"
+              :loading="isPageActionPending('settings-remove-avatar')"
+              @click="runPageAction(() => changeAvatar(true), 'settings-remove-avatar')"
+            >
+              {{ avatarPending && !writing ? '重试恢复默认头像' : '恢复默认头像' }}
+            </button>
+          </view>
         </view>
-      </view>
-      <text v-if="avatarDraft" class="notice">{{
-        writing ? '正在保存头像…' : '当前为头像预览，保存后生效。'
-      }}</text>
-      <AppNotice :message="avatarError" kind="error" />
-      <text>昵称</text>
-      <input
-        v-model="nickname"
-        placeholder-class="field-placeholder"
-        :maxlength="-1"
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        placeholder="填写昵称"
-        @input="queueSave"
-      />
-      <picker
-        :range="campuses.map((item) => item.label)"
-        :value="campuses.findIndex((item) => item.value === identityCampus)"
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        @change="runPageAction(() => selectTag('campus', $event))"
-        ><view
-          >校区 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
-        ></picker
-      >
-      <picker
-        :range="genders.map((item) => item.label)"
-        :value="genders.findIndex((item) => item.value === identityGender)"
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        @change="runPageAction(() => selectTag('gender', $event))"
-        ><view
-          >性别 {{ genders.find((item) => item.value === identityGender)?.label }}</view
-        ></picker
-      >
-      <text class="section-title">学籍与当前年级</text>
-      <picker
-        :range="enrollmentYears"
-        :value="Math.max(0, enrollmentYears.indexOf(enrollmentYear))"
-        :disabled="busy || writing || !allowed('putMeProfile')"
-        @change="selectYear"
-      >
-        <view>入学年份 {{ enrollmentYear || '请选择' }}</view>
-      </picker>
-      <picker
-        :range="educationOptions"
-        range-key="label"
-        :value="
-          Math.max(
-            0,
-            educationOptions.findIndex((item) => item.code === educationLevel),
-          )
-        "
-        :disabled="busy || writing || !allowed('putMeProfile')"
-        @change="selectEducation"
-      >
-        <view
-          >学历层级 {{ educationOptions.find((item) => item.code === educationLevel)?.label }}</view
+        <text v-if="avatarDraft" class="ui-text-reset notice">{{
+          writing ? '正在保存头像…' : '当前为头像预览，保存后生效。'
+        }}</text>
+        <AppNotice :message="avatarError" kind="error" />
+        <text class="ui-copy">昵称</text>
+        <input
+          v-model="nickname"
+          class="ui-input"
+          placeholder-class="field-placeholder"
+          :maxlength="-1"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          placeholder="填写昵称"
+          @input="queueSave"
+        />
+        <picker
+          class="ui-picker"
+          :range="campuses.map((item) => item.label)"
+          :value="campuses.findIndex((item) => item.value === identityCampus)"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          @change="runPageAction(() => selectTag('campus', $event))"
+          ><view
+            >校区 {{ campuses.find((item) => item.value === identityCampus)?.label }}</view
+          ></picker
         >
-      </picker>
-      <text class="muted">每年9月自动升一个年级。手动调整不会改变入学年份和学历层级。</text>
-      <text v-if="automaticGradePreview" class="muted"
-        >自动计算预览：{{ automaticGradePreview }}</text
-      >
-      <text v-if="!enrollmentYear || !educationLevel" class="muted"
-        >旧年级已保留，请补全入学年份与学历层级。</text
-      >
-      <text
-        >当前年级：{{
-          gradeOptions.find((item) => item.code === identityGrade)?.label ||
-          identityGrade ||
-          '未填写'
-        }}（{{ gradeOverride ? '手动调整' : '自动计算' }}）</text
-      >
-      <picker
-        :range="gradeOptions"
-        range-key="label"
-        :value="
-          Math.max(
-            0,
-            gradeOptions.findIndex((item) => item.code === gradeOverride),
-          )
-        "
-        :disabled="
-          busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
-        "
-        @change="selectTag('grade', $event)"
-      >
-        <view
-          >手动调整年级：{{
-            gradeOptions.find((item) => item.code === gradeOverride)?.label || '跟随自动计算'
-          }}</view
+        <picker
+          class="ui-picker"
+          :range="genders.map((item) => item.label)"
+          :value="genders.findIndex((item) => item.value === identityGender)"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          @change="runPageAction(() => selectTag('gender', $event))"
+          ><view
+            >性别 {{ genders.find((item) => item.value === identityGender)?.label }}</view
+          ></picker
+        > </view
+      ><view class="ui-section settings-group settings-education"
+        ><text class="ui-section-title">学籍与当前年级</text>
+        <picker
+          class="ui-picker"
+          :range="enrollmentYears"
+          :value="Math.max(0, enrollmentYears.indexOf(enrollmentYear))"
+          :disabled="busy || writing || !allowed('putMeProfile')"
+          @change="selectYear"
         >
-      </picker>
-      <text>按年级序号调整（选填，1–100）</text>
-      <input
-        type="number"
-        :value="gradeOverride ? gradeOverride.split('_').slice(-1)[0] : ''"
-        :disabled="
-          busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
-        "
-        placeholder="例如输入 2 表示二年级，留空恢复自动"
-        @input="adjustGradeNumber"
-      />
-      <button
-        v-if="gradeOverride"
-        :disabled="busy || writing || !allowed('putMeProfile')"
-        @click="restoreAutomaticGrade"
-      >
-        恢复自动计算
-      </button>
-      <text>MBTI（选填）</text>
-      <picker
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        :range="personalityLabels"
-        :value="Math.max(0, personalityTypes.indexOf(mbti))"
-        @change="selectPersonality"
-      >
-        <view class="personality-picker">{{ mbti || '未设置' }} ›</view>
-      </picker>
-      <view class="assessment">
-        <text class="section-title">16Personalities 官方测评</text>
-        <text class="muted">在浏览器完成测评后，可以回来手动选择四字母类型。</text>
-        <text class="muted" selectable>{{ assessmentURL }}</text>
-        <button @click="copyAssessment">复制官方测评链接</button>
-      </view>
-      <text>公开展示设置</text>
-      <text>报名使用已保存的昵称、校区、性别、年级和 MBTI。</text>
-      <text
-        >此设置控制校区、性别和年级在公开内容及主页上的展示。MBTI 仅本人和获授权的活动可见。</text
-      >
-      <text v-if="hidden === null">当前设置未返回，请明确选择后保存。</text>
-      <button
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        :loading="isPageActionPending('pages-settings-index-button-2')"
-        @click="runPageAction(() => editVisibility(true), 'pages-settings-index-button-2')"
-      >
-        {{ hidden === true ? '已选择：隐藏公开资料' : '隐藏公开资料' }}
-      </button>
-      <button
-        :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-        :loading="isPageActionPending('pages-settings-index-button-3')"
-        @click="runPageAction(() => editVisibility(false), 'pages-settings-index-button-3')"
-      >
-        {{ hidden === false ? '已选择：显示公开资料' : '显示公开资料' }}
-      </button>
-      <text v-if="!allowed('putMeProfile')">当前账号没有修改资料的权限。</text>
-    </view>
-    <text v-if="profilePending && !saving" class="notice"
+          <view>入学年份 {{ enrollmentYear || '请选择' }}</view>
+        </picker>
+        <picker
+          class="ui-picker"
+          :range="educationOptions"
+          range-key="label"
+          :value="
+            Math.max(
+              0,
+              educationOptions.findIndex((item) => item.code === educationLevel),
+            )
+          "
+          :disabled="busy || writing || !allowed('putMeProfile')"
+          @change="selectEducation"
+        >
+          <view
+            >学历层级
+            {{ educationOptions.find((item) => item.code === educationLevel)?.label }}</view
+          >
+        </picker>
+        <text class="ui-meta">每年9月自动升一个年级。手动调整不会改变入学年份和学历层级。</text>
+        <text v-if="automaticGradePreview" class="ui-meta"
+          >自动计算预览：{{ automaticGradePreview }}</text
+        >
+        <text v-if="!enrollmentYear || !educationLevel" class="ui-meta"
+          >旧年级已保留，请补全入学年份与学历层级。</text
+        >
+        <text class="ui-copy"
+          >当前年级：{{
+            gradeOptions.find((item) => item.code === identityGrade)?.label ||
+            identityGrade ||
+            '未填写'
+          }}（{{ gradeOverride ? '手动调整' : '自动计算' }}）</text
+        >
+        <picker
+          class="ui-picker"
+          :range="gradeOptions"
+          range-key="label"
+          :value="
+            Math.max(
+              0,
+              gradeOptions.findIndex((item) => item.code === gradeOverride),
+            )
+          "
+          :disabled="
+            busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
+          "
+          @change="selectTag('grade', $event)"
+        >
+          <view
+            >手动调整年级：{{
+              gradeOptions.find((item) => item.code === gradeOverride)?.label || '跟随自动计算'
+            }}</view
+          >
+        </picker>
+        <text class="ui-copy">按年级序号调整（选填，1–100）</text>
+        <input
+          class="ui-input"
+          type="number"
+          :value="gradeOverride ? gradeOverride.split('_').slice(-1)[0] : ''"
+          :disabled="
+            busy || writing || !allowed('putMeProfile') || !enrollmentYear || !educationLevel
+          "
+          placeholder="例如输入 2 表示二年级，留空恢复自动"
+          @input="adjustGradeNumber"
+        />
+        <button
+          v-if="gradeOverride"
+          class="ui-button"
+          :disabled="busy || writing || !allowed('putMeProfile')"
+          @click="restoreAutomaticGrade"
+        >
+          恢复自动计算
+        </button> </view
+      ><view class="ui-section settings-group settings-personality"
+        ><text class="ui-section-title">MBTI（选填）</text>
+        <picker
+          class="ui-picker"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          :range="personalityLabels"
+          :value="Math.max(0, personalityTypes.indexOf(mbti))"
+          @change="selectPersonality"
+        >
+          <view class="personality-value">{{ mbti || '未设置' }} ›</view>
+        </picker>
+        <view class="assessment">
+          <text class="ui-section-title">16Personalities 官方测评</text>
+          <text class="ui-meta">在浏览器完成测评后，可以回来手动选择四字母类型。</text>
+          <text class="ui-meta" selectable>{{ assessmentURL }}</text>
+          <button class="ui-button" @click="copyAssessment">复制官方测评链接</button>
+        </view> </view
+      ><view class="ui-section settings-group settings-privacy"
+        ><text class="ui-section-title">公开展示设置</text>
+        <text class="ui-copy">报名使用已保存的昵称、校区、性别、年级和 MBTI。</text>
+        <text class="ui-copy"
+          >此设置控制校区、性别和年级在公开内容及主页上的展示。MBTI 仅本人和获授权的活动可见。</text
+        >
+        <text v-if="hidden === null" class="ui-copy">当前设置未返回，请明确选择后保存。</text>
+        <button
+          class="ui-button"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          :loading="isPageActionPending('pages-settings-index-button-2')"
+          @click="runPageAction(() => editVisibility(true), 'pages-settings-index-button-2')"
+        >
+          {{ hidden === true ? '已选择：隐藏公开资料' : '隐藏公开资料' }}
+        </button>
+        <button
+          class="ui-button"
+          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
+          :loading="isPageActionPending('pages-settings-index-button-3')"
+          @click="runPageAction(() => editVisibility(false), 'pages-settings-index-button-3')"
+        >
+          {{ hidden === false ? '已选择：显示公开资料' : '显示公开资料' }}
+        </button>
+        <text v-if="!allowed('putMeProfile')" class="ui-copy">当前账号没有修改资料的权限。</text>
+      </view></template
+    >
+    <text v-if="profilePending && !saving" class="ui-text-reset notice"
       >上次保存结果尚未确认，点「保存资料」可原样重试。</text
     >
-    <view v-if="allowed('putMeProfile')" class="card">
-      <text class="muted">修改后自动保存，也可手动保存。</text>
-      <text v-if="saving" class="muted">正在保存资料…</text>
-      <text v-else-if="hasUnsavedChanges" class="muted">有改动尚未保存</text>
+    <view v-if="allowed('putMeProfile')" class="ui-section">
+      <text class="ui-meta">修改后自动保存，也可手动保存。</text>
+      <text v-if="saving" class="ui-meta">正在保存资料…</text>
+      <text v-else-if="hasUnsavedChanges" class="ui-meta">有改动尚未保存</text>
       <button
+        class="ui-button ui-button-primary"
         :disabled="busy || writing || selectingAvatar"
         :loading="isPageActionPending('settings-save-profile')"
         @click="runPageAction(() => act(), 'settings-save-profile')"
@@ -902,11 +938,20 @@ onPullDownRefresh(async () => {
     </view>
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
-    <navigator url="/pages/deletion/index" class="card">账号注销与删除进度</navigator>
+    <navigator url="/pages/deletion/index" class="ui-section">账号注销与删除进度</navigator>
   </AppPage>
 </template>
 
 <style scoped>
+.settings-group {
+  display: grid;
+  gap: 24rpx;
+}
+.settings-group .ui-copy,
+.settings-group .ui-meta {
+  margin: 0;
+}
+
 .avatar-settings {
   display: flex;
   align-items: center;

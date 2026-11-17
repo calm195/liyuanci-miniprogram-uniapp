@@ -1,0 +1,149 @@
+// 仅用于页面显式选择的结构，不改变未采用这些类的业务组件。
+.page .ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+.page .ui-section.ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+.page .ui-text-reset {
+  margin: 0;
+}
+.page .ui-section {
+  display: block;
+  margin: 0 0 24rpx;
+  padding: 32rpx;
+  border-radius: 32rpx;
+  background: var(--theme-surface);
+  color: var(--theme-ink);
+}
+.page .ui-section-title,
+.page .ui-copy,
+.page .ui-meta,
+.page .ui-label {
+  display: block;
+  margin: 0;
+  white-space: pre-wrap;
+}
+.page .ui-section-title {
+  font-size: 32rpx;
+  line-height: 1.5;
+  font-weight: 700;
+}
+.page .ui-copy,
+.page .ui-label {
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.page .ui-meta {
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.page .ui-section-title + .ui-copy,
+.page .ui-section-title + .ui-meta,
+.page .ui-copy + .ui-meta {
+  margin-top: 12rpx;
+}
+.page .ui-field {
+  display: block;
+  margin: 0 0 24rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.page .ui-label {
+  margin-bottom: 12rpx;
+}
+.page .ui-input,
+.page .ui-textarea,
+.page .ui-picker {
+  display: block;
+  width: 100%;
+  min-height: 88rpx;
+  margin: 0;
+  padding: 20rpx 24rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 16rpx;
+  background: var(--theme-canvas);
+  color: var(--theme-ink);
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.page .ui-input {
+  height: 88rpx;
+}
+.page .ui-textarea {
+  min-height: 240rpx;
+}
+.page .ui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16rpx;
+  margin: 24rpx 0 0;
+}
+.page .ui-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88rpx;
+  height: auto;
+  margin: 0;
+  padding: 18rpx 28rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 16rpx;
+  background: var(--theme-surface);
+  color: var(--theme-ink);
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.page .ui-button-primary {
+  background: var(--theme-brand);
+  border-color: var(--theme-brand);
+  color: var(--theme-on-brand, #fff);
+}
+.page .ui-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 64rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-brand);
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+.page .ui-list-row {
+  display: block;
+  margin: 0;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid var(--theme-line);
+  color: var(--theme-ink);
+}
+.page .ui-list-row:last-child {
+  border-bottom: 0;
+}
+.page .ui-state {
+  display: block;
+  margin: 0 0 24rpx;
+  padding: 32rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 24rpx;
+  color: var(--theme-muted);
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.page .ui-stack[hidden],
+.page .ui-section[hidden],
+.page .ui-field[hidden],
+.page .ui-actions[hidden],
+.page .ui-state[hidden] {
+  display: none !important;
+}

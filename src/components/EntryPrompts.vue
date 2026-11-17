@@ -22,6 +22,7 @@ function leave() {
   visible = false
   generation++
   loginError.value = ''
+  entry.cancelLogin()
 }
 onShow(() => {
   visible = true
@@ -37,7 +38,7 @@ watch(
 watch(
   () => [user.validated, user.user?.verification, props.hideGuide],
   () => {
-    if (!config.useMock && user.validated) {
+    if (!config.useMock && user.validated && !entry.loginVisible) {
       entry.loginVisible = false
       if (!props.hideGuide) void entry.showGuide()
     }
@@ -54,8 +55,8 @@ async function login() {
     if (!active()) return
     if (!user.validated) throw new Error('登录尚未确认，请重试。')
     uni.$emit?.('app:notice', { message: '登录成功', kind: 'success' })
-    entry.loginVisible = false
-    if (!props.hideGuide) await entry.showGuide()
+    const continued = await entry.completeLogin()
+    if (!continued && !props.hideGuide && active()) await entry.showGuide()
   } catch (failure) {
     if (active())
       loginError.value = failure instanceof Error ? failure.message : '登录未完成，请重试。'
@@ -80,7 +81,7 @@ async function login() {
         :loading="isPageActionPending('src-components-EntryPrompts.vue-action-2')"
         @click="
           runPageAction(() => {
-            entry.loginVisible = false
+            entry.cancelLogin()
             emit('loginCancel')
           }, 'src-components-EntryPrompts.vue-action-2')
         "

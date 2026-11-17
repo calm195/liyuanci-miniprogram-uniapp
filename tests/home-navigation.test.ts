@@ -179,6 +179,7 @@ test('同账号会话更新时重载首页，旧请求不能让加载状态卡�
 })
 
 test('个人页心愿状态进入对应筛选，游客先登录且不遗留筛选意图', async () => {
+  let continueLogin: (() => void | Promise<void>) | undefined
   const user = reactive({ isLoggedIn: true, user: { id: 'synthetic-owner' } })
   const calls: string[] = []
   Object.assign(globalThis, {
@@ -195,6 +196,11 @@ test('个人页心愿状态进入对应筛选，游客先登录且不遗留筛�
       '\nexport { openOwnWishes, wishStates }',
     {
       openMainPage,
+      useLogin: () => ({
+        requestLogin: (after: () => void | Promise<void>) => {
+          continueLogin = after
+        },
+      }),
       useUserStore: () => user,
       useThemeStore: () => ({ preference: 'system' }),
       useEntryStore: () => ({}),
@@ -210,6 +216,10 @@ test('个人页心愿状态进入对应筛选，游客先登录且不遗留筛�
   assert.deepEqual(takeMainQuery(), { own: '1' })
   user.isLoggedIn = false
   await page.openOwnWishes('matching')
-  assert.equal(calls.at(-1), '/pages/login/index')
+  assert.ok(continueLogin)
   assert.equal(takeMainQuery(), null)
+  user.isLoggedIn = true
+  await continueLogin!()
+  assert.equal(calls.at(-1), '/pages/wishes/index')
+  assert.deepEqual(takeMainQuery(), { own: '1', state: 'matching' })
 })

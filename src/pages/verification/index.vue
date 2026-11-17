@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -19,6 +21,8 @@ const wishReturn = useWishActionReturn('verification')
 const name = ref('')
 const studentNumber = ref('')
 const asset = ref<StudentCardAsset | null>(null)
+const cardPreview = ref('')
+let previewingCard = false
 const uploading = ref(false)
 const resizeCanvas = shallowRef<{ width: number; height: number } | null>(null)
 const submitting = ref(false)
@@ -83,6 +87,8 @@ function showScanProblem(title: string, content: string) {
   uni.$emit?.('app:notice', { message: `${title}：${content}`, kind: 'warning' })
 }
 function clearPrivateData() {
+  cardPreview.value = ''
+  previewingCard = false
   stopScanPolling()
   reviewPoller.stop()
   readingReview = false
@@ -231,6 +237,11 @@ async function chooseCard() {
     const path =
       typeof result.tempFilePaths === 'string' ? result.tempFilePaths : result.tempFilePaths[0]
     if (!path) return
+    // 新图片与旧扫描回执不能混用，取消选图则保留原来的图片和回执。
+    stopScanPolling()
+    asset.value = null
+    assetEpoch.value = -1
+    cardPreview.value = path
     const uploaded = await uploadStudentCard(
       path,
       `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -270,6 +281,27 @@ async function chooseCard() {
   } finally {
     if (current === generation) uploading.value = false
   }
+}
+function removeCard() {
+  if (busy.value || querying.value) return
+  stopScanPolling()
+  asset.value = null
+  assetEpoch.value = -1
+  cardPreview.value = ''
+  scanNotice.value = ''
+}
+function previewCard() {
+  if (!cardPreview.value || busy.value) return
+  // #ifdef MP-WEIXIN
+  previewingCard = true
+  // #endif
+  uni.previewImage({
+    urls: [cardPreview.value],
+    current: cardPreview.value,
+    fail: () => {
+      previewingCard = false
+    },
+  })
 }
 async function queryAsset() {
   if (config.useMock || querying.value || busy.value || !asset.value) return
@@ -344,6 +376,7 @@ async function submitReal() {
     uni.$emit?.('app:notice', { message: '认证申请已受理，等待人工审核。', kind: 'success' })
     name.value = ''
     studentNumber.value = ''
+    cardPreview.value = ''
     asset.value = null
     void store.refresh(false, true).catch(() => {})
   } catch (failure) {
@@ -403,10 +436,14 @@ function reviewDemo(approved: boolean) {
 }
 onShow(() => {
   visible = true
+  if (previewingCard) {
+    previewingCard = false
+    return
+  }
   if (!config.useMock && !selectingCard) void refreshReview()
 })
 onHide(() => {
-  if (selectingCard) return
+  if (selectingCard || previewingCard) return
   visible = false
   clearPrivateData()
 })
@@ -424,17 +461,20 @@ onPullDownRefresh(async () => {
 })
 </script>
 <template>
-  <AppPage :hide-entry-guide="wishReturn.active.value">
+  <AppPage responsive-padding :hide-entry-guide="wishReturn.active.value">
     <canvas
       v-if="resizeCanvas"
       canvas-id="student-card-resize"
       class="resize-canvas"
       :style="{ width: resizeCanvas.width + 'px', height: resizeCanvas.height + 'px' }"
     />
-    <text class="title">学生认证</text>
-    <view v-if="wishReturn.active.value" class="card">
-      <text>认证通过后会返回心愿详情。等待审核期间可返回，审核通过后再继续操作。</text>
+    <PageHeading title="学生认证" description="学生卡仅用于资格审核，请核对当前进度后继续。" />
+    <view v-if="wishReturn.active.value" class="ui-section ui-stack">
+      <text class="ui-copy"
+        >认证通过后会返回心愿详情。等待审核期间可返回，审核通过后再继续操作。</text
+      >
       <button
+        class="ui-button"
         :disabled="uploading || submitting || wishReturn.returning.value"
         :loading="wishReturn.returning.value"
         @click="wishReturn.returnToWish"
@@ -442,12 +482,14 @@ onPullDownRefresh(async () => {
         返回心愿详情
       </button>
     </view>
-    <text v-if="config.useMock" class="notice"
+    <text v-if="config.useMock" class="ui-text-reset notice"
       >合成演示 · 请仅填写虚构资料，不选择或上传真实学生卡</text
     >
-    <text v-else>学生卡仅用于学生资格审核。离开页面会清除已填写资料；待审不承诺完成时限。</text>
-    <view class="card">
-      <text v-if="uploading || submitting || refreshing || querying" class="notice">{{
+    <text v-else class="ui-copy"
+      >学生卡仅用于学生资格审核。离开页面会清除已填写资料；待审不承诺完成时限。</text
+    >
+    <view class="ui-section ui-stack">
+      <text v-if="uploading || submitting || refreshing || querying" class="ui-text-reset notice">{{
         uploading
           ? '正在准备或上传学生卡，其他操作暂不可用。'
           : submitting
@@ -456,17 +498,19 @@ onPullDownRefresh(async () => {
               ? '正在读取审核记录，请稍候。'
               : '正在查询图片扫描状态，请稍候。'
       }}</text>
-      <text>账号状态：{{ store.label }}</text>
-      <text v-if="(config.useMock ? store.verification : currentReview)?.reason">
+      <text class="ui-copy">账号状态：{{ store.label }}</text>
+      <text v-if="(config.useMock ? store.verification : currentReview)?.reason" class="ui-copy">
         驳回原因：{{ (config.useMock ? store.verification : currentReview)?.reason }}
       </text>
-      <text v-if="(config.useMock ? store.verification : currentReview)?.revision_suggestion"
+      <text
+        v-if="(config.useMock ? store.verification : currentReview)?.revision_suggestion"
+        class="ui-copy"
         >修改建议：{{
           (config.useMock ? store.verification : currentReview)?.revision_suggestion
         }}</text
       >
       <view v-if="!config.useMock">
-        <text>{{
+        <text class="ui-copy">{{
           reviewState === 'absent'
             ? '当前没有认证申请记录。'
             : reviewState === 'present'
@@ -480,6 +524,7 @@ onPullDownRefresh(async () => {
                 : '当前审核记录尚未确认，请重新读取。'
         }}</text>
         <button
+          class="ui-button"
           :disabled="refreshing || busy || querying"
           :loading="refreshing && !submitting"
           @click="runPageAction(() => refreshReview(), 'pages-verification-index-button-1')"
@@ -487,9 +532,13 @@ onPullDownRefresh(async () => {
           重新读取审核记录
         </button>
       </view>
-      <text v-if="!config.useMock && !config.verificationWritesReady">认证提交暂未开放。</text>
-      <input
+      <text v-if="!config.useMock && !config.verificationWritesReady" class="ui-copy"
+        >认证提交暂未开放。</text
+      >
+      <text class="ui-label">学生姓名</text
+      ><input
         v-model="name"
+        class="ui-input"
         placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="姓名（演示时填写虚构姓名）"
@@ -500,8 +549,10 @@ onPullDownRefresh(async () => {
           demoStatus === 'approved'
         "
       />
-      <input
+      <text class="ui-label">学号</text
+      ><input
         v-model="studentNumber"
+        class="ui-input"
         :class="{ 'student-number-invalid': studentNumberError }"
         placeholder-class="field-placeholder"
         :maxlength="-1"
@@ -513,24 +564,57 @@ onPullDownRefresh(async () => {
           demoStatus === 'approved'
         "
       />
-      <text v-if="studentNumberError" class="error">{{ studentNumberError }}</text>
-      <button
-        :disabled="
-          busy ||
-          querying ||
-          (!config.useMock && !canUpload) ||
-          (config.useMock && (demoStatus === 'pending' || demoStatus === 'approved'))
-        "
-        :loading="uploading"
-        @click="runPageAction(() => chooseCard(), 'pages-verification-index-button-2')"
-      >
-        {{ config.useMock ? '选择合成学生卡' : '选择并上传学生卡' }}
-      </button>
-      <text v-if="!config.useMock && !asset && !busy">
+      <text v-if="studentNumberError" class="ui-text-reset error">{{ studentNumberError }}</text>
+      <view class="student-card-upload">
+        <button
+          v-if="cardPreview"
+          class="card-preview-button"
+          :disabled="busy"
+          aria-label="预览学生卡照片"
+          @click="previewCard"
+        >
+          <image :src="cardPreview" class="card-preview" mode="aspectFit" /><text
+            class="preview-caption"
+            >点击预览</text
+          >
+        </button>
+        <view v-else class="card-upload-placeholder"
+          ><AppIcon name="shield" :size="60" /><text class="ui-section-title">上传学生卡照片</text
+          ><text class="ui-meta">请拍清姓名、学号与学校信息</text></view
+        >
+        <view class="card-upload-actions"
+          ><button
+            class="ui-button ui-button-primary"
+            :disabled="
+              busy ||
+              querying ||
+              (!config.useMock && !canUpload) ||
+              (config.useMock && (demoStatus === 'pending' || demoStatus === 'approved'))
+            "
+            :loading="uploading"
+            @click="runPageAction(() => chooseCard(), 'pages-verification-index-button-2')"
+          >
+            {{
+              uploading ? '正在上传' : cardPreview || asset ? '重新选择照片' : '选择学生卡照片'
+            }}</button
+          ><button
+            v-if="cardPreview || asset"
+            class="ui-button"
+            :disabled="busy || querying"
+            @click="removeCard"
+          >
+            移除
+          </button></view
+        >
+        <text class="ui-meta card-privacy"
+          >照片仅用于资格审核，支持 PNG/JPEG。大图会先缩小，处理后不超过 4 MiB / 400 万像素。</text
+        >
+      </view>
+      <text v-if="!config.useMock && !asset && !busy" class="ui-copy">
         请选择清晰的 PNG/JPEG 图片，大图会自动缩小。上传成功后显示扫描查询按钮。
       </text>
-      <text v-if="!asset && scanNotice">{{ scanNotice }}</text>
-      <text v-if="asset"
+      <text v-if="!asset && scanNotice" class="ui-copy">{{ scanNotice }}</text>
+      <text v-if="asset" class="ui-copy"
         >图片扫描状态：{{
           asset.scan_status === 'pending'
             ? scanNotice || '等待安全扫描'
@@ -539,11 +623,14 @@ onPullDownRefresh(async () => {
               : '安全扫描未通过，请重新选择'
         }}</text
       >
-      <text v-if="asset?.scan_status === 'pending' && !config.useMock && !scanNotice"
+      <text
+        v-if="asset?.scan_status === 'pending' && !config.useMock && !scanNotice"
+        class="ui-copy"
         >图片已受理，正在自动查询扫描状态。安全扫描通过后仍须提交认证申请。</text
       >
       <button
         v-if="!config.useMock && asset"
+        class="ui-button"
         :disabled="querying || busy"
         :loading="querying"
         @click="runPageAction(() => queryAsset(), 'pages-verification-index-button-3')"
@@ -552,17 +639,20 @@ onPullDownRefresh(async () => {
       </button>
       <view v-if="config.useMock && asset?.scan_status === 'pending'">
         <button
+          class="ui-button"
           @click="runPageAction(() => scanDemo('approved'), 'pages-verification-index-button-4')"
         >
           演示：扫描通过
         </button>
         <button
+          class="ui-button"
           @click="runPageAction(() => scanDemo('rejected'), 'pages-verification-index-button-5')"
         >
           演示：扫描失败
         </button>
       </view>
       <button
+        class="ui-button ui-button-primary"
         :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
         :loading="submitting"
         @click="runPageAction(() => submit(), 'pages-verification-index-button-6')"
@@ -570,14 +660,18 @@ onPullDownRefresh(async () => {
         {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
       </button>
       <AppNotice :message="error" kind="error" />
-      <text v-if="demoMessage">{{ demoMessage }}</text>
+      <text v-if="demoMessage" class="ui-copy">{{ demoMessage }}</text>
       <view v-if="config.useMock && demoStatus === 'pending'">
         <button
+          class="ui-button"
           @click="runPageAction(() => reviewDemo(false), 'pages-verification-index-button-7')"
         >
           演示：人工驳回
         </button>
-        <button @click="runPageAction(() => reviewDemo(true), 'pages-verification-index-button-8')">
+        <button
+          class="ui-button"
+          @click="runPageAction(() => reviewDemo(true), 'pages-verification-index-button-8')"
+        >
           演示：人工通过
         </button>
       </view>
@@ -586,6 +680,56 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.student-card-upload {
+  margin: 24rpx 0;
+  padding: 32rpx;
+  border: 2rpx dashed var(--theme-line);
+  border-radius: 28rpx;
+  background: var(--theme-surface);
+}
+.card-upload-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 0 32rpx;
+}
+.page .card-preview-button {
+  position: relative;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0 0 24rpx;
+  border-radius: 20rpx;
+  background: var(--theme-mint);
+  overflow: hidden;
+}
+.card-preview {
+  width: 100%;
+  height: 280rpx;
+}
+.preview-caption {
+  position: absolute;
+  right: 12rpx;
+  bottom: 12rpx;
+  background: var(--theme-surface);
+  padding: 4rpx 14rpx;
+  border-radius: 10rpx;
+  font-size: 22rpx;
+}
+.card-upload-actions {
+  display: flex;
+  gap: 16rpx;
+}
+.card-upload-actions .ui-button {
+  flex: 1;
+}
+.card-privacy {
+  margin-top: 20rpx !important;
+  font-size: 22rpx;
+  text-align: center;
+}
+
 .resize-canvas {
   position: fixed;
   left: -10000px;

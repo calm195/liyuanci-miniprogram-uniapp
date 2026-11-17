@@ -47,28 +47,6 @@
   display: inline;
   margin: 0;
 }
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 8;
-  margin: 0 -32rpx;
-  padding-left: 36rpx;
-  padding-right: 220rpx;
-  background: var(--theme-canvas);
-}
-.app-header-inner {
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  min-height: 88rpx;
-  font-size: 40rpx;
-  font-weight: 750;
-}
-.brand-koi {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-}
 .app-tabbar {
   position: fixed;
   z-index: 15;

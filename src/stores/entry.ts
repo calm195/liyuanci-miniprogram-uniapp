@@ -12,11 +12,40 @@ export const useEntryStore = defineStore('entry', () => {
   const busy = ref(false)
   const error = ref('')
   let checked = ''
-  function openLogin() {
+  let continuation: {
+    run: () => void | Promise<void>
+    active: () => boolean
+    owner?: string
+  } | null = null
+  function openLogin(run?: () => void | Promise<void>, active: () => boolean = () => true) {
+    continuation = run ? { run, active, owner: useUserStore().user?.id } : null
     loginVisible.value = true
     error.value = ''
   }
+  function cancelLogin() {
+    continuation = null
+    loginVisible.value = false
+  }
+  async function completeLogin() {
+    const user = useUserStore()
+    if (!user.validated || !user.user) return false
+    const next = continuation
+    continuation = null
+    loginVisible.value = false
+    // 续接动作自行读取目标资格，完成后再刷新页面，避免两次读取竞争同一 busy 门禁。
+    if (next && next.active() && (!next.owner || next.owner === user.user.id)) {
+      try {
+        await next.run()
+      } finally {
+        uni.$emit?.('auth:ready')
+      }
+      return true
+    }
+    uni.$emit?.('auth:ready')
+    return false
+  }
   function clear() {
+    cancelLogin()
     checked = ''
     guide.value = null
     guideVisible.value = false
@@ -77,6 +106,8 @@ export const useEntryStore = defineStore('entry', () => {
     busy,
     error,
     openLogin,
+    cancelLogin,
+    completeLogin,
     showGuide,
     confirmGuide,
     clear,

@@ -2,6 +2,7 @@ import { createSSRApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import AppNotice from '@/components/AppNotice.vue'
+import LoginLink from '@/components/LoginLink.vue'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useThemeStore } from '@/stores/theme'
@@ -13,6 +14,7 @@ export function createApp() {
   const pinia = createPinia()
   app.use(pinia)
   app.component('AppNotice', AppNotice)
+  app.component('LoginLink', LoginLink)
   app.mixin(createPageInteractionMixin(() => useThemeStore(pinia).syncNative()))
   return { app }
 }

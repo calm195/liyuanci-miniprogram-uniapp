@@ -926,3 +926,35 @@ test('年级非法输入即使没有其他字段改动，保存也不能清除�
   await s.runtime.returnToActivity()
   assert.deepEqual(s.navigation, [])
 })
+
+test('已有凭据但身份尚未恢复时，资料页先复核本人再显示完整字段', async () => {
+  const s = await setup()
+  s.user.user = null
+  s.user.validated = false
+  s.user.refresh = async () => {
+    s.user.user = structuredClone(actor)
+    s.user.validated = true
+  }
+  await s.runtime.load()
+  assert.equal(s.runtime.error.value, '')
+  assert.equal(s.runtime.currentMe.value.id, actor.id)
+  assert.equal(s.runtime.nickname.value, actor.nickname)
+})
+
+test('资料冷启动身份读取跨会话代次，旧结果不回填且释放忙碌状态', async () => {
+  const s = await setup()
+  s.user.user = null
+  let finish!: () => void
+  s.user.refresh = () =>
+    new Promise<void>((resolve) => {
+      finish = resolve
+    })
+  const reading = s.runtime.load()
+  s.epoch()
+  s.user.user = { ...actor, id: 'synthetic-other' }
+  finish()
+  await reading
+  assert.equal(s.runtime.currentMe.value, null)
+  assert.equal(s.runtime.nickname.value, '')
+  assert.equal(s.runtime.busy.value, false)
+})
