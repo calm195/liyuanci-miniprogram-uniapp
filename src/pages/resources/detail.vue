@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { dictionaryLabel, dictionaryItems } from '@/features/dictionaries/catalog'
 import { refreshDictionaries } from '@/features/dictionaries/load'
 const resourceFeedbackChoices = computed(() =>
@@ -27,6 +28,7 @@ import {
 } from '@/api/resource-file'
 import { beijingTime } from '@/utils/capsules'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import ContentStats from '@/components/ContentStats.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import { useContentView } from '@/composables/use-content-view'
@@ -268,31 +270,34 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">资料详情</text>
-    <view v-if="gate" class="card">
-      <text>{{ gate }}</text>
-      <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-      <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
+  <AppPage responsive-padding>
+    <PageHeading :title="detail?.title || '资料详情'" />
+    <view v-if="gate" class="ui-section ce-group">
+      <text class="ui-copy">{{ gate }}</text>
+      <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+      <navigator v-else class="ui-link" url="/pages/verification/index">查看学生认证</navigator>
     </view>
     <AppNotice :message="error" kind="error" />
-    <text v-if="busy">正在加载资料…</text><AppNotice :message="notice" kind="info" />
+    <text v-if="busy" class="ui-copy">正在加载资料…</text
+    ><AppNotice :message="notice" kind="info" />
 
     <template v-if="visible && detail">
-      <view class="card">
-        <text class="title">{{ detail.title }}</text>
+      <view class="ui-section ce-group">
         <ContentStats :views="detail.view_count" />
-        <FavoriteButton
-          kind="resource"
-          :target-id="detail.id"
-          :favorited="detail.favorited"
-        /><text>{{ detail.category.name }}</text>
-        <text class="resource-text">{{ detail.description || '暂无简介' }}</text>
-        <text>更新时间：{{ beijingTime(detail.updated_at) }}（北京时间）</text>
+        <FavoriteButton kind="resource" :target-id="detail.id" :favorited="detail.favorited" /><text
+          class="ui-copy"
+          >{{ detail.category.name }}</text
+        >
+        <text class="ui-copy resource-text">{{ detail.description || '暂无简介' }}</text>
+        <text class="ui-copy">更新时间：{{ beijingTime(detail.updated_at) }}（北京时间）</text>
+      </view>
+      <view class="ui-section ce-group">
+        <text class="ui-section-title">获取资料</text>
         <template v-if="detail.file">
-          <text
+          <text class="ui-copy"
             >文件：{{ detail.file.name }}（{{
               (detail.file.size / 1024 / 1024).toFixed(2)
             }}
@@ -300,6 +305,7 @@ onPullDownRefresh(async () => {
           >
           <button
             v-if="!downloaded && detail.allowed_actions.includes('copy_download')"
+            class="ui-button ui-button-primary"
             :disabled="writing || !!pending || busy"
             :loading="isPageActionPending('resource-download')"
             @click="runPageAction(() => downloadFile(), 'resource-download')"
@@ -313,10 +319,13 @@ onPullDownRefresh(async () => {
             }}
           </button>
           <template v-if="downloaded">
-            <text>已保存到微信小程序</text>
-            <text class="resource-text" user-select>保存路径：{{ downloaded.path }}</text>
-            <text>此路径仅供微信小程序访问，手机文件管理器无法打开。可将文件转发到微信聊天。</text>
+            <text class="ui-copy">已保存到微信小程序</text>
+            <text class="ui-copy resource-text" user-select>保存路径：{{ downloaded.path }}</text>
+            <text class="ui-copy"
+              >此路径仅供微信小程序访问，手机文件管理器无法打开。可将文件转发到微信聊天。</text
+            >
             <button
+              class="ui-button"
               :loading="isPageActionPending('resource-share')"
               @click="runPageAction(() => shareDownloaded(), 'resource-share')"
             >
@@ -325,17 +334,23 @@ onPullDownRefresh(async () => {
           </template>
         </template>
         <template v-else>
-          <text class="resource-text">下载链接：{{ detail.download_url }}</text>
-          <text>提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
+          <text class="ui-copy resource-text">下载链接：{{ detail.download_url }}</text>
+          <text class="ui-copy">提取码：{{ detail.extraction_code ?? '无提取码' }}</text>
           <button
-            :disabled="writing || !!pending || busy"
+            class="ui-button ui-button-primary"
+            :disabled="
+              writing || !!pending || busy || !detail.allowed_actions.includes('copy_download')
+            "
             :loading="isPageActionPending('pages-resources-detail-button-2')"
             @click="runPageAction(() => copy(false), 'pages-resources-detail-button-2')"
           >
             复制下载信息
           </button>
           <button
-            :disabled="writing || !!pending || busy"
+            class="ui-button"
+            :disabled="
+              writing || !!pending || busy || !detail.allowed_actions.includes('copy_download')
+            "
             :loading="isPageActionPending('pages-resources-detail-button-3')"
             @click="runPageAction(() => copy(true), 'pages-resources-detail-button-3')"
           >
@@ -343,21 +358,23 @@ onPullDownRefresh(async () => {
           </button>
         </template>
       </view>
-      <view class="card">
-        <text>资料反馈</text>
+      <view class="ui-section ce-group">
+        <text class="ui-section-title">资料反馈</text>
         <view v-if="!resourceFeedbackChoices.length"
-          ><text>反馈选项暂不可用，请刷新后再提交。</text
+          ><text class="ui-copy">反馈选项暂不可用，请刷新后再提交。</text
           ><button
+            class="ui-button"
             :loading="isPageActionPending('feedback-options-refresh')"
             @click="runPageAction(() => refreshFeedbackChoices(), 'feedback-options-refresh')"
           >
             刷新反馈选项
           </button></view
         >
-        <text v-if="!canFeedback">当前允许查看资料，暂不可提交或修改反馈。</text>
+        <text v-if="!canFeedback" class="ui-copy">当前允许查看资料，暂不可提交或修改反馈。</text>
         <button
           v-for="option in resourceFeedbackChoices"
           :key="option.kind"
+          class="ui-button"
           :disabled="!canFeedback || writing || !!pending"
           :class="{ chosen: choice === option.kind }"
           :loading="isPageActionPending('pages-resources-detail-button-4' + ':' + option.kind)"
@@ -371,11 +388,12 @@ onPullDownRefresh(async () => {
           {{ choice === option.kind ? '已选择：' : '' }}{{ option.label }}
           {{ detail.feedback_summary?.[option.kind] ?? '' }}
         </button>
-        <text v-if="detail.my_feedback"
+        <text v-if="detail.my_feedback" class="ui-copy"
           >已保存：{{ dictionaryLabel('resource_feedback', detail.my_feedback.kind) }}</text
         >
         <button
           v-if="!pending"
+          class="ui-button"
           :disabled="
             !canFeedback ||
             !resourceFeedbackChoices.some((option) => option.kind === choice) ||
@@ -388,8 +406,9 @@ onPullDownRefresh(async () => {
           提交反馈
         </button>
         <template v-else
-          ><text>反馈结果尚未确认，重试将核实同一次提交。</text
+          ><text class="ui-copy">反馈结果尚未确认，重试将核实同一次提交。</text
           ><button
+            class="ui-button"
             :disabled="writing || busy"
             :loading="isPageActionPending('pages-resources-detail-button-6')"
             @click="runPageAction(() => submit(true), 'pages-resources-detail-button-6')"
@@ -402,6 +421,13 @@ onPullDownRefresh(async () => {
   </AppPage>
 </template>
 <style scoped>
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+
 .resource-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

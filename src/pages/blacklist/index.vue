@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -331,20 +333,21 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">黑名单</text>
+  <AppPage responsive-padding>
+    <PageHeading title="屏蔽管理" description="管理你希望减少的联系。解除屏蔽不会恢复旧关系。" />
 
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentMe" class="card">
-      <text
+    <text v-if="busy" class="ui-copy">加载中…</text>
+    <view v-if="currentMe" class="ui-section">
+      <text class="ui-copy"
         >可从他人公开主页进入拉黑。列表不展示账号或内容来源。解除拉黑不会恢复旧申请、旧消息或已取消暖评。</text
       >
       <view v-if="targetName && blockAllowed()">
-        <text>当前选择：{{ targetName }}</text>
+        <text class="ui-copy">当前选择：{{ targetName }}</text>
         <button
-          class="moderation-link"
+          class="ui-button moderation-link"
           :disabled="busy || writing || retryReady"
           :loading="isPageActionPending('blacklist-block-user')"
           @click="runPageAction(() => act('block'), 'blacklist-block-user')"
@@ -352,11 +355,11 @@ onPullDownRefresh(async () => {
           屏蔽此用户
         </button>
       </view>
-      <view v-for="(entry, index) in rows" :key="entry.block_id" class="mt-3">
-        <text>{{ entry.label }} {{ index + 1 }}</text>
+      <view v-for="(entry, index) in rows" :key="entry.block_id" class="ui-list-row">
+        <text class="ui-copy">{{ entry.label }} {{ index + 1 }}</text>
         <button
           v-if="unblockAllowed(entry)"
-          class="moderation-link"
+          class="ui-button moderation-link"
           :disabled="busy || writing"
           :loading="isPageActionPending('blacklist-unblock-user' + ':' + entry.block_id)"
           @click="
@@ -369,9 +372,10 @@ onPullDownRefresh(async () => {
           解除屏蔽
         </button>
       </view>
-      <text v-if="blocksReady && !rows.length">暂无拉黑记录</text>
+      <text v-if="blocksReady && !rows.length" class="ui-copy">暂无拉黑记录</text>
       <button
         v-if="cursor && blocksReady"
+        class="ui-button"
         :disabled="busy || writing"
         :loading="isPageActionPending('blacklist-load-more')"
         @click="runPageAction(() => load(true), 'blacklist-load-more')"
@@ -381,6 +385,7 @@ onPullDownRefresh(async () => {
     </view>
     <button
       v-if="retryReady"
+      class="ui-button"
       :disabled="busy || writing"
       :loading="isPageActionPending('blacklist-retry-write')"
       @click="runPageAction(retryWrite, 'blacklist-retry-write')"

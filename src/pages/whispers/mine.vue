@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
@@ -44,31 +46,38 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">我的心事</text>
-    <view v-for="post in posts" :key="post.id" class="whisper-preview">
-      <text class="post-heading">{{ post.title || '未命名悄悄话' }}</text>
+  <AppPage responsive-padding>
+    <PageHeading title="我的心事" description="每一段表达，都值得被认真对待。" />
+    <view v-for="post in posts" :key="post.id" class="ui-section ce-group">
+      <text class="ui-copy post-heading">{{ post.title || '未命名悄悄话' }}</text>
       <view class="post-meta"
-        ><text class="author-tag">帖主</text><text>{{ whisperStates[post.status] }}</text></view
+        ><text class="ui-copy author-tag">帖主</text
+        ><text class="ui-copy">{{ whisperStates[post.status] }}</text></view
       >
-      <text v-if="post.body" class="whitespace-pre-wrap">{{ post.body }}</text>
-      <text v-if="post.review_result?.reason" class="notice">{{ post.review_result.reason }}</text>
-      <text v-if="post.review_result?.revision_suggestion" class="notice">{{
+      <text v-if="post.body" class="ui-copy own-post-excerpt">{{ post.body }}</text>
+      <text v-if="post.review_result?.reason" class="ui-meta notice">{{
+        post.review_result.reason
+      }}</text>
+      <text v-if="post.review_result?.revision_suggestion" class="ui-meta notice">{{
         post.review_result.revision_suggestion
       }}</text>
       <navigator
-        class="small-link"
+        class="ui-link small-link"
         :url="`/pages/whispers/detail?id=${encodeURIComponent(post.id)}&manage=1`"
         >查看心事 ›</navigator
       >
     </view>
-    <view v-if="ready && !posts.length && !busy" class="empty-state"
-      ><AppIcon name="chat" :size="52" /><text>还没有心事，想说的话可以慢慢写。</text></view
+    <view v-if="ready && !posts.length && !busy && !error" class="empty-state"
+      ><AppIcon name="chat" :size="52" /><text class="ui-copy"
+        >还没有心事，想说的话可以慢慢写。</text
+      ></view
     >
     <button
       v-if="cursor"
+      class="ui-button"
       :disabled="busy || writing || retryReady"
       :loading="isPageActionPending('whisper-mine-more')"
       @click="runPageAction(() => load(true), 'whisper-mine-more')"
@@ -76,10 +85,19 @@ onShow(() => {
       加载下一页
     </button>
     <AppNotice :message="error" kind="error" />
-    <navigator url="/pages/whispers/editor" class="floating-compose">＋ 说说心事</navigator>
+    <navigator url="/pages/whispers/editor" class="ui-button ui-button-primary"
+      >＋ 说说心事</navigator
+    >
   </AppPage>
 </template>
 <style scoped>
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+
 .post-heading {
   display: block;
   font-size: 34rpx;
@@ -103,5 +121,11 @@ onShow(() => {
 .small-link {
   display: block;
   margin-top: 24rpx;
+}
+.own-post-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>

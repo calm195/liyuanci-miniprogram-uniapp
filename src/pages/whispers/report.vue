@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
@@ -110,22 +112,24 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">举报树洞内容</text
-    ><button
+  <AppPage responsive-padding>
+    <PageHeading title="举报树洞内容" description="先核对公开来源，再选择合适的反馈类型。" /><button
+      class="ui-button"
       :disabled="busy || writing || retryReady"
       :loading="isPageActionPending('pages-whispers-report-button-1')"
       @click="runPageAction(load, 'pages-whispers-report-button-1')"
     >
       重新核对来源
     </button>
-    <view v-if="target" class="card"
-      ><text>已读取当前公开来源。举报仅提交内容引用与版本。</text
+    <view v-if="target" class="ui-section ce-group"
+      ><text class="ui-copy">已读取当前公开来源。举报仅提交内容引用与版本。</text
       ><button
         v-for="item in module.config?.report_types || []"
         :key="item.code"
+        class="ui-button"
         :disabled="busy || writing || retryReady"
         :loading="isPageActionPending('pages-whispers-report-button-2' + ':' + item.code)"
         @click="
@@ -136,8 +140,10 @@ onShow(() => {
         "
       >
         {{ typeCode === item.code ? '已选：' : '' }}{{ item.label }}</button
-      ><text v-if="!module.config?.report_types.length">举报类型资料尚不可用，不能提交。</text
+      ><text v-if="!module.config?.report_types.length" class="ui-copy"
+        >举报类型资料尚不可用，不能提交。</text
       ><button
+        class="ui-button ui-button-primary"
         :disabled="busy || writing || retryReady"
         :loading="isPageActionPending('pages-whispers-report-button-3')"
         @click="runPageAction(submit, 'pages-whispers-report-button-3')"
@@ -147,6 +153,7 @@ onShow(() => {
     >
     <button
       v-if="retryReady"
+      class="ui-button ui-button-primary"
       :disabled="writing"
       :loading="isPageActionPending('pages-whispers-report-button-4')"
       @click="runPageAction(page.retry, 'pages-whispers-report-button-4')"
@@ -155,3 +162,12 @@ onShow(() => {
     ><AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
+
+<style scoped>
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+</style>

@@ -23,9 +23,9 @@ function retry() {
 <template>
   <view v-if="open" class="contribution-mask" @tap.self="emit('close')">
     <view class="contribution-panel">
-      <text class="title">资料投稿</text>
-      <text>添加资料负责人微信，备注“资料投稿”</text>
-      <text v-if="!resourceContributionImage">投稿二维码暂未配置</text>
+      <text class="ui-copy title">资料投稿</text>
+      <text class="ui-copy">添加资料负责人微信，备注“资料投稿”</text>
+      <text v-if="!resourceContributionImage" class="ui-copy">投稿二维码暂未配置</text>
       <template v-else>
         <AppNotice :message="failed ? '二维码加载失败，请重试。' : ''" kind="error" />
         <image
@@ -38,6 +38,7 @@ function retry() {
         />
         <button
           v-if="failed"
+          class="ui-button"
           :loading="isPageActionPending('components-ResourceContribution-button-1')"
           @click="runPageAction(() => retry(), 'components-ResourceContribution-button-1')"
         >
@@ -45,17 +46,25 @@ function retry() {
         </button>
         <button
           v-else
+          class="ui-button"
           :loading="isPageActionPending('components-ResourceContribution-button-2')"
           @click="runPageAction(() => preview(), 'components-ResourceContribution-button-2')"
         >
           查看大图
         </button>
       </template>
-      <button @click="emit('close')">关闭</button>
+      <button class="ui-button" @click="emit('close')">关闭</button>
     </view>
   </view>
 </template>
 <style scoped>
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+
 .contribution-mask {
   position: fixed;
   inset: 0;

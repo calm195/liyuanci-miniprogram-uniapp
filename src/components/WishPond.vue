@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import FeedPageHero from '@/components/FeedPageHero.vue'
 import WishPreview from '@/components/WishPreview.vue'
 import WishImageEditor from '@/components/WishImageEditor.vue'
 import WishIdentityEditor from '@/components/WishIdentityEditor.vue'
@@ -430,17 +432,35 @@ async function refresh() {
   }
 }
 defineExpose({ show, leave, refresh })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage :tab="props.mainTab ? 'pond' : undefined" :title="props.mainTab ? '心愿池' : undefined">
-    <view class="module-hero">
-      <image src="/static/illustrations/pavilion.png" class="module-art" mode="aspectFit" />
-      <text class="module-title">捞一捞，心愿有回响</text>
-      <text class="module-subtitle">投一枚心愿，也做一次别人的锦鲤。</text>
-    </view>
-    <text v-if="config.useMock" class="notice">合成演示 · 仅填写虚构内容，不发送 API</text>
+  <AppPage
+    responsive-padding
+    :tab="props.mainTab ? 'pond' : undefined"
+    :title="props.mainTab ? '心愿池' : undefined"
+  >
+    <FeedPageHero
+      :title="
+        editing
+          ? '写下一份小小期待'
+          : wall
+            ? '心愿实现的时刻'
+            : own
+              ? '我的心愿与进展'
+              : '让每一份期待有回响'
+      "
+      :description="
+        editing ? '保留真实的期待，说明你希望获得怎样的帮助。' : '投一枚心愿，也做一次别人的锦鲤。'
+      "
+      illustration="pavilion"
+    />
+    <text v-if="config.useMock" class="ui-text-reset notice"
+      >合成演示 · 仅填写虚构内容，不发送 API</text
+    >
     <view v-if="!editing" class="segment-tabs">
       <button
+        class="ui-button"
         :class="{ selected: !own && !wall }"
         :disabled="commandLocked"
         :loading="isPageActionPending('pages-wishes-index-button-1')"
@@ -449,6 +469,7 @@ defineExpose({ show, leave, refresh })
         心愿广场
       </button>
       <button
+        class="ui-button"
         :class="{ selected: wall }"
         :disabled="commandLocked"
         :loading="isPageActionPending('src-pages-wishes-index.vue-action-2')"
@@ -461,6 +482,7 @@ defineExpose({ show, leave, refresh })
         还愿墙
       </button>
       <button
+        class="ui-button"
         :class="{ selected: own && !wall }"
         :disabled="commandLocked"
         :loading="isPageActionPending('pages-wishes-index-button-2')"
@@ -473,24 +495,24 @@ defineExpose({ show, leave, refresh })
     <AppNotice :message="!wall ? error : ''" :kind="pendingWrite ? 'uncertain' : 'error'" />
     <button
       v-if="pendingWrite && !wall"
+      class="ui-button"
       :disabled="writing"
       :loading="isPageActionPending('wish-write-retry')"
       @click="runPageAction(retryWrite, 'wish-write-retry')"
     >
       使用原请求重试
     </button>
-    <view v-if="!wall && (!user.isLoggedIn || !canCreate)" class="qualification-links">
-      <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-      <navigator v-else url="/pages/verification/index">查看学生认证</navigator>
-    </view>
-    <view v-if="editing && !wall" class="card">
+    <view v-if="editing && !wall" class="ui-section wish-editor">
+      <text class="ui-label">心愿标题</text>
       <input
         v-model="form.title"
+        class="ui-input"
         :disabled="commandLocked"
         placeholder="给心愿起个标题（最多40个字）"
         :maxlength="40"
       />
       <picker
+        class="ui-picker"
         :disabled="commandLocked"
         :range="categories.map((item) => item.label)"
         :value="categories.findIndex((item) => item.value === form.category)"
@@ -500,20 +522,23 @@ defineExpose({ show, leave, refresh })
         ></picker
       >
       <picker
+        class="ui-picker"
         :disabled="commandLocked"
         :range="campuses.map((item) => item.label)"
         :value="campuses.findIndex((item) => item.value === form.campus)"
         @change="runPageAction(() => selectFormOption('campus', $event))"
         ><view>校区：{{ campuses.find((item) => item.value === form.campus)?.label }}</view></picker
       >
+      <text class="ui-label">心愿正文</text>
       <textarea
         v-model="form.body"
+        class="ui-textarea"
         :disabled="commandLocked"
         placeholder-class="field-placeholder"
         :maxlength="-1"
         placeholder="写下你的文字心愿（最多 500 个字）"
       />
-      <text>{{ Array.from(form.body).length }}/500</text>
+      <text class="ui-copy">{{ Array.from(form.body).length }}/500</text>
       <WishImageEditor
         :model-value="form.image_ids ?? []"
         :disabled="commandLocked"
@@ -536,6 +561,7 @@ defineExpose({ show, leave, refresh })
         @update:tags="form.identity_tags = $event"
       />
       <picker
+        class="ui-picker"
         :disabled="commandLocked"
         :range="rewards.map((item) => item.label)"
         :value="rewards.findIndex((item) => item.value === form.reward_method)"
@@ -547,6 +573,7 @@ defineExpose({ show, leave, refresh })
       <input
         v-if="form.reward_method === 'custom'"
         v-model="form.reward_text"
+        class="ui-input"
         :disabled="commandLocked"
         :maxlength="100"
         placeholder="想怎样表达感谢？"
@@ -555,6 +582,7 @@ defineExpose({ show, leave, refresh })
         ><button
           v-for="days in [7, 14, 30, 60, 90]"
           :key="days"
+          class="ui-button"
           :class="{ selected: form.duration_days === days }"
           :disabled="commandLocked"
           @click="form.duration_days = days"
@@ -562,20 +590,23 @@ defineExpose({ show, leave, refresh })
           {{ days }} 天
         </button></view
       >
-      <text>有效期（1 至 90 天，默认 7 天）</text
+      <text class="ui-copy">有效期（1 至 90 天，默认 7 天）</text
       ><input
         v-model.number="form.duration_days"
+        class="ui-input"
         :disabled="commandLocked"
         placeholder-class="field-placeholder"
         type="number"
       />
       <button
+        class="ui-button ui-button-primary"
         :disabled="commandLocked || imagesBusy || (!config.useMock && !config.wishWritesReady)"
         :loading="isPageActionPending('pages-wishes-index-button-3')"
         @click="runPageAction(() => save(), 'pages-wishes-index-button-3')"
       >
         {{ config.useMock ? '保存合成草稿' : '保存草稿' }}</button
       ><button
+        class="ui-button"
         :disabled="commandLocked"
         :loading="isPageActionPending('pages-wishes-index-button-4')"
         @click="runPageAction(() => cancelEdit(), 'pages-wishes-index-button-4')"
@@ -589,13 +620,12 @@ defineExpose({ show, leave, refresh })
         v-if="!own && !config.useMock"
         :keyword="keyword"
         :sort="sort"
-        support-sort
         :disabled="busy || commandLocked"
         @search="search"
       />
       <scroll-view class="chip-scroll" scroll-x :show-scrollbar="false">
         <button
-          class="filter-chip"
+          class="ui-button filter-chip"
           :class="{ selected: !category }"
           :disabled="commandLocked"
           :loading="isPageActionPending('pages-wishes-index-button-5')"
@@ -611,7 +641,7 @@ defineExpose({ show, leave, refresh })
         <button
           v-for="(item, index) in categories"
           :key="item.value"
-          class="filter-chip"
+          class="ui-button filter-chip"
           :class="{ selected: category === item.value }"
           :disabled="commandLocked"
           :loading="isPageActionPending('pages-wishes-index-button-6' + ':' + item.value)"
@@ -627,6 +657,7 @@ defineExpose({ show, leave, refresh })
       </scroll-view>
       <view class="filter-row">
         <picker
+          class="ui-picker"
           :range="['全部校区', ...campuses.map((item) => item.label)]"
           :value="campuses.findIndex((item) => item.value === campus) + 1"
           :disabled="commandLocked"
@@ -637,6 +668,7 @@ defineExpose({ show, leave, refresh })
         >
         <picker
           v-if="own"
+          class="ui-picker"
           :range="['全部状态', ...Object.values(wishStateLabels)]"
           :value="Object.keys(wishStateLabels).indexOf(state) + 1"
           :disabled="commandLocked"
@@ -644,31 +676,33 @@ defineExpose({ show, leave, refresh })
           ><view>{{ state ? wishStateLabels[state] : '全部状态' }} ▾</view></picker
         >
       </view>
-      <text v-if="busy && !rows.length" class="page-footnote">正在加载心愿…</text>
+      <text v-if="busy && !rows.length" class="ui-meta">正在加载心愿…</text>
       <view v-if="!busy && !error && !rows.length" class="empty-state"
-        ><text>暂时没有符合条件的心愿</text><text>换个分类看看，或写下自己的期待。</text></view
+        ><text class="ui-copy">暂时没有符合条件的心愿</text
+        ><text class="ui-copy">换个分类看看，或写下自己的期待。</text></view
       >
-      <view v-for="wish in rows" :key="wish.id" :class="{ card: own }">
+      <view v-for="wish in rows" :key="wish.id" :class="{ 'ui-section': own }">
         <WishPreview :wish="wish" :own="own" @support-change="sort === 'support' && load()" />
-        <text v-if="own && wish.review_result?.reason"
+        <text v-if="own && wish.review_result?.reason" class="ui-copy"
           >驳回原因：{{ wish.review_result.reason }}</text
         >
-        <text v-if="own && wish.review_result?.revision_suggestion"
+        <text v-if="own && wish.review_result?.revision_suggestion" class="ui-copy"
           >修改建议：{{ wish.review_result.revision_suggestion }}</text
         >
         <navigator
           v-if="own && !config.useMock && canManageApplications(user.user, user.validated, wish)"
-          class="application-queue-link"
+          class="ui-link application-queue-link"
           :url="`/pages/applications/index?wishId=${encodeURIComponent(wish.id)}`"
         >
-          <text>查看应愿申请 ›</text>
-          <text v-if="wish.unread_application_count" class="category-pill">
+          <text class="ui-copy">查看应愿申请 ›</text>
+          <text v-if="wish.unread_application_count" class="ui-text-reset category-pill">
             {{ wish.unread_application_count }} 个新申请
           </text>
         </navigator>
         <view v-if="!config.useMock && own" class="wish-actions">
           <button
             v-if="allowed(wish, 'deleteWishesIdDraft')"
+            class="ui-button"
             :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-9' + ':' + wish.id)"
             @click="
@@ -682,6 +716,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="allowed(wish, 'postWishesIdSubmitReview')"
+            class="ui-button"
             :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-10' + ':' + wish.id)"
             @click="
@@ -695,6 +730,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="allowed(wish, 'postWishesIdPublish')"
+            class="ui-button"
             :disabled="!config.wishWritesReady || writing"
             :loading="isPageActionPending('pages-wishes-index-button-11' + ':' + wish.id)"
             @click="
@@ -710,6 +746,7 @@ defineExpose({ show, leave, refresh })
         <view v-if="config.useMock && own" class="wish-actions">
           <button
             v-if="['draft', 'rejected'].includes(wish.current_state)"
+            class="ui-button"
             :loading="isPageActionPending('pages-wishes-index-button-13' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -722,6 +759,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="wish.current_state === 'draft'"
+            class="ui-button"
             :loading="isPageActionPending('pages-wishes-index-button-14' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -734,6 +772,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="wish.current_state === 'pending_review'"
+            class="ui-button"
             :loading="isPageActionPending('pages-wishes-index-button-15' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -746,6 +785,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="wish.current_state === 'pending_review'"
+            class="ui-button"
             :loading="isPageActionPending('pages-wishes-index-button-16' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -758,6 +798,7 @@ defineExpose({ show, leave, refresh })
           </button>
           <button
             v-if="wish.current_state === 'ready'"
+            class="ui-button"
             :loading="isPageActionPending('pages-wishes-index-button-17' + ':' + wish.id)"
             @click="
               runPageAction(
@@ -773,32 +814,82 @@ defineExpose({ show, leave, refresh })
 
       <button
         v-if="!config.useMock && cursor"
+        class="ui-button"
         :disabled="busy || commandLocked"
         :loading="isPageActionPending('pages-wishes-index-button-18')"
         @click="runPageAction(() => load(true), 'pages-wishes-index-button-18')"
       >
         加载更多
       </button>
-      <button
-        v-if="config.useMock || (config.wishWritesReady && canCreate)"
-        class="floating-compose"
-        :disabled="commandLocked"
-        :loading="isPageActionPending('pages-wishes-index-button-19')"
-        @click="runPageAction(() => edit(), 'pages-wishes-index-button-19')"
-      >
-        ＋ 许个心愿
-      </button>
-      <navigator
-        v-else
-        :url="user.isLoggedIn ? '/pages/verification/index' : '/pages/login/index'"
-        class="floating-compose"
-        >{{ user.isLoggedIn ? '认证后许愿' : '登录后许愿' }}</navigator
-      >
     </view>
+    <view v-if="!editing && !wall" class="compose-space" aria-hidden="true" />
+    <button
+      v-if="!editing && !wall && (config.useMock || (config.wishWritesReady && canCreate))"
+      class="floating-compose pond-compose"
+      :disabled="commandLocked"
+      :loading="isPageActionPending('pages-wishes-index-button-19')"
+      @click="runPageAction(() => edit(), 'pages-wishes-index-button-19')"
+    >
+      ＋ 许个心愿
+    </button>
+    <navigator
+      v-else-if="!editing && !wall && user.isLoggedIn"
+      class="floating-compose pond-compose"
+      url="/pages/verification/index"
+      >认证后许愿</navigator
+    ><LoginLink
+      v-else-if="!editing && !wall"
+      class="floating-compose pond-compose"
+      target="/pages/wishes/shortcut?compose=1"
+      >登录后许愿</LoginLink
+    >
   </AppPage>
 </template>
 
 <style scoped>
+.pond-compose.pond-compose {
+  left: auto;
+  right: 28rpx;
+}
+.compose-space {
+  height: 88rpx;
+}
+
+.wish-editor {
+  display: grid;
+  gap: 24rpx;
+}
+.wish-editor .ui-label {
+  margin: 0;
+}
+.segment-tabs {
+  margin: 0 0 24rpx;
+}
+.chip-scroll {
+  line-height: 0;
+}
+.segment-tabs .ui-button {
+  min-height: 72rpx;
+  padding: 12rpx 16rpx;
+  border-radius: 16rpx;
+  font-size: 26rpx;
+}
+.filter-row {
+  display: flex;
+  gap: 16rpx;
+  margin: 0 0 24rpx;
+}
+.filter-row .ui-picker {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 88rpx;
+  padding: 20rpx 24rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 16rpx;
+  background: var(--theme-canvas);
+}
+
 .duration-options {
   display: flex;
   flex-wrap: wrap;

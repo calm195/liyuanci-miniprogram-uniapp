@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -382,13 +384,17 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">警告与申诉</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <text v-if="scoped && user.user?.penalty_notice">{{ user.user.penalty_notice }}</text>
+  <AppPage responsive-padding>
+    <PageHeading title="账号安全与申诉" description="查看本人警告、限制与申诉处理情况。" />
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <text v-if="scoped && user.user?.penalty_notice" class="ui-copy">{{
+      user.user.penalty_notice
+    }}</text>
     <button
+      class="ui-button"
       :disabled="busy || writing || uncertain"
       :loading="isPageActionPending('pages-safety-index-button-1')"
       @click="runPageAction(() => selectTab('warnings'), 'pages-safety-index-button-1')"
@@ -396,6 +402,7 @@ onPullDownRefresh(async () => {
       本人警告
     </button>
     <button
+      class="ui-button"
       :disabled="busy || writing || uncertain"
       :loading="isPageActionPending('pages-safety-index-button-2')"
       @click="runPageAction(() => selectTab('appeals'), 'pages-safety-index-button-2')"
@@ -404,10 +411,11 @@ onPullDownRefresh(async () => {
     </button>
 
     <template v-if="tab === 'warnings'">
-      <text v-if="scoped && !busy && !warningRows.length">暂无未确认警告</text>
-      <view v-for="warning in warningRows" :key="warning.id" class="card">
-        <text>{{ warning.notice }}</text>
+      <text v-if="scoped && !busy && !warningRows.length" class="ui-copy">暂无未确认警告</text>
+      <view v-for="warning in warningRows" :key="warning.id" class="ui-section ui-stack">
+        <text class="ui-copy">{{ warning.notice }}</text>
         <button
+          class="ui-button"
           :disabled="busy || writing || !permitted('postMeWarningsIdDisplay')"
           :loading="isPageActionPending('pages-safety-index-button-4' + ':' + warning.id)"
           @click="
@@ -420,10 +428,13 @@ onPullDownRefresh(async () => {
           阅读警告并核验计时
         </button>
         <template v-if="activeWarning?.id === warning.id">
-          <text>首次展示：{{ warning.first_displayed_at }}</text>
-          <text>可确认时间：{{ warning.confirmable_at }}</text>
-          <text>约剩 {{ countdown }} 秒；确认资格以服务端时间为准，重新进入不重置计时。</text>
+          <text class="ui-copy">首次展示：{{ warning.first_displayed_at }}</text>
+          <text class="ui-copy">可确认时间：{{ warning.confirmable_at }}</text>
+          <text class="ui-copy"
+            >约剩 {{ countdown }} 秒；确认资格以服务端时间为准，重新进入不重置计时。</text
+          >
           <button
+            class="ui-button"
             :disabled="busy || writing"
             :loading="isPageActionPending('pages-safety-index-button-5' + ':' + warning.id)"
             @click="
@@ -436,6 +447,7 @@ onPullDownRefresh(async () => {
             核对服务端确认时间
           </button>
           <button
+            class="ui-button"
             :disabled="busy || writing || !mayAck"
             :loading="isPageActionPending('pages-safety-index-button-6' + ':' + warning.id)"
             @click="
@@ -449,6 +461,7 @@ onPullDownRefresh(async () => {
           </button>
         </template>
         <button
+          class="ui-button"
           :disabled="busy || writing || !permitted('postMeAppeals')"
           :loading="isPageActionPending('pages-safety-index-button-7' + ':' + warning.id)"
           @click="
@@ -463,16 +476,18 @@ onPullDownRefresh(async () => {
       </view>
     </template>
     <template v-else>
-      <view v-if="scoped && penaltyId" class="card">
-        <text>针对当前核验的本人处罚提交申诉。受理不会自动解除处罚。</text>
+      <view v-if="scoped && penaltyId" class="ui-section ui-stack">
+        <text class="ui-copy">针对当前核验的本人处罚提交申诉。受理不会自动解除处罚。</text>
         <textarea
           v-model="body"
+          class="ui-textarea"
           placeholder-class="field-placeholder"
           :maxlength="-1"
           :disabled="writing || uncertain"
           placeholder="请填写申诉说明"
         />
         <button
+          class="ui-button"
           :disabled="busy || writing || !permitted('postMeAppeals')"
           :loading="isPageActionPending('pages-safety-index-button-8')"
           @click="runPageAction(() => appeal(), 'pages-safety-index-button-8')"
@@ -480,16 +495,21 @@ onPullDownRefresh(async () => {
           {{ uncertain ? '重试同一次申诉' : '提交申诉' }}
         </button>
       </view>
-      <text v-if="scoped && !penaltyId">可在「本人警告」选择对应记录提交申诉。</text>
-      <text v-if="uncertain">离开页面将清除未确认内容，请避免重复新建申诉。</text>
-      <view v-for="(item, index) in appealRows" :key="item.id" class="card">
-        <text>申诉 {{ index + 1 }}：{{ appealLabels[item.status] || '状态待核对' }}</text>
-        <text v-if="item.reason">处理说明：{{ item.reason }}</text>
+      <text v-if="scoped && !penaltyId" class="ui-copy"
+        >可在「本人警告」选择对应记录提交申诉。</text
+      >
+      <text v-if="uncertain" class="ui-copy">离开页面将清除未确认内容，请避免重复新建申诉。</text>
+      <view v-for="(item, index) in appealRows" :key="item.id" class="ui-section ui-stack">
+        <text class="ui-copy"
+          >申诉 {{ index + 1 }}：{{ appealLabels[item.status] || '状态待核对' }}</text
+        >
+        <text v-if="item.reason" class="ui-copy">处理说明：{{ item.reason }}</text>
       </view>
-      <text v-if="scoped && !busy && !appealRows.length">暂无申诉记录</text>
+      <text v-if="scoped && !busy && !appealRows.length" class="ui-copy">暂无申诉记录</text>
     </template>
     <button
       v-if="scoped && cursor"
+      class="ui-button"
       :disabled="busy || writing || uncertain"
       :loading="isPageActionPending('pages-safety-index-button-9')"
       @click="runPageAction(() => load(true), 'pages-safety-index-button-9')"

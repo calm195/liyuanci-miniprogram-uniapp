@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -356,12 +357,15 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => refresh())
 </script>
 <template>
-  <AppPage>
-    <text class="title">匿名聊天</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <text v-if="currentConversation">{{ canSend ? '当前可发送消息' : '当前会话只读' }}</text>
+  <AppPage responsive-padding>
+    <text class="chat-title">{{ currentConversation?.wish_title || '聊天' }}</text>
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <text v-if="currentConversation" class="ui-copy">{{
+      canSend ? '当前可发送消息' : '当前会话只读'
+    }}</text>
 
     <scroll-view
       class="chat-timeline"
@@ -375,54 +379,63 @@ onPullDownRefresh(async () => {
         class="chat-message"
         :class="{ outgoing: message.viewer_is_sender }"
       >
-        <text class="chat-speaker">{{
+        <text class="ui-text-reset chat-speaker">{{
           message.viewer_is_sender === true
             ? '我'
             : message.viewer_is_sender === false
               ? '对方'
               : '消息'
         }}</text>
-        <text class="whitespace-pre-wrap break-words">{{ message.body }}</text>
+        <text class="ui-text-reset whitespace-pre-wrap break-words">{{ message.body }}</text>
         <navigator
-          class="moderation-link"
+          class="ui-link moderation-link"
           :url="`/pages/report/index?kind=message&id=${encodeURIComponent(message.message_id)}&contextId=${encodeURIComponent(id)}`"
           >举报此消息</navigator
         >
-        <text class="text-muted text-sm">送达时间：{{ message.deliveredAtText }}</text>
+        <text class="ui-text-reset text-muted text-sm"
+          >送达时间：{{ message.deliveredAtText }}</text
+        >
       </view>
       <view id="chat-end" />
     </scroll-view>
     <button
       v-if="unreadArrival"
+      class="ui-button"
       :loading="isPageActionPending('pages-chat-index-button-2')"
       @click="runPageAction(scrollLatest, 'pages-chat-index-button-2')"
     >
       有新消息，查看最新
     </button>
-    <text v-if="currentConversation && !timeline.length && !reading">暂无已送达消息</text>
+    <text v-if="currentConversation && !timeline.length && !reading" class="ui-copy"
+      >暂无已送达消息</text
+    >
     <button
       v-if="hasMore && currentConversation"
+      class="ui-button"
       :disabled="reading || sending"
       :loading="isPageActionPending('pages-chat-index-button-3')"
       @click="runPageAction(() => refresh(), 'pages-chat-index-button-3')"
     >
       继续读取消息
     </button>
-    <view v-if="outgoing.length" class="card">
-      <text>我的发送状态</text>
+    <view v-if="outgoing.length" class="ui-section">
+      <text class="ui-copy">我的发送状态</text>
       <view v-for="(receipt, index) in outgoing" :key="receipt.message_id">
-        <text>消息 {{ index + 1 }}：{{ messageStatusLabels[receipt.status] }}</text>
-        <text v-if="receipt.review_result?.reason"
+        <text class="ui-copy">消息 {{ index + 1 }}：{{ messageStatusLabels[receipt.status] }}</text>
+        <text v-if="receipt.review_result?.reason" class="ui-copy"
           >驳回原因：{{ receipt.review_result.reason }}</text
         >
-        <text v-if="receipt.review_result?.revision_suggestion"
+        <text v-if="receipt.review_result?.revision_suggestion" class="ui-copy"
           >修改建议：{{ receipt.review_result.revision_suggestion }}</text
         >
       </view>
     </view>
-    <view v-if="currentConversation" class="card">
+    <view v-if="currentConversation" class="ui-section chat-composer">
       <textarea
         v-model="draft"
+        class="ui-textarea"
+        :adjust-position="true"
+        :cursor-spacing="24"
         placeholder-class="field-placeholder"
         :maxlength="-1"
         :disabled="!canSend || sending || !!attempt"
@@ -430,6 +443,7 @@ onPullDownRefresh(async () => {
       />
       <button
         v-if="!attempt"
+        class="ui-button ui-button-primary"
         :disabled="!canSend || reading || sending"
         :loading="isPageActionPending('pages-chat-index-button-4')"
         @click="runPageAction(() => send(), 'pages-chat-index-button-4')"
@@ -439,6 +453,7 @@ onPullDownRefresh(async () => {
       <template v-else>
         <AppNotice message="发送结果未确认，请重试或先核对聊天记录。" kind="info" />
         <button
+          class="ui-button"
           :disabled="!canSend || reading || sending"
           :loading="isPageActionPending('pages-chat-index-button-5')"
           @click="runPageAction(() => send(true), 'pages-chat-index-button-5')"
@@ -446,6 +461,7 @@ onPullDownRefresh(async () => {
           重试同一条消息
         </button>
         <button
+          class="ui-button"
           :disabled="sending"
           :loading="isPageActionPending('pages-chat-index-button-6')"
           @click="runPageAction(() => abandonAttempt(), 'pages-chat-index-button-6')"
@@ -460,6 +476,26 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.chat-title {
+  display: block;
+  margin: 0 0 16rpx;
+  font-size: 36rpx;
+  line-height: 1.5;
+  font-weight: 700;
+}
+.chat-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -8rpx 20rpx #091d3d08;
+}
+.chat-composer .ui-textarea {
+  min-height: 160rpx;
+  height: 160rpx;
+  margin-bottom: 16rpx;
+}
+
 .chat-timeline {
   height: 55vh;
   overflow-anchor: none;

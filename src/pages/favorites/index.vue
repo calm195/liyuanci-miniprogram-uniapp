@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import { listFavorites } from '@/api/interactions'
 import type { ContentKind, FavoriteItem } from '@/types/interactions'
@@ -104,28 +106,33 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage
-    ><text class="title">我的收藏</text
-    ><text class="subtitle">仅自己可见，内容下架后不再展示原文。</text
-    ><navigator v-if="!loggedIn" url="/pages/login/index">登录查看收藏</navigator
+  <AppPage responsive-padding
+    ><PageHeading
+      title="我的收藏"
+      description="收藏仅自己可见，内容下架后不再展示原文。" /><LoginLink
+      v-if="!loggedIn"
+      class="ui-link"
+      >登录查看收藏</LoginLink
     ><view class="favorite-tabs"
       ><button
         v-for="choice in choices"
         :key="choice.kind"
+        class="ui-button"
         :class="{ selected: kind === choice.kind }"
         :disabled="busy"
         @click="select(choice.kind)"
       >
         {{ choice.label }}
       </button></view
-    ><text v-if="busy">加载中…</text
-    ><view v-for="item in items" :key="item.kind + ':' + item.target_id" class="card"
-      ><navigator v-if="item.available" :url="destination(item)"
-        ><text class="section-title">{{ item.content?.title || '查看收藏内容' }}</text
-        ><text>{{ item.content?.excerpt }}</text></navigator
-      ><text v-else>内容已不可查看</text
+    ><text v-if="busy" class="ui-copy">加载中…</text
+    ><view v-for="item in items" :key="item.kind + ':' + item.target_id" class="ui-section"
+      ><navigator v-if="item.available" class="ui-link" :url="destination(item)"
+        ><text class="ui-section-title">{{ item.content?.title || '查看收藏内容' }}</text
+        ><text class="ui-copy">{{ item.content?.excerpt }}</text></navigator
+      ><text v-else class="ui-copy">内容已不可查看</text
       ><FavoriteButton
         :kind="item.kind"
         :target-id="item.target_id"
@@ -135,9 +142,9 @@ onPullDownRefresh(async () => {
             if (!active) items = items.filter((entry) => entry !== item)
           }
         " /></view
-    ><text v-if="loggedIn && !busy && !error && !items.length">暂时没有收藏</text
-    ><button v-if="cursor" :disabled="busy" @click="load(true)">加载更多</button
-    ><button v-if="error" :disabled="busy" @click="load()">重新加载</button
+    ><text v-if="loggedIn && !busy && !error && !items.length" class="ui-copy">暂时没有收藏</text
+    ><button v-if="cursor" class="ui-button" :disabled="busy" @click="load(true)">加载更多</button
+    ><button v-if="error" class="ui-button" :disabled="busy" @click="load()">重新加载</button
     ><AppNotice :message="error" kind="error"
   /></AppPage>
 </template>

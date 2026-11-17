@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useLogin } from '@/composables/use-login'
+const { requestLogin } = useLogin()
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import { setWishSupport } from '@/api/wishes'
@@ -34,10 +36,7 @@ watch([() => props.count, () => props.supported], () => {
 async function toggle() {
   if (pending.value) return
   if (!session.getToken()) {
-    uni.navigateTo({
-      url: '/pages/login/index',
-      fail: () => uni.$emit('app:notice', { message: '无法打开登录页，请重试', kind: 'error' }),
-    })
+    requestLogin(() => toggle())
     return
   }
   const id = props.wishId

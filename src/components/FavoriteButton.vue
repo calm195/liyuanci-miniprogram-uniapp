@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useLogin } from '@/composables/use-login'
+const { requestLogin } = useLogin()
 import { onUnmounted, ref, watch } from 'vue'
 import { onShow, onHide } from '@dcloudio/uni-app'
 import AppIcon from '@/components/AppIcon.vue'
@@ -53,7 +55,7 @@ onUnmounted(() => {
 async function toggle() {
   if (!visible || busy.value) return
   if (!session.getToken()) {
-    uni.navigateTo({ url: '/pages/login/index' })
+    requestLogin(() => toggle())
     return
   }
   const current = generation

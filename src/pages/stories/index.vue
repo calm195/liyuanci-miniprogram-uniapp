@@ -2,6 +2,7 @@
 import { onHide, onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import StoryWall from '@/components/StoryWall.vue'
 import { useContentShare } from '@/composables/use-content-share'
 import { shareReference } from '@/utils/share'
@@ -33,7 +34,16 @@ onPullDownRefresh(async () => {
 })
 </script>
 <template>
-  <AppPage :tab="storyId || sharedEntry ? undefined : 'pond'" :hide-entry-prompts="sharedEntry">
+  <AppPage
+    responsive-padding
+    :tab="storyId || sharedEntry ? undefined : 'pond'"
+    :hide-entry-prompts="sharedEntry"
+  >
+    <PageHeading
+      v-if="!storyId && !sharedEntry"
+      title="还愿故事"
+      description="读读那些被认真回应的期待。"
+    />
     <StoryWall
       ref="storyWall"
       :story-id="storyId"

@@ -32,7 +32,7 @@ const author = computed(() =>
 )
 </script>
 <template>
-  <view class="wish-preview">
+  <view class="wish-preview" :class="{ 'own-preview': own }">
     <navigator
       class="wish-preview-link"
       hover-class="tap-feedback"
@@ -56,7 +56,7 @@ const author = computed(() =>
           {{ categories.find((item) => item.value === content?.category)?.label }}
         </text>
       </view>
-      <text v-if="content" class="section-title">{{ content.title || '未命名心愿' }}</text>
+      <text v-if="content" class="preview-title">{{ content.title || '未命名心愿' }}</text>
       <IdentityTags :tags="wish.public?.author?.identity_tags" />
       <text class="wish-body">{{ body || '内容暂不可查看' }}</text>
       <WishImages
@@ -100,7 +100,7 @@ const author = computed(() =>
         v-if="wish.current_state === 'published' && content"
         class="content-action"
         :url="`/pages/wish-detail/index?id=${encodeURIComponent(wish.id)}&section=comments`"
-        ><AppIcon name="chat" :size="28" /><text
+        ><AppIcon name="chat" :size="28" /><text class="preview-action-text"
           >评论 {{ wish.public?.comment_count ?? wish.comment_count ?? 0 }}</text
         ></navigator
       >
@@ -113,6 +113,52 @@ const author = computed(() =>
 </template>
 
 <style scoped>
+.wish-preview {
+  display: block;
+  margin: 0 0 24rpx;
+  padding: 32rpx;
+  border: 0;
+  border-radius: 32rpx;
+  background: var(--theme-surface);
+}
+.wish-preview.own-preview {
+  margin: 0;
+  padding: 0;
+}
+.wish-preview .card-author {
+  margin: 0 0 24rpx;
+}
+.wish-preview .author-name {
+  margin: 0;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.wish-preview .author-hint {
+  margin: 4rpx 0 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.wish-preview .preview-title {
+  display: block;
+  margin: 0 0 12rpx;
+  font-size: 32rpx;
+  line-height: 1.5;
+  font-weight: 700;
+}
+.wish-preview .wish-body {
+  margin: 16rpx 0;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+.wish-preview .category-pill,
+.wish-preview .preview-action-text {
+  margin: 0;
+}
+.wish-preview .card-meta {
+  margin: 24rpx 0 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
 .wish-preview-link {
   margin: 0;
   color: var(--theme-ink);

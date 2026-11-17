@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -43,17 +45,17 @@ async function load(more = false) {
   if (more && (busy.value || !scoped.value || !cursor.value || id.value)) return
   const next = more ? cursor.value! : undefined
   const current = ++generation
-  const account = user.user?.id
+  let account = user.user?.id
   const sessionEpoch = session.getEpoch()
   const isCurrent = () =>
     visible &&
     current === generation &&
-    account === user.user?.id &&
+    (!account || account === user.user?.id) &&
     sessionEpoch === session.getEpoch()
   if (!more) clear()
   busy.value = false
   error.value = ''
-  if (config.useMock || !account || !session.getToken()) {
+  if (config.useMock || !session.getToken()) {
     error.value = config.useMock
       ? '关怀资料需连接真实服务，合成模式不提供援助信息。'
       : '请登录后查看本人的关怀资料。'
@@ -63,7 +65,8 @@ async function load(more = false) {
   try {
     await user.refresh(false)
     if (!isCurrent()) return
-    if (!user.validated) throw new Error('当前会话未校验')
+    if (!user.validated || !user.user?.id) throw new Error('当前会话未校验')
+    account = user.user.id
     // 不要求学生认证或普通业务写权限，受限本人仍可读取援助资料。
     if (id.value) {
       const result = await getCareCard(id.value)
@@ -106,8 +109,10 @@ function leave() {
   error.value = ''
 }
 watch(
-  () => user.user?.id,
-  () => {
+  [() => user.user?.id, () => session.getEpoch()],
+  ([next, nextEpoch], [previous, previousEpoch]) => {
+    // 冷启动从凭据恢复身份属于本次读取；换号或令牌代次变化必须废弃旧响应。
+    if (nextEpoch === previousEpoch && !previous && next) return
     generation++
     clear()
     busy.value = false
@@ -130,47 +135,54 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">关怀与援助</text>
-    <text>你可以在这里查看为你提供的援助资料。</text>
+  <AppPage responsive-padding>
+    <PageHeading title="关怀与帮助" description="需要的时候，这里有为你准备的援助资料。" />
+    <text class="ui-copy">你可以在这里查看为你提供的援助资料。</text>
     <view class="notice">
-      <text
+      <text class="ui-copy"
         >平台人工处理时段为北京时间
         8:00–22:00，夜间由自动措施处理并保留待办，次日由危机处置人员接手。</text
       >
-      <text
+      <text class="ui-copy"
         >援助渠道的服务时间与平台人工处理时间分别说明；平台不承诺全天人工值守或首次响应时限。</text
       >
     </view>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <navigator v-if="id" url="/pages/care/index">查看本人关怀通知</navigator>
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <navigator v-if="id" class="ui-link" url="/pages/care/index">查看本人关怀通知</navigator>
     <button
+      class="ui-button"
       :disabled="busy"
       :loading="isPageActionPending('pages-care-index-button-1')"
       @click="runPageAction(() => load(), 'pages-care-index-button-1')"
     >
       重新读取
     </button>
-    <text v-if="busy">读取中…</text>
-    <view v-if="currentCard" class="card">
-      <text class="font-bold">援助资料</text>
-      <text>{{ currentCard.resources.notice }}</text>
-      <text class="font-bold">24 小时援助渠道</text>
-      <text selectable>{{ currentCard.resources.hotline_24_hours }}</text>
-      <text class="font-bold">校心理中心预约方式</text>
-      <text selectable>{{ currentCard.resources.appointment }}</text>
-      <text selectable>资料来源：{{ currentCard.resources.source }}</text>
-      <text>资料版本：{{ currentCard.resources.version }}</text>
-      <text>核验日期：{{ currentCard.resources.verified_at }}</text>
-      <text>以上为该关怀卡保存的资料，请留意渠道当前说明；预约是否成功以提供方确认为准。</text>
+    <text v-if="busy" class="ui-copy">读取中…</text>
+    <view v-if="currentCard" class="ui-section ui-stack">
+      <text class="ui-text-reset font-bold">援助资料</text>
+      <text class="ui-copy">{{ currentCard.resources.notice }}</text>
+      <text class="ui-text-reset font-bold">24 小时援助渠道</text>
+      <text class="ui-copy" selectable>{{ currentCard.resources.hotline_24_hours }}</text>
+      <text class="ui-text-reset font-bold">校心理中心预约方式</text>
+      <text class="ui-copy" selectable>{{ currentCard.resources.appointment }}</text>
+      <text class="ui-copy" selectable>资料来源：{{ currentCard.resources.source }}</text>
+      <text class="ui-copy">资料版本：{{ currentCard.resources.version }}</text>
+      <text class="ui-copy">核验日期：{{ currentCard.resources.verified_at }}</text>
+      <text class="ui-copy"
+        >以上为该关怀卡保存的资料，请留意渠道当前说明；预约是否成功以提供方确认为准。</text
+      >
     </view>
     <template v-if="!id">
-      <text v-if="scoped && loaded && !rows.length">当前已读取的通知中暂无关怀卡片。</text>
-      <view v-for="(item, index) in rows" :key="item.id" class="card">
-        <text>关怀资料 {{ index + 1 }}</text>
+      <text v-if="scoped && loaded && !rows.length" class="ui-copy"
+        >当前已读取的通知中暂无关怀卡片。</text
+      >
+      <view v-for="(item, index) in rows" :key="item.id" class="ui-section ui-stack">
+        <text class="ui-copy">关怀资料 {{ index + 1 }}</text>
         <button
+          class="ui-button"
           :disabled="busy"
           :loading="isPageActionPending('pages-care-index-button-2' + ':' + item.id)"
           @click="runPageAction(() => open(item), 'pages-care-index-button-2' + ':' + item.id)"
@@ -180,6 +192,7 @@ onPullDownRefresh(async () => {
       </view>
       <button
         v-if="scoped && cursor"
+        class="ui-button"
         :disabled="busy"
         :loading="isPageActionPending('pages-care-index-button-3')"
         @click="runPageAction(() => load(true), 'pages-care-index-button-3')"

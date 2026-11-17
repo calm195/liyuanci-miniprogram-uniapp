@@ -199,10 +199,10 @@ defineExpose({ refresh: load, show, hide: leave })
 
 <style scoped>
 .story-card {
-  padding: 26rpx;
-  margin-bottom: 20rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
   border: 1px solid var(--theme-line);
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   background: var(--theme-surface);
 }
 .story-title {
@@ -229,8 +229,8 @@ defineExpose({ refresh: load, show, hide: leave })
 .wall-state {
   display: block;
   padding: 30rpx;
-  margin-bottom: 20rpx;
-  border-radius: 24rpx;
+  margin-bottom: 24rpx;
+  border-radius: 32rpx;
   background: var(--theme-surface);
   color: var(--theme-muted);
   text-align: center;

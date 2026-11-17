@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -206,23 +208,26 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">举报内容</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <text>举报受理后由平台核查，请选择类型并说明情况。</text>
+  <AppPage responsive-padding>
+    <PageHeading title="举报与反馈" description="请说明具体情况，平台受理后会按规则核查。" />
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <text class="ui-copy">举报受理后由平台核查，请选择类型并说明情况。</text>
     <button
+      class="ui-button"
       :disabled="busy || writing || uncertain"
       :loading="isPageActionPending('pages-report-index-button-1')"
       @click="runPageAction(() => load(), 'pages-report-index-button-1')"
     >
       重新核验
     </button>
-    <view v-if="ready && scoped" class="card">
+    <view v-if="ready && scoped" class="ui-section ui-stack">
       <button
         v-for="item in types"
         :key="item.code"
+        class="ui-button"
         :disabled="writing || uncertain || finished"
         :loading="isPageActionPending('pages-report-index-button-2' + ':' + item.code)"
         @click="
@@ -231,15 +236,17 @@ onPullDownRefresh(async () => {
       >
         {{ code === item.code ? '已选：' : '' }}{{ item.label }}
       </button>
-      <text v-if="!types.length">暂无已发布的举报类型</text>
+      <text v-if="!types.length" class="ui-copy">暂无已发布的举报类型</text>
       <textarea
         v-model="description"
+        class="ui-textarea"
         placeholder-class="field-placeholder"
         :maxlength="-1"
         :disabled="writing || uncertain || finished"
         placeholder="补充说明（可不填）"
       />
       <button
+        class="ui-button ui-button-primary"
         :disabled="busy || writing || !maySubmit"
         :loading="isPageActionPending('pages-report-index-button-3')"
         @click="runPageAction(() => submit(), 'pages-report-index-button-3')"
@@ -247,7 +254,7 @@ onPullDownRefresh(async () => {
         {{ uncertain ? '重试同一次举报' : '提交举报' }}
       </button>
     </view>
-    <text v-if="uncertain">离开页面将清除本次未确认内容，请避免另行重复提交。</text>
+    <text v-if="uncertain" class="ui-copy">离开页面将清除本次未确认内容，请避免另行重复提交。</text>
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="error" kind="error" />
   </AppPage>

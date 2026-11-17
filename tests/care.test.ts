@@ -23,20 +23,29 @@ const notification = {
   read: false,
   target_ref: card.id,
 }
-async function setup(id = card.id, mock = false, loggedIn = true) {
+async function setup(id = card.id, mock = false, loggedIn = true, cold = false) {
   const hooks: Record<string, (query?: Record<string, string>) => unknown> = {}
   const user = reactive({
-    user: loggedIn
-      ? {
+    user:
+      loggedIn && !cold
+        ? {
+            id: 'synthetic-owner',
+            verification: 'unverified',
+            allowed_actions: [],
+            penalty_notice: '合成受限账号',
+          }
+        : null,
+    validated: true,
+    isLoggedIn: loggedIn,
+    refresh: async () => {
+      if (cold && !user.user)
+        user.user = {
           id: 'synthetic-owner',
           verification: 'unverified',
           allowed_actions: [],
           penalty_notice: '合成受限账号',
         }
-      : null,
-    validated: true,
-    isLoggedIn: loggedIn,
-    refresh: async () => {},
+    },
   })
   let epoch = 1
   let transport: (input: { url: string }) => Promise<unknown> = async (input) =>
@@ -217,4 +226,36 @@ test('REQ-017：关怀已注册且安全与关怀入口保留在个人中心，�
   }
   assert.equal(/<web-view|<rich-text|makePhoneCall|setClipboardData/.test(page), false)
   assert.ok(page.includes('不承诺全天人工值守'))
+})
+
+test('保存凭据冷启动先复核身份再读取关怀，不把尚未恢复的用户当未登录', async () => {
+  const h = await setup('', false, true, true)
+  assert.equal(h.r.error.value, '')
+  assert.equal(h.r.scoped.value, true)
+  assert.equal(h.r.rows.value.length, 1)
+  assert.deepEqual(h.calls, [{ url: '/me/notifications' }])
+})
+
+test('冷启动身份复核期间换会话，不发起旧账号关怀读取', async () => {
+  const h = await setup('', false, true, true)
+  h.user.user = null
+  let finish!: () => void
+  h.user.refresh = () =>
+    new Promise<void>((resolve) => {
+      finish = resolve
+    })
+  const before = h.calls.length
+  const reading = h.r.load()
+  h.changeEpoch()
+  h.user.user = {
+    id: 'new-synthetic-owner',
+    verification: 'verified',
+    allowed_actions: [],
+    penalty_notice: '',
+  }
+  finish()
+  await reading
+  assert.equal(h.calls.length, before)
+  assert.deepEqual(h.r.rows.value, [])
+  assert.equal(h.r.busy.value, false)
 })

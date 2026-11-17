@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
+import AppIcon from '@/components/AppIcon.vue'
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
@@ -43,52 +46,87 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">时光胶囊</text>
-    <button class="create-capsule" @click="createCapsule">＋ 写给未来的自己</button>
-
-    <text v-if="ready && !items.length">当前页暂无胶囊。</text>
-    <view v-for="item in items" :key="item.id" class="card">
-      <text class="capsule-state">{{ capsuleStatus(item) }}</text
-      ><text v-if="item.status === 'unlocked' && item.preview" class="capsule-preview"
-        >{{ item.preview }}…</text
-      >
-      <text>预约时间（北京时间）：{{ beijingTime(item.unlock_at) }}</text>
-      <navigator :url="`/pages/capsules/detail?id=${encodeURIComponent(item.id)}`"
-        >读取当前详情与管理</navigator
-      >
-    </view>
-    <button
-      v-if="cursor"
-      :disabled="locked"
-      :loading="isPageActionPending('pages-capsules-index-button-2')"
-      @click="runPageAction(() => load(true), 'pages-capsules-index-button-2')"
+  <AppPage responsive-padding>
+    <PageHeading
+      title="时光胶囊"
+      illustration="entry-whisper"
+      description="把此刻的心情，留给未来的某一天。"
     >
-      加载下一页
-    </button>
-    <AppNotice :message="error" kind="error" />
+      <button class="ui-button ui-button-primary" @click="createCapsule">新建胶囊</button>
+    </PageHeading>
+    <view class="ce-layout">
+      <text v-if="busy && !items.length" class="ui-state">正在读取你的胶囊…</text>
+      <text v-if="ready && !items.length && !busy && !error" class="ui-state"
+        >还没有胶囊，写一封信给未来吧。</text
+      >
+      <view v-if="items.length" class="capsule-timeline">
+        <navigator
+          v-for="item in items"
+          :key="item.id"
+          class="capsule-row"
+          :url="`/pages/capsules/detail?id=${encodeURIComponent(item.id)}`"
+        >
+          <view class="capsule-status"
+            ><AppIcon name="clock" :size="36" /><text class="ui-meta">{{
+              capsuleStatus(item)
+            }}</text></view
+          >
+          <text class="ui-section-title">写给未来的一封信</text>
+          <text v-if="item.status === 'unlocked' && item.preview" class="ui-copy"
+            >{{ item.preview }}…</text
+          >
+          <text class="ui-meta">预约时间 · {{ beijingTime(item.unlock_at) }}</text>
+          <text class="ui-link">查看这封信 ›</text>
+        </navigator>
+      </view>
+      <button
+        v-if="cursor"
+        class="ui-button"
+        :disabled="locked"
+        :loading="isPageActionPending('pages-capsules-index-button-2')"
+        @click="runPageAction(() => load(true), 'pages-capsules-index-button-2')"
+      >
+        加载下一页
+      </button>
+      <AppNotice :message="error" kind="error" />
+    </view>
   </AppPage>
 </template>
-
 <style scoped>
-.card {
-  border-radius: 28rpx;
-  padding: 32rpx;
+.ce-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
 }
-.card > text {
-  display: block;
-  margin-bottom: 20rpx;
-  line-height: 1.7;
+.ce-panel {
+  margin-bottom: 0;
 }
-.capsule-state {
-  font-weight: 600;
+.capsule-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
 }
-.capsule-preview {
-  font-size: 34rpx;
+.capsule-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  margin: 0;
+  color: var(--theme-ink);
+  padding: 36rpx;
+  border: 2rpx solid var(--theme-line);
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, var(--theme-peach), var(--theme-surface));
 }
-.create-capsule {
-  margin: 24rpx 0;
+.capsule-status {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+.capsule-row .ui-link {
+  align-self: flex-end;
 }
 </style>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -407,48 +409,59 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">{{
-      wishId
-        ? ownerMode
-          ? '心愿申请列表'
-          : '申请应愿'
-        : applicationId
-          ? '应愿申请结果'
-          : '我的应愿'
-    }}</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <navigator v-if="wishId || applicationId" url="/pages/applications/index"
+  <AppPage responsive-padding>
+    <PageHeading
+      :title="
+        wishId
+          ? ownerMode
+            ? '心愿收到的应愿'
+            : '回应这份心愿'
+          : applicationId
+            ? '查看应愿进度'
+            : '应愿记录'
+      "
+      description="认真回应每一份期待，按当前进度继续下一步。"
+    />
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <navigator v-if="wishId || applicationId" class="ui-link" url="/pages/applications/index"
       >查看我的应愿</navigator
     >
     <picker
       v-if="!wishId && !applicationId"
+      class="ui-picker"
       :range="['全部状态', ...Object.values(applicationStatusLabels)]"
       @change="runPageAction(() => selectStatus($event))"
     >
       <view>状态：{{ status ? applicationStatusLabels[status] : '全部' }}</view>
     </picker>
 
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentWish" class="card">
-      <navigator :url="`/pages/wish-detail/index?id=${encodeURIComponent(currentWish.id)}`"
+    <text v-if="busy" class="ui-copy">加载中…</text>
+    <view v-if="currentWish" class="ui-section ui-stack">
+      <navigator
+        class="ui-link"
+        :url="`/pages/wish-detail/index?id=${encodeURIComponent(currentWish.id)}`"
         >查看心愿详情</navigator
       >
-      <text>心愿状态：{{ wishStateLabels[currentWish.current_state] || '未知状态' }}</text>
-      <text v-if="currentWish.privacy_review_required">内容暂不可查看</text>
+      <text class="ui-copy"
+        >心愿状态：{{ wishStateLabels[currentWish.current_state] || '未知状态' }}</text
+      >
+      <text v-if="currentWish.privacy_review_required" class="ui-copy">内容暂不可查看</text>
       <template v-if="mayApply">
-        <text>申请留言（可不填，最多100个字）</text>
+        <text class="ui-copy">申请留言（可不填，最多100个字）</text>
         <textarea
           v-model="message"
+          class="ui-textarea"
           placeholder-class="field-placeholder"
           :disabled="writing"
           :maxlength="-1"
           placeholder="说说你希望如何帮助对方"
         />
-        <text>{{ Array.from(message).length }}/100</text>
+        <text class="ui-copy">{{ Array.from(message).length }}/100</text>
         <button
+          class="ui-button"
           :disabled="busy || writing"
           :loading="isPageActionPending('pages-applications-index-button-2')"
           @click="runPageAction(() => submit(), 'pages-applications-index-button-2')"
@@ -456,47 +469,53 @@ onPullDownRefresh(async () => {
           提交应愿申请
         </button>
       </template>
-      <text v-else-if="applicationInProgress">申请中，可在「我的应愿」查看进度。</text>
-      <text v-else-if="submittedStatus && submittedStatus !== 'in_progress'">{{
+      <text v-else-if="applicationInProgress" class="ui-copy"
+        >申请中，可在「我的应愿」查看进度。</text
+      >
+      <text v-else-if="submittedStatus && submittedStatus !== 'in_progress'" class="ui-copy">{{
         applicationStatusLabels[submittedStatus]
       }}</text>
-      <text v-else-if="!ownerMode && !mayRetry"
+      <text v-else-if="!ownerMode && !mayRetry" class="ui-copy"
         >当前无法申请，请以心愿状态和当前账号权限为准。</text
       >
-      <text v-if="ownerMode">仅显示审核通过且当前可处理的申请。</text>
+      <text v-if="ownerMode" class="ui-copy">仅显示审核通过且当前可处理的申请。</text>
     </view>
     <button
       v-if="mayRetry"
+      class="ui-button"
       :disabled="busy || writing"
       :loading="isPageActionPending('pages-applications-retry')"
       @click="runPageAction(() => submit(), 'pages-applications-retry')"
     >
       核实并重试原申请
     </button>
-    <text v-if="!busy && scoped && !rows.length && (!wishId || ownerMode)">{{
+    <text v-if="!busy && scoped && !rows.length && (!wishId || ownerMode)" class="ui-copy">{{
       applicationId ? '这条申请暂不可查看' : '暂无可展示的申请'
     }}</text>
-    <view v-for="application in rows" :key="application.id" class="card">
+    <view v-for="application in rows" :key="application.id" class="ui-section ui-stack">
       <navigator
         v-if="!wishId"
+        class="ui-link"
         :url="`/pages/wish-detail/index?id=${encodeURIComponent(application.wish_id)}`"
         >{{ application.wish_title || '心愿标题暂不可查看' }}</navigator
       >
-      <text>{{ applicationStatusLabels[application.status] || '未知状态' }}</text>
+      <text class="ui-copy">{{ applicationStatusLabels[application.status] || '未知状态' }}</text>
       <template v-if="ownerMode && application.status === 'active'">
         <navigator
-          class="moderation-link"
+          class="ui-link moderation-link"
           :url="`/pages/report/index?kind=application&id=${encodeURIComponent(application.id)}&contextId=${encodeURIComponent(wishId)}`"
           >举报此申请留言</navigator
         >
-        <text>{{ application.message || '对方未填写留言' }}</text>
+        <text class="ui-copy">{{ application.message || '对方未填写留言' }}</text>
         <navigator
           v-if="application.applicant"
+          class="ui-link"
           :url="`/pages/public-profile/index?id=${encodeURIComponent(application.applicant.id)}`"
         >
           {{ application.applicant.nickname || '查看申请者公开主页' }}
         </navigator>
         <button
+          class="ui-button"
           :disabled="busy || writing || !mayAccept(application)"
           :loading="isPageActionPending('pages-applications-index-button-3' + ':' + application.id)"
           @click="
@@ -510,15 +529,18 @@ onPullDownRefresh(async () => {
         </button>
       </template>
       <template v-if="!wishId">
-        <text v-if="application.message !== undefined">我的留言：{{ application.message }}</text>
-        <text v-if="application.review_result?.reason"
+        <text v-if="application.message !== undefined" class="ui-copy"
+          >我的留言：{{ application.message }}</text
+        >
+        <text v-if="application.review_result?.reason" class="ui-copy"
           >驳回原因：{{ application.review_result.reason }}</text
         >
-        <text v-if="application.review_result?.revision_suggestion"
+        <text v-if="application.review_result?.revision_suggestion" class="ui-copy"
           >修改建议：{{ application.review_result.revision_suggestion }}</text
         >
         <button
           v-if="mayWithdraw(application)"
+          class="ui-button"
           :disabled="busy || writing"
           :loading="isPageActionPending('pages-applications-index-button-4' + ':' + application.id)"
           @click="
@@ -534,6 +556,7 @@ onPullDownRefresh(async () => {
     </view>
     <button
       v-if="scoped && cursor"
+      class="ui-button"
       :disabled="busy || writing"
       :loading="isPageActionPending('pages-applications-index-button-5')"
       @click="runPageAction(() => load(true), 'pages-applications-index-button-5')"

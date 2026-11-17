@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -141,27 +143,29 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => refresh())
 </script>
 <template>
-  <AppPage>
-    <text class="title">账号注销与删除进度</text>
-    <view class="card">
-      <text
+  <AppPage responsive-padding>
+    <PageHeading title="注销账号" description="先核对资格与后果，再决定是否提交。" />
+    <view class="ui-section ui-stack">
+      <text class="ui-copy"
         >注销受理后，账号会话将撤销，普通资料、心愿、故事、申请和双方普通聊天等进入清理，相关内容不可继续访问，旧审核或投递不会恢复这些内容。</text
       >
-      <text
+      <text class="ui-copy"
         >尚存用户自有内容按隐私规则处理，必要时保持屏障并重新审核；注销不会使其自动公开或恢复原匹配。</text
       >
-      <text
+      <text class="ui-copy"
         >已认定违规或已生成危机事件的限定证据按规则保留。备份保留 90
         天，恢复须重新执行删除；注销不表示立即抹除全部备份或合法保留证据。</text
       >
-      <text>提交不可撤销。处理完成前只显示处理中，不代表全部物理清理已完成。</text>
+      <text class="ui-copy">提交不可撤销。处理完成前只显示处理中，不代表全部物理清理已完成。</text>
     </view>
-    <text v-if="config.useMock">合成模式不提交注销，也不查询真实回执。</text>
+    <text v-if="config.useMock" class="ui-copy">合成模式不提交注销，也不查询真实回执。</text>
     <template v-if="!deletion.receipt && !deletion.uncertain">
-      <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
+      <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
       <button
+        class="ui-button"
         :disabled="busy || config.useMock"
         :loading="isPageActionPending('pages-deletion-index-button-1')"
         @click="runPageAction(() => refresh(), 'pages-deletion-index-button-1')"
@@ -169,11 +173,11 @@ onPullDownRefresh(async () => {
         重新读取账号资格
       </button>
       <template v-if="user.isLoggedIn && !config.useMock">
-        <text v-if="preparing">正在校验注销资格…</text>
-        <text v-else-if="!notice && (!checked || !user.validated)"
+        <text v-if="preparing" class="ui-copy">正在校验注销资格…</text>
+        <text v-else-if="!notice && (!checked || !user.validated)" class="ui-copy"
           >注销资格尚未校验，请重新读取。</text
         >
-        <text v-else-if="checked && !eligible">当前服务未开放账号注销。</text>
+        <text v-else-if="checked && !eligible" class="ui-copy">当前服务未开放账号注销。</text>
       </template>
       <checkbox-group @change="runPageAction(() => toggle($event))">
         <label
@@ -185,6 +189,7 @@ onPullDownRefresh(async () => {
         >
       </checkbox-group>
       <button
+        class="ui-button"
         :disabled="!maySubmit"
         :loading="isPageActionPending('pages-deletion-index-button-2')"
         @click="runPageAction(() => confirmDeletion(), 'pages-deletion-index-button-2')"
@@ -192,10 +197,13 @@ onPullDownRefresh(async () => {
         申请注销账号
       </button>
     </template>
-    <text v-if="deletion.submitting">正在提交，请等待受理结果…</text>
-    <view v-if="deletion.uncertain" class="card">
-      <text>注销结果尚未确认，请勿重复发起。会话失效不等于已取得删除回执或清理完成。</text>
+    <text v-if="deletion.submitting" class="ui-copy">正在提交，请等待受理结果…</text>
+    <view v-if="deletion.uncertain" class="ui-section ui-stack">
+      <text class="ui-copy"
+        >注销结果尚未确认，请勿重复发起。会话失效不等于已取得删除回执或清理完成。</text
+      >
       <button
+        class="ui-button"
         :disabled="busy || !user.isLoggedIn"
         :loading="isPageActionPending('pages-deletion-index-button-3')"
         @click="runPageAction(() => retry(), 'pages-deletion-index-button-3')"
@@ -203,10 +211,13 @@ onPullDownRefresh(async () => {
         手动重试原请求
       </button>
     </view>
-    <view v-if="deletion.receipt" class="card">
-      <text>删除回执已取得。回执是查询凭证，仅在本次应用运行期间保留，请自行保存。</text>
-      <text selectable>{{ deletion.receipt }}</text>
+    <view v-if="deletion.receipt" class="ui-section ui-stack">
+      <text class="ui-copy"
+        >删除回执已取得。回执是查询凭证，仅在本次应用运行期间保留，请自行保存。</text
+      >
+      <text class="ui-copy" selectable>{{ deletion.receipt }}</text>
       <button
+        class="ui-button"
         :disabled="busy"
         :loading="isPageActionPending('pages-deletion-index-button-4')"
         @click="runPageAction(() => copyReceipt(), 'pages-deletion-index-button-4')"
@@ -214,6 +225,7 @@ onPullDownRefresh(async () => {
         复制回执
       </button>
       <button
+        class="ui-button"
         :disabled="busy || config.useMock"
         :loading="isPageActionPending('pages-deletion-index-button-5')"
         @click="runPageAction(() => deletion.read(), 'pages-deletion-index-button-5')"
@@ -221,23 +233,33 @@ onPullDownRefresh(async () => {
         查询当前进度
       </button>
     </view>
-    <view v-if="deletion.status" class="card">
-      <text v-if="deletion.status.status === 'processing'">处理中：后台清理尚未完成。</text>
-      <text v-else>已完成：服务端报告本次注销清理完成。合法保留证据及备份规则仍适用。</text>
-      <text v-if="deletion.status.status === 'processing' && deletion.status.retryable_error"
+    <view v-if="deletion.status" class="ui-section ui-stack">
+      <text v-if="deletion.status.status === 'processing'" class="ui-copy"
+        >处理中：后台清理尚未完成。</text
+      >
+      <text v-else class="ui-copy"
+        >已完成：服务端报告本次注销清理完成。合法保留证据及备份规则仍适用。</text
+      >
+      <text
+        v-if="deletion.status.status === 'processing' && deletion.status.retryable_error"
+        class="ui-copy"
         >后台清理遇到可重试问题，仍需等待后续处理。</text
       >
     </view>
-    <view class="card">
-      <text>已有删除回执可直接查询，无需登录。回执无效或过期不代表清理已停止或完成。</text>
+    <view class="ui-section ui-stack">
+      <text class="ui-copy"
+        >已有删除回执可直接查询，无需登录。回执无效或过期不代表清理已停止或完成。</text
+      >
       <input
         v-model="inputReceipt"
+        class="ui-input"
         placeholder-class="field-placeholder"
         :disabled="busy"
         :maxlength="2048"
         placeholder="输入自行保存的删除回执"
       />
       <button
+        class="ui-button"
         :disabled="busy || config.useMock || !inputReceipt.trim()"
         :loading="isPageActionPending('pages-deletion-index-button-6')"
         @click="runPageAction(() => queryReceipt(), 'pages-deletion-index-button-6')"
@@ -245,7 +267,7 @@ onPullDownRefresh(async () => {
         使用回执查询
       </button>
     </view>
-    <text v-if="deletion.reading">正在读取进度…</text>
+    <text v-if="deletion.reading" class="ui-copy">正在读取进度…</text>
     <AppNotice :message="notice" kind="info" />
     <AppNotice :message="deletion.error" kind="error" />
   </AppPage>

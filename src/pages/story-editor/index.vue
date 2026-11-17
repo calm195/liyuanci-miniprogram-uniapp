@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -179,39 +181,44 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">我的还愿故事</text>
+  <AppPage responsive-padding>
+    <PageHeading title="我的还愿故事" description="写下这段经历，也把善意留给后来的人。" />
 
-    <text v-if="busy">加载中…</text>
-    <view v-if="currentWish" class="card">
-      <text>心愿状态：{{ wishStateLabels[currentWish.current_state] }}</text>
+    <text v-if="busy" class="ui-copy">加载中…</text>
+    <view v-if="currentWish" class="ui-section ui-stack">
+      <text class="ui-copy">心愿状态：{{ wishStateLabels[currentWish.current_state] }}</text>
       <template v-if="currentWish.story_review_result">
-        <text
+        <text class="ui-copy"
           >故事审核：{{
             { pending: '审核中', approved: '已通过', rejected: '未通过' }[
               currentWish.story_review_result.decision
             ]
           }}</text
         >
-        <text v-if="currentWish.story_review_result.reason">{{
+        <text v-if="currentWish.story_review_result.reason" class="ui-copy">{{
           currentWish.story_review_result.reason
         }}</text>
-        <text v-if="currentWish.story_review_result.revision_suggestion">{{
+        <text v-if="currentWish.story_review_result.revision_suggestion" class="ui-copy">{{
           currentWish.story_review_result.revision_suggestion
         }}</text>
       </template>
-      <text>审核通过与当前公开状态可能不同，请以公开故事入口为准。</text>
+      <text class="ui-copy">审核通过与当前公开状态可能不同，请以公开故事入口为准。</text>
       <navigator
         v-if="currentWish.current_state === 'fulfilled'"
+        class="ui-link"
         :url="`/pages/stories/index?id=${encodeURIComponent(id)}`"
         >查看当前公开故事</navigator
       >
       <template v-if="allowed('submit') || allowed('update')">
-        <text>请填写完整故事正文；已提交的非公开原文不会在此恢复。修改会替换全文并重新审核。</text>
+        <text class="ui-copy"
+          >请填写完整故事正文；已提交的非公开原文不会在此恢复。修改会替换全文并重新审核。</text
+        >
         <textarea
           v-model="body"
+          class="ui-textarea"
           placeholder-class="field-placeholder"
           :maxlength="-1"
           :disabled="busy || writing"
@@ -219,6 +226,7 @@ onPullDownRefresh(async () => {
         />
         <button
           v-if="allowed('submit')"
+          class="ui-button"
           :disabled="busy || writing"
           :loading="isPageActionPending('pages-story-editor-index-button-2')"
           @click="runPageAction(() => act('submit'), 'pages-story-editor-index-button-2')"
@@ -227,6 +235,7 @@ onPullDownRefresh(async () => {
         </button>
         <button
           v-if="allowed('update')"
+          class="ui-button"
           :disabled="busy || writing"
           :loading="isPageActionPending('pages-story-editor-index-button-3')"
           @click="runPageAction(() => act('update'), 'pages-story-editor-index-button-3')"
@@ -236,6 +245,7 @@ onPullDownRefresh(async () => {
       </template>
       <button
         v-if="allowed('withdraw')"
+        class="ui-button"
         :disabled="busy || writing"
         :loading="isPageActionPending('pages-story-editor-index-button-4')"
         @click="runPageAction(() => act('withdraw'), 'pages-story-editor-index-button-4')"

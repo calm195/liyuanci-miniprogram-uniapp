@@ -113,20 +113,20 @@ onPullDownRefresh(async () => {
 })
 </script>
 <template>
-  <AppPage>
-    <text v-if="busy" class="page-footnote">加载中…</text>
-    <view v-if="currentProfile" class="card public-profile-card">
+  <AppPage responsive-padding>
+    <text v-if="busy" class="ui-text-reset page-footnote">加载中…</text>
+    <view v-if="currentProfile" class="ui-section public-profile-card">
       <view class="public-profile-heading">
         <ProfileAvatar :src="currentProfile.avatar_url" :size="100" />
         <view class="public-profile-copy">
-          <text class="profile-name">{{ currentProfile.nickname }}</text>
-          <text v-if="currentProfile.display_id" class="profile-id"
+          <text class="ui-text-reset profile-name">{{ currentProfile.nickname }}</text>
+          <text v-if="currentProfile.display_id" class="ui-text-reset profile-id"
             >ID {{ currentProfile.display_id }}</text
           >
         </view>
         <button
           v-if="user.user && currentProfile.id !== user.user.id"
-          class="content-action profile-more"
+          class="ui-button content-action profile-more"
           aria-label="更多用户操作"
           :aria-expanded="menuTarget === 'profile'"
           @click="menuTarget = menuTarget === 'profile' ? '' : 'profile'"
@@ -140,22 +140,22 @@ onPullDownRefresh(async () => {
         class="profile-menu"
       >
         <navigator
-          class="content-action"
+          class="ui-link content-action"
           :url="`/pages/blacklist/index?targetId=${encodeURIComponent(currentProfile.id)}`"
           >屏蔽此用户</navigator
         >
       </view>
     </view>
     <view v-if="currentProfile" class="section-heading"
-      ><text class="section-title">公开内容</text></view
+      ><text class="ui-section-title">公开内容</text></view
     >
     <view
       v-for="item in rows"
       :key="`${item.kind}-${item.content.id}`"
-      class="card public-content-card"
+      class="ui-section public-content-card"
     >
       <navigator
-        class="public-content-link"
+        class="ui-link public-content-link"
         hover-class="tap-feedback"
         :url="
           item.kind === 'wish'
@@ -164,20 +164,22 @@ onPullDownRefresh(async () => {
         "
       >
         <view class="public-content-heading">
-          <text class="section-title">{{
+          <text class="ui-section-title">{{
             item.content.title || (item.kind === 'wish' ? '一份心愿' : '一个还愿故事')
           }}</text>
-          <text class="category-pill">{{ item.kind === 'wish' ? '心愿' : '还愿故事' }}</text>
+          <text class="ui-text-reset category-pill">{{
+            item.kind === 'wish' ? '心愿' : '还愿故事'
+          }}</text>
         </view>
-        <text class="public-content-body">{{ item.content.body }}</text>
-        <text v-if="item.content.school_related" class="notice">未经证实</text>
+        <text class="ui-text-reset public-content-body">{{ item.content.body }}</text>
+        <text v-if="item.content.school_related" class="ui-text-reset notice">未经证实</text>
         <view class="public-content-footer">
           <ContentStats :comments="item.content.comment_count" :views="item.content.view_count" />
-          <text class="content-action">查看详情 ›</text>
+          <text class="ui-text-reset content-action">查看详情 ›</text>
         </view>
       </navigator>
       <button
-        class="content-action profile-more"
+        class="ui-button content-action profile-more"
         aria-label="更多内容操作"
         :aria-expanded="menuTarget === `${item.kind}-${item.content.id}`"
         @click="
@@ -191,17 +193,18 @@ onPullDownRefresh(async () => {
       </button>
       <view v-if="menuTarget === `${item.kind}-${item.content.id}`" class="profile-menu">
         <navigator
-          class="content-action"
+          class="ui-link content-action"
           :url="`/pages/report/index?kind=${item.kind}&id=${encodeURIComponent(item.content.id)}`"
           >举报此内容</navigator
         >
       </view>
     </view>
-    <text v-if="currentProfile && !busy && !rows.length" class="empty-state"
+    <text v-if="currentProfile && !busy && !rows.length" class="ui-text-reset empty-state"
       >暂无可展示的公开内容</text
     >
     <button
       v-if="currentProfile && cursor"
+      class="ui-button"
       :disabled="busy"
       :loading="isPageActionPending('pages-public-profile-index-button-2')"
       @click="runPageAction(() => load(true), 'pages-public-profile-index-button-2')"
@@ -212,6 +215,12 @@ onPullDownRefresh(async () => {
   </AppPage>
 </template>
 <style scoped>
+.public-profile-copy .profile-name {
+  margin: 0;
+  font-size: 44rpx;
+  line-height: 1.35;
+}
+
 .public-profile-card {
   border-top: 6rpx solid var(--theme-teal);
 }

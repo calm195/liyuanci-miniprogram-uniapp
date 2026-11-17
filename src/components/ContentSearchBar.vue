@@ -7,6 +7,7 @@ const props = defineProps<{
   sort: ContentSort
   disabled?: boolean
   supportSort?: boolean
+  hideSort?: boolean
 }>()
 const emit = defineEmits<{ search: [keyword: string, sort: ContentSort] }>()
 const draft = ref(props.keyword)
@@ -47,6 +48,7 @@ function changeSort(event: { detail: { value: string | number } }) {
     <view class="search-field">
       <input
         v-model="draft"
+        class="search-input"
         aria-label="搜索标题或正文"
         placeholder="搜索标题或正文"
         confirm-type="search"
@@ -73,6 +75,7 @@ function changeSort(event: { detail: { value: string | number } }) {
       </button>
     </view>
     <picker
+      v-if="!hideSort"
       class="sort-picker"
       :range="options"
       range-key="label"
@@ -90,7 +93,7 @@ function changeSort(event: { detail: { value: string | number } }) {
   display: flex;
   gap: 16rpx;
   align-items: center;
-  margin: 20rpx 0;
+  margin: 0 0 24rpx;
 }
 .search-field {
   display: flex;
@@ -99,12 +102,14 @@ function changeSort(event: { detail: { value: string | number } }) {
   gap: 10rpx;
   align-items: center;
 }
-.search-field input {
+.search-field .search-input {
   flex: 1;
   min-width: 0;
   margin: 0;
   padding: 0 16rpx;
   font-size: 26rpx;
+  height: 88rpx;
+  border-radius: 16rpx;
 }
 .search-field button {
   flex: 0 0 auto;
@@ -124,5 +129,11 @@ function changeSort(event: { detail: { value: string | number } }) {
   color: var(--theme-teal);
   font-size: 26rpx;
   white-space: nowrap;
+  margin: 0;
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  padding: 12rpx 20rpx;
+  border-radius: 16rpx;
 }
 </style>

@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { useUnreadStore } from '@/stores/unread'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
+import { beijingTime } from '@/utils/capsules'
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
@@ -144,17 +147,26 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">悄悄鲤通知</text>
+  <AppPage responsive-padding>
+    <PageHeading title="我的回响" description="暖评与时光胶囊的新进展，都在这里。" />
 
-    <text v-if="ready">已加载通知中 {{ unread }} 条未读</text>
-    <text v-if="ready && !items.length && !busy">当前页暂无模块通知。</text>
-    <view v-for="item in items" :key="item.id" class="card">
-      <text>{{ item.kind === 'whisper_comment' ? '树洞有暖评进展' : '本人胶囊有新进展' }}</text>
-      <text>{{ item.read ? '已读' : '未读' }}</text>
+    <text v-if="ready" class="ui-copy">已加载通知中 {{ unread }} 条未读</text>
+    <text v-if="ready && !items.length && !busy && !error" class="ui-copy"
+      >当前页暂无模块通知。</text
+    >
+    <view v-for="item in items" :key="item.id" class="ui-section ce-group">
+      <text class="ui-copy">{{
+        item.kind === 'whisper_comment' ? '树洞有暖评进展' : '本人胶囊有新进展'
+      }}</text>
+      <text class="ui-meta"
+        >{{ item.read ? '已读' : '未读' }} · {{ beijingTime(item.created_at) }}</text
+      >
+      <text v-if="item.notice" class="ui-copy">{{ item.notice }}</text>
       <button
+        class="ui-button"
         :disabled="locked"
         :loading="isPageActionPending('pages-whispers-notifications-button-2' + ':' + item.id)"
         @click="
@@ -165,6 +177,7 @@ onShow(() => {
       </button>
       <button
         v-if="!item.read && canWhisperAction('Notification', item, 'whisperNotificationRead')"
+        class="ui-button"
         :disabled="locked"
         :loading="isPageActionPending('pages-whispers-notifications-button-3' + ':' + item.id)"
         @click="
@@ -179,28 +192,32 @@ onShow(() => {
     </view>
     <button
       v-if="cursor"
+      class="ui-button"
       :disabled="locked"
       :loading="isPageActionPending('pages-whispers-notifications-button-4')"
       @click="runPageAction(() => load(true), 'pages-whispers-notifications-button-4')"
     >
       加载下一页
     </button>
-    <view v-if="capsule" class="card">
-      <navigator :url="`/pages/capsules/detail?id=${encodeURIComponent(capsule.id)}`"
+    <view v-if="capsule" class="ui-section ce-group">
+      <navigator
+        class="ui-link"
+        :url="`/pages/capsules/detail?id=${encodeURIComponent(capsule.id)}`"
         >读取胶囊详情与管理</navigator
       >
-      <text>本人胶囊当前状态：{{ capsuleStates[capsule.status] }}</text>
-      <text>预约时间（UTC）：{{ capsule.unlock_at }}</text>
-      <text>服务端时间（UTC）：{{ capsule.server_now }}</text>
+      <text class="ui-copy">本人胶囊当前状态：{{ capsuleStates[capsule.status] }}</text>
+      <text class="ui-copy">预约时间（UTC）：{{ capsule.unlock_at }}</text>
+      <text class="ui-copy">服务端时间（UTC）：{{ capsule.server_now }}</text>
       <text
         v-if="capsule.status === 'unlocked' && capsule.body !== null"
-        class="whitespace-pre-wrap"
+        class="ui-copy whitespace-pre-wrap"
         >{{ capsule.body }}</text
       >
-      <text v-else>当前不能读取正文，以重新读取的服务端状态为准。</text>
+      <text v-else class="ui-copy">当前不能读取正文，以重新读取的服务端状态为准。</text>
     </view>
     <button
       v-if="retryReady"
+      class="ui-button"
       :disabled="writing"
       :loading="isPageActionPending('pages-whispers-notifications-button-6')"
       @click="runPageAction(page.retry, 'pages-whispers-notifications-button-6')"
@@ -212,13 +229,10 @@ onShow(() => {
 </template>
 
 <style scoped>
-.card {
-  border-radius: 28rpx;
-  padding: 32rpx;
-}
-.card > text {
-  display: block;
-  margin-bottom: 20rpx;
-  line-height: 1.7;
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
 }
 </style>

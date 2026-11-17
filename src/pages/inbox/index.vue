@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { useUnreadStore } from '@/stores/unread'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -37,6 +39,12 @@ const scoped = computed(
 const conversationRows = computed(() => (scoped.value ? conversations.value : []))
 const notificationRows = computed(() => (scoped.value ? notifications.value : []))
 const unreadCount = computed(() => notificationRows.value.filter((item) => !item.read).length)
+function changeView(value: 'conversations' | 'notifications') {
+  if (busy.value || writing.value || opening.value || value === tab.value) return
+  tab.value = value
+  clear()
+  void load()
+}
 function checkCursor(next: unknown) {
   // 游标仅在当前读取链内使用；重复或畸形值停止翻页，刷新后重新建立读取链。
   if (next === null) return
@@ -264,31 +272,55 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">{{ tab === 'conversations' ? '聊天' : '通知中心' }}</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index">前往登录</navigator>
-    <text v-if="busy">加载中…</text>
+  <AppPage responsive-padding>
+    <PageHeading title="消息" description="聊天与通知，重要的回应都在这里。" />
+    <view class="inbox-tabs"
+      ><button
+        class="ui-button"
+        :class="{ 'ui-button-primary': tab === 'conversations' }"
+        :disabled="busy || writing || opening"
+        @click="changeView('conversations')"
+      >
+        会话</button
+      ><button
+        class="ui-button"
+        :class="{ 'ui-button-primary': tab === 'notifications' }"
+        :disabled="busy || writing || opening"
+        @click="changeView('notifications')"
+      >
+        通知
+      </button></view
+    >
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
+    <text v-if="busy" class="ui-copy">加载中…</text>
     <template v-if="tab === 'conversations'">
-      <text v-if="scoped && !busy && !conversationRows.length">暂无可访问会话</text>
+      <text v-if="scoped && !busy && !conversationRows.length" class="ui-copy">暂无可访问会话</text>
       <navigator
         v-for="conversation in conversationRows"
         :key="conversation.id"
-        class="card conversation-card"
+        class="ui-section conversation-card"
         :url="`/pages/chat/index?id=${encodeURIComponent(conversation.id)}`"
       >
         <view class="conversation-heading">
-          <text class="conversation-title">{{ conversation.wish_title || '未命名心愿' }}</text>
-          <text class="read-state" :class="{ unread: conversation.has_unread === true }">{{
-            conversation.has_unread === true
-              ? '未读'
-              : conversation.has_unread === false
-                ? '已读'
-                : '状态待同步'
+          <text class="ui-text-reset conversation-title">{{
+            conversation.wish_title || '未命名心愿'
           }}</text>
+          <text
+            class="ui-text-reset read-state"
+            :class="{ unread: conversation.has_unread === true }"
+            >{{
+              conversation.has_unread === true
+                ? '未读'
+                : conversation.has_unread === false
+                  ? '已读'
+                  : '状态待同步'
+            }}</text
+          >
         </view>
-        <text class="conversation-preview">{{
+        <text class="ui-text-reset conversation-preview">{{
           conversation.latest_message
             ? `${conversation.latest_message.viewer_is_sender ? '我：' : ''}${conversation.latest_message.body}`
             : conversation.latest_message === null
@@ -298,23 +330,23 @@ onPullDownRefresh(async () => {
       </navigator>
     </template>
     <template v-else>
-      <text v-if="scoped">已加载通知中有 {{ unreadCount }} 条未读</text>
-      <text v-if="scoped && !busy && !notificationRows.length">暂无通知</text>
+      <text v-if="scoped" class="ui-copy">已加载通知中有 {{ unreadCount }} 条未读</text>
+      <text v-if="scoped && !busy && !notificationRows.length" class="ui-copy">暂无通知</text>
       <view
         v-for="notification in notificationRows"
         :key="notification.id"
-        class="card notification-card"
+        class="ui-section notification-card"
       >
-        <text class="read-state" :class="{ unread: !notification.read }">{{
+        <text class="ui-text-reset read-state" :class="{ unread: !notification.read }">{{
           notification.read ? '已读' : '未读'
         }}</text>
         <view class="notification-content">
-          <text class="notification-text">{{
+          <text class="ui-text-reset notification-text">{{
             notification.notice || '这条通知的详情暂不可查看。'
           }}</text>
           <button
             v-if="notificationDestination(notification)"
-            class="notification-jump"
+            class="ui-button notification-jump"
             :aria-label="notificationDestination(notification)?.label"
             :disabled="busy || writing || opening"
             @click="
@@ -324,15 +356,15 @@ onPullDownRefresh(async () => {
               )
             "
           >
-            <text aria-hidden="true">→</text>
+            <text class="ui-copy" aria-hidden="true">→</text>
           </button>
         </view>
-        <text v-if="!notificationDestination(notification)" class="subtitle"
+        <text v-if="!notificationDestination(notification)" class="ui-meta"
           >关联内容暂不可打开。</text
         >
         <button
           v-if="!notification.read"
-          class="mark-read"
+          class="ui-button mark-read"
           :disabled="busy || writing"
           :loading="isPageActionPending('pages-inbox-index-button-6' + ':' + notification.id)"
           @click="
@@ -348,6 +380,7 @@ onPullDownRefresh(async () => {
     </template>
     <button
       v-if="scoped && cursor"
+      class="ui-button"
       :disabled="busy || writing"
       :loading="isPageActionPending('pages-inbox-index-button-7')"
       @click="runPageAction(() => load(true), 'pages-inbox-index-button-7')"
@@ -360,6 +393,15 @@ onPullDownRefresh(async () => {
 </template>
 
 <style scoped>
+.inbox-tabs {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+.inbox-tabs .ui-button {
+  flex: 1;
+}
+
 .page .conversation-card {
   color: var(--theme-ink);
 }
@@ -380,7 +422,7 @@ onPullDownRefresh(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 34rpx;
+  font-size: 32rpx;
   font-weight: 700;
 }
 .page .read-state {
@@ -400,7 +442,7 @@ onPullDownRefresh(async () => {
   white-space: nowrap;
   color: var(--theme-muted);
   font-size: 28rpx;
-  text-align: right;
+  text-align: left;
 }
 .page .notification-text {
   flex: 1;

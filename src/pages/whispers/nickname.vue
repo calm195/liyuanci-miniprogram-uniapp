@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
@@ -62,29 +64,33 @@ page.onRefresh(() => load())
 onShow(() => {
   void load()
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <text class="title">树洞昵称</text>
-    <text>这是独立的树洞昵称，可重名，不关联公开主页。新昵称先审后用，旧内容保留原身份快照。</text>
+  <AppPage responsive-padding>
+    <PageHeading title="树洞昵称" description="已审核的昵称才会用于新内容，旧内容保留原身份。" />
+    <text class="ui-copy"
+      >这是独立的树洞昵称，可重名，不关联公开主页。新昵称先审后用，旧内容保留原身份快照。</text
+    >
 
-    <view v-if="state" class="card">
-      <text>当前已审昵称：{{ state.active?.label || '暂无' }}</text>
+    <view v-if="state" class="ui-section ce-group">
+      <text class="ui-copy">当前已审昵称：{{ state.active?.label || '暂无' }}</text>
       <view v-if="state.candidate"
-        ><text>新候选：{{ state.candidate.label }}</text
-        ><text>{{ candidateLabels[state.candidate.status] }}</text
-        ><text v-if="state.candidate.review_result?.reason"
+        ><text class="ui-copy">新候选：{{ state.candidate.label }}</text
+        ><text class="ui-copy">{{ candidateLabels[state.candidate.status] }}</text
+        ><text v-if="state.candidate.review_result?.reason" class="ui-copy"
           >原因：{{ state.candidate.review_result.reason }}</text
-        ><text v-if="state.candidate.review_result?.revision_suggestion"
+        ><text v-if="state.candidate.review_result?.revision_suggestion" class="ui-copy"
           >修改建议：{{ state.candidate.review_result.revision_suggestion }}</text
         ></view
       >
-      <text
+      <text class="ui-copy"
         >候选审核期间，旧已审昵称仍可用于新内容；违规版本撤销后，关联内容须更换合法展示方式重审。</text
       >
       <input
         v-if="canSave"
         v-model="label"
+        class="ui-input"
         :maxlength="-1"
         :disabled="busy || writing || retryReady"
         placeholder="昵称2至20个字"
@@ -92,6 +98,7 @@ onShow(() => {
       />
       <button
         v-if="canSave"
+        class="ui-button ui-button-primary"
         :disabled="busy || writing || retryReady"
         :loading="isPageActionPending('pages-whispers-nickname-button-2')"
         @click="runPageAction(save, 'pages-whispers-nickname-button-2')"
@@ -101,6 +108,7 @@ onShow(() => {
     </view>
     <button
       v-if="retryReady"
+      class="ui-button ui-button-primary"
       :disabled="writing"
       :loading="isPageActionPending('pages-whispers-nickname-button-3')"
       @click="runPageAction(page.retry, 'pages-whispers-nickname-button-3')"
@@ -110,3 +118,12 @@ onShow(() => {
     <AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
   </AppPage>
 </template>
+
+<style scoped>
+.ui-section.ce-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+  min-width: 0;
+}
+</style>
