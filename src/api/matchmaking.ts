@@ -9,7 +9,7 @@ import {
   parseMatchmakingPreferences,
   parseMatchmakingReceipt,
 } from '@/utils/matchmaking'
-import type { MatchmakingCommand } from '@/types/matchmaking'
+import type { MatchmakingCommand, MatchmakingTraitCategory } from '@/types/matchmaking'
 
 function path(id: string) {
   if (!matchmakingID(id)) throw new Error('活动标识无效，请从活动列表重新进入。')
@@ -95,8 +95,11 @@ export async function writeMatchmaking(command: MatchmakingCommand) {
 export async function suggestMatchmakingTraits(
   query: string,
   purpose: 'ideal' | 'personal' = 'ideal',
+  category?: MatchmakingTraitCategory,
 ) {
   return parseTraitSuggestions(
-    await call(`/matchmaking/traits?q=${encodeURIComponent(query)}&purpose=${purpose}&limit=10`),
+    await call(
+      `/matchmaking/traits?q=${encodeURIComponent(query)}&purpose=${purpose}&limit=10${category ? `&category=${category}` : ''}`,
+    ),
   )
 }

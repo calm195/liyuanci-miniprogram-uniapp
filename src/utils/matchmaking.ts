@@ -3,6 +3,7 @@ import type {
   MatchmakingActivity,
   MatchmakingAccountProfile,
   MatchmakingDetail,
+  MatchmakingResultState,
   MatchmakingEnrollment,
   MatchmakingPage,
   MatchmakingPair,
@@ -12,6 +13,7 @@ import type {
   MatchmakingScore,
   MatchmakingTask,
   MatchmakingTraitSelection,
+  MatchmakingTraitCategories,
   MatchmakingTraitSuggestion,
 } from '../types/matchmaking.ts'
 
@@ -33,6 +35,46 @@ export const matchmakingMbtis = [
   'ISTJ',
   'ESTJ',
 ] as const
+export const matchmakingTraitCategories = [
+  { code: 'personality', label: '性格' },
+  { code: 'interest', label: '兴趣' },
+  { code: 'lifestyle', label: '生活' },
+  { code: 'uncategorized', label: '待分类' },
+] as const
+const traitCategoryCodes = matchmakingTraitCategories.map((item) => item.code)
+function traitCategories(value: unknown, names: unknown): MatchmakingTraitCategories {
+  const source = record(value)
+  const selected = names === undefined ? [] : parseIdealTraits(names)
+  if (Object.keys(source).length > 10) invalid()
+  const out: MatchmakingTraitCategories = {}
+  for (const [name, category] of Object.entries(source)) {
+    if (!selected.includes(name) || name.normalize('NFKC').trim() !== name) invalid()
+    Object.defineProperty(out, name, {
+      value: option(category, traitCategoryCodes),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+  }
+  return out
+}
+function categoryMaps(value: Record<string, unknown>) {
+  return {
+    ...(value.personal_trait_categories === undefined
+      ? {}
+      : {
+          personal_trait_categories: traitCategories(
+            value.personal_trait_categories,
+            value.personal_traits,
+          ),
+        }),
+    ...(value.ideal_trait_categories === undefined
+      ? {}
+      : {
+          ideal_trait_categories: traitCategories(value.ideal_trait_categories, value.ideal_traits),
+        }),
+  }
+}
 const phases: ActivityPhase[] = [
   'draft',
   'cancelled',
@@ -189,6 +231,7 @@ export function parseMatchmakingProfile(value: unknown): MatchmakingProfile {
     introduction: string(v.introduction, 500),
     ...(v.ideal_traits === undefined ? {} : { ideal_traits: parseIdealTraits(v.ideal_traits) }),
     ...preferences(v),
+    ...categoryMaps(v),
     ...education(v),
     ...(v.grade_label === undefined ? {} : { grade_label: string(v.grade_label, 64) }),
     consent: bool(v.consent),
@@ -212,6 +255,7 @@ export function parseMatchmakingPreferences(value: unknown): MatchmakingPreferen
     v[key] === 0 ? 0 : integer(v[key], min, max)
   const draft: MatchmakingPreferences = {
     ...preferences(v),
+    ...categoryMaps(v),
     age: numeric('age', 18, 80),
     age_min: numeric('age_min', 18, 80),
     age_max: numeric('age_max', 18, 80),
@@ -246,6 +290,7 @@ function parseMatchmakingProfileDraft(v: Record<string, unknown>): MatchmakingPr
     campus: option(v.campus, ['', ...campusCodes]),
     mbti: option(v.mbti, ['', ...matchmakingMbtis]),
     ...preferences(v),
+    ...categoryMaps(v),
     ...education(v),
     ...(v.grade_label === undefined ? {} : { grade_label: string(v.grade_label, 64) }),
     consent: bool(v.consent),
@@ -266,6 +311,10 @@ export function parseMatchmakingAccountProfile(value: unknown): MatchmakingAccou
             name: string(item.name, 20),
             status: option(item.status, ['approved', 'pending', 'rejected']),
             reason: string(item.reason ?? '', 500),
+            ...(item.category === undefined
+              ? {}
+              : { category: option(item.category, traitCategoryCodes) }),
+            ...(item.enabled === undefined ? {} : { enabled: bool(item.enabled) }),
           }
         })
   if (trait_selections) {
@@ -397,6 +446,18 @@ function task(value: unknown): MatchmakingTask {
 export function parseMatchmakingDetail(value: unknown): MatchmakingDetail {
   const v = record(value)
   const out: MatchmakingDetail = {
+    ...(v.result_state === undefined
+      ? {}
+      : {
+          result_state: option(v.result_state, [
+            'not_enrolled',
+            'pending_review',
+            'waiting',
+            'paired',
+            'unmatched',
+            'ended',
+          ] as const),
+        }),
     activity: parseMatchmakingActivity(v.activity),
     ...(v.enrollment === undefined ? {} : { enrollment: enrollment(v.enrollment) }),
     ...(v.pair === undefined ? {} : { pair: pair(v.pair) }),
@@ -422,6 +483,21 @@ export function parseMatchmakingDetail(value: unknown): MatchmakingDetail {
   )
     invalid()
   return out
+}
+// 旧服务没有实际发布标记时保守展示等待；绝不根据设备时间推断未配对。
+export function matchmakingResultState(detail: MatchmakingDetail): MatchmakingResultState {
+  if (
+    detail.activity.phase === 'ended' ||
+    detail.activity.phase === 'cancelled' ||
+    detail.pair?.status === 'ended'
+  )
+    return 'ended'
+  if (detail.result_state) return detail.result_state
+  if (!detail.enrollment || ['withdrawn', 'rejected'].includes(detail.enrollment.status))
+    return 'not_enrolled'
+  if (detail.enrollment.status === 'pending') return 'pending_review'
+  if (detail.pair?.status === 'published') return 'paired'
+  return 'waiting'
 }
 export function parseMatchmakingPage(value: unknown): MatchmakingPage {
   const v = record(value)
@@ -517,7 +593,15 @@ export function parseTraitSuggestions(value: unknown): MatchmakingTraitSuggestio
   return unique(
     array(record(value).items, 10).map((value) => {
       const item = record(value)
-      return { id: id(item.id), name: string(item.name, 20), heat: integer(item.heat) }
+      return {
+        id: id(item.id),
+        name: string(item.name, 20),
+        heat: integer(item.heat),
+        ...(item.category === undefined
+          ? {}
+          : { category: option(item.category, traitCategoryCodes) }),
+        ...(item.enabled === undefined ? {} : { enabled: bool(item.enabled) }),
+      }
     }),
   )
 }

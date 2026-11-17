@@ -211,6 +211,7 @@ async function setup() {
       pageScript(new URL(`../src/pages/matchmaking/${name}.vue`, import.meta.url)) +
         `\nexport { page, load, ${exports} }`,
       {
+        useThemeStore: () => ({ mode: 'light' }),
         ...lifecycle,
         ...contract,
         ...api,

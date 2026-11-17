@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { ref, computed } from 'vue'
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
-import AppIcon from '@/components/AppIcon.vue'
+import PageHeading from '@/components/PageHeading.vue'
 import MatchmakingActivitySummary from '@/components/MatchmakingActivitySummary.vue'
 import { listMatchmaking } from '@/api/matchmaking'
 import { useMatchmakingPage } from '@/composables/use-matchmaking-page'
@@ -44,41 +45,46 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage>
-    <view class="activity-hero">
-      <view class="hero-icon"><AppIcon name="heart" :size="34" /></view>
-      <text class="hero-title">遇见一位新朋友</text>
-      <text class="hero-copy">用个人资料报名，和搭档一起完成每日小任务。</text>
+  <AppPage responsive-padding>
+    <view class="activity-letter">
+      <PageHeading
+        kicker="包分配 · 认真认识一个人"
+        title="包分配"
+        illustration="entry-buddy"
+        description="用完整的资料介绍自己，和新朋友一起完成每日小任务。"
+      >
+        <navigator class="ui-link" url="/pages/matchmaking/profile">我的配对资料 ›</navigator>
+      </PageHeading>
     </view>
-    <view v-if="gate" class="card"
+    <view v-if="gate" class="ui-state"
       ><text>{{ gate }}</text
-      ><navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="small-link"
-        >微信登录 ›</navigator
-      ></view
+      ><LoginLink v-if="!user.isLoggedIn" class="ui-link">微信登录 ›</LoginLink></view
     >
-    <view v-else-if="!busy && !error && !activities.length" class="card empty-state"
-      ><text>暂时没有可查看的活动</text><text>新的包分配活动发布后，会出现在这里。</text></view
+    <view v-else-if="!busy && !error && !activities.length" class="ui-state"
+      ><text class="ui-section-title">暂时没有可查看的活动</text
+      ><text class="ui-meta">新的包分配活动发布后，会出现在这里。</text></view
     >
     <text v-if="busy" class="notice">正在读取活动…</text>
     <navigator
       v-for="activity in activities"
       :key="activity.id"
       :url="`/pages/matchmaking/detail?id=${activity.id}`"
-      class="card activity-card"
+      class="ui-section activity-card"
     >
       <view class="activity-card-head">
         <text class="phase-pill" :class="{ 'phase-live': activity.phase === 'registration' }">
           {{ matchmakingPhaseLabel(activity.phase) }}
         </text>
-        <text class="activity-meta">{{ activity.days }} 天互动</text>
+        <text class="ui-meta">{{ activity.days }} 天互动</text>
       </view>
-      <text class="section-title">{{ activity.title }}</text>
-      <text class="description">{{ activity.description }}</text>
-      <MatchmakingActivitySummary v-if="activity.summary" :summary="activity.summary" />
+      <text class="ui-section-title">{{ activity.title }}</text>
+      <text class="ui-copy activity-description">{{ activity.description }}</text>
+      <MatchmakingActivitySummary v-if="activity.summary" :summary="activity.summary" compact />
       <view class="activity-card-foot">
-        <text class="activity-meta">
+        <text class="ui-meta">
           {{ activity.phase === 'ended' ? '结束' : '报名截止' }} ·
           {{
             beijingTime(
@@ -86,11 +92,12 @@ onPullDownRefresh(async () => {
             )
           }}
         </text>
-        <text class="small-link">查看活动 ›</text>
+        <text class="ui-link">查看活动 ›</text>
       </view>
     </navigator>
     <button
       v-if="more"
+      class="ui-button"
       :disabled="busy"
       :loading="isPageActionPending('matchmaking-list-more')"
       @click="runPageAction(() => load(true), 'matchmaking-list-more')"
@@ -99,90 +106,55 @@ onPullDownRefresh(async () => {
     </button>
     <button
       v-if="error"
+      class="ui-button"
       :disabled="busy"
       :loading="isPageActionPending('matchmaking-list-refresh')"
       @click="runPageAction(() => load(), 'matchmaking-list-refresh')"
     >
       重新读取活动
     </button>
-    <text class="page-footnote">匹配分数仅供参考，相处从尊重彼此开始。</text>
+    <text class="ui-meta">匹配分数仅供参考，相处从尊重彼此开始。</text>
     <AppNotice :message="error" kind="error" /><AppNotice :message="notice" kind="info" />
   </AppPage>
 </template>
 <style scoped>
-.activity-hero {
-  display: grid;
-  gap: 14rpx;
-  margin: 12rpx 0 28rpx;
-  padding: 30rpx;
-  border: 1rpx solid var(--theme-line);
+.activity-letter {
+  padding: 32rpx;
   border-radius: 32rpx;
-  background: var(--theme-mint);
-}
-.hero-icon {
-  display: grid;
-  place-items: center;
-  width: 76rpx;
-  height: 76rpx;
-  border-radius: 24rpx;
-  color: var(--theme-teal);
-  background: var(--theme-surface);
-}
-.hero-title {
-  font-size: 44rpx;
-  line-height: 1.2;
-  font-weight: 700;
-}
-.hero-copy {
-  font-size: 26rpx;
-  line-height: 1.65;
-  opacity: 0.8;
-}
-.activity-card {
-  display: grid;
-  gap: 16rpx;
+  background: var(--theme-peach);
   margin-bottom: 24rpx;
-  color: var(--theme-ink);
 }
 .activity-card-head,
 .activity-card-foot {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   justify-content: space-between;
-  gap: 12rpx;
+  align-items: center;
+  gap: 16rpx;
+}
+.activity-card-head {
+  margin-bottom: 16rpx;
 }
 .activity-card-foot {
+  margin-top: 24rpx;
   border-top: 1rpx solid var(--theme-line);
   padding-top: 16rpx;
 }
-.phase-pill {
-  font-size: 23rpx;
-  font-weight: 600;
-  padding: 7rpx 16rpx;
-  border-radius: 999rpx;
-  border: 1rpx solid var(--theme-line);
-}
-.phase-live {
-  color: var(--theme-teal);
-  border-color: var(--theme-teal);
-  background: var(--theme-mint);
-}
-.description {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.7;
-}
-.activity-meta {
-  font-size: 24rpx;
+.activity-description {
+  margin-top: 12rpx;
   color: var(--theme-muted);
 }
-.empty-state {
-  display: grid;
-  gap: 20rpx;
+.phase-pill {
+  display: block;
+  margin: 0;
+  padding: 6rpx 16rpx;
+  border-radius: 12rpx;
+  background: var(--theme-canvas);
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.phase-live {
+  background: var(--theme-mint);
+  color: var(--theme-teal);
 }
 </style>

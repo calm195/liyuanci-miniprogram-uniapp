@@ -17,6 +17,7 @@ async function setup(fail = false) {
       '\nexport { edit,saveForm,returnToActivity,activity }',
     {
       matchmakingID,
+      useThemeStore: () => ({ mode: 'light' }),
       useMatchmakingProfile: () => ({
         page: {
           user: { validated: true, user: { nickname: '合成昵称' }, refresh: async () => {} },

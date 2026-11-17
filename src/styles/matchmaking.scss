@@ -1,0 +1,79 @@
+.content-text {
+  margin: 0;
+}
+// 包分配沿用全局薄荷面色与品牌色，保持深浅主题一致。
+.match-experience {
+  --match-soft: var(--theme-mint);
+  --match-accent: var(--theme-teal);
+  --match-ink: var(--theme-ink);
+  --match-on-accent: #fff;
+  color: var(--theme-ink);
+  margin: 0;
+}
+.match-experience.dark {
+  --match-soft: var(--theme-mint);
+  --match-accent: var(--theme-teal);
+  --match-ink: var(--theme-ink);
+  --match-on-accent: var(--theme-canvas);
+}
+.match-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 48rpx 40rpx;
+  margin-bottom: 24rpx;
+  border: 0;
+  border-radius: 32rpx;
+  color: var(--match-ink);
+  background: var(--match-soft);
+}
+.match-kicker {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--match-accent);
+  letter-spacing: 4rpx;
+}
+.match-title {
+  display: block;
+  font-size: 44rpx;
+  line-height: 1.35;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.match-description {
+  display: block;
+  margin-top: 16rpx;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+.match-card {
+  display: grid;
+  gap: 24rpx;
+  padding: 32rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid var(--theme-line);
+  border-radius: 32rpx;
+  background: var(--theme-surface);
+}
+.match-experience .match-primary {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 92rpx;
+  margin: 0;
+  padding: 20rpx 24rpx;
+  border: 0;
+  border-radius: 24rpx;
+  background: var(--match-accent);
+  color: var(--match-on-accent);
+  line-height: 1.6;
+  font-size: 28rpx;
+}
+.match-experience .muted {
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  line-height: 1.6;
+}

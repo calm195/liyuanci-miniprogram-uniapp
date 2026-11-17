@@ -1,29 +1,46 @@
 <script setup lang="ts">
 import type { MatchmakingActivitySummary } from '@/types/matchmaking'
 
-defineProps<{ summary: MatchmakingActivitySummary }>()
+defineProps<{ summary: MatchmakingActivitySummary; compact?: boolean }>()
 </script>
 
 <template>
-  <view class="activity-stats">
+  <view class="activity-stats" :class="{ compact }">
     <view class="stat">
       <text class="stat-label">报名人数</text>
       <view class="stat-value"
-        ><text>{{ summary.enrollment_count }}</text
-        ><text>人</text></view
+        ><text class="stat-number">{{ summary.enrollment_count }}</text
+        ><text class="stat-unit">人</text></view
       >
     </view>
     <view class="stat">
       <text class="stat-label">成功配对组数</text>
       <view class="stat-value"
-        ><text>{{ summary.successful_pair_count }}</text
-        ><text>组</text></view
+        ><text class="stat-number">{{ summary.successful_pair_count }}</text
+        ><text class="stat-unit">组</text></view
       >
     </view>
   </view>
 </template>
 
 <style scoped>
+.activity-stats.compact {
+  margin-top: 24rpx;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.compact .stat {
+  padding: 0 24rpx 0 0;
+}
+.compact .stat + .stat {
+  padding-left: 24rpx;
+}
+.compact .stat-label,
+.compact .stat-number,
+.compact .stat-unit {
+  margin: 0;
+}
 .activity-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

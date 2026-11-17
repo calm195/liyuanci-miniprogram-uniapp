@@ -68,6 +68,24 @@ export function useMatchmakingProfile() {
   function withoutRejected(draft: MatchmakingPreferences): MatchmakingPreferences {
     return {
       ...draft,
+      ...(draft.personal_trait_categories === undefined
+        ? {}
+        : {
+            personal_trait_categories: Object.fromEntries(
+              Object.entries(draft.personal_trait_categories).filter(
+                ([name]) => !rejectedTraits.has(name),
+              ),
+            ),
+          }),
+      ...(draft.ideal_trait_categories === undefined
+        ? {}
+        : {
+            ideal_trait_categories: Object.fromEntries(
+              Object.entries(draft.ideal_trait_categories).filter(
+                ([name]) => !rejectedTraits.has(name),
+              ),
+            ),
+          }),
       ...(draft.ideal_traits === undefined
         ? {}
         : { ideal_traits: draft.ideal_traits.filter((name) => !rejectedTraits.has(name)) }),
@@ -102,6 +120,18 @@ export function useMatchmakingProfile() {
       if (result.trait_selections) {
         form.value.ideal_traits = idealTraitSelections.value.map((item) => item.name)
         form.value.personal_traits = personalTraitSelections.value.map((item) => item.name)
+        if (result.trait_selections.some((item) => item.category !== undefined)) {
+          form.value.personal_trait_categories = Object.fromEntries(
+            personalTraitSelections.value
+              .filter((item) => item.category !== undefined)
+              .map((item) => [item.name, item.category!]),
+          )
+          form.value.ideal_trait_categories = Object.fromEntries(
+            idealTraitSelections.value
+              .filter((item) => item.category !== undefined)
+              .map((item) => [item.name, item.category!]),
+          )
+        }
       } else {
         form.value.personal_traits ??= []
       }

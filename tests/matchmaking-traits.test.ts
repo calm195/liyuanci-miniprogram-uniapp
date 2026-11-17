@@ -73,8 +73,8 @@ test('标签编辑新增删除与上限，迟到推荐在隐藏后不能回填',
       '\nexport { add, remove, state, query, suggestions, loading, error };',
     {
       defineProps: () => props,
-      defineEmits: () => (_event: string, items: string[]) => {
-        props.modelValue = items
+      defineEmits: () => (event: string, items: string[]) => {
+        if (event === 'update:modelValue') props.modelValue = items
       },
       onBeforeUnmount: () => {},
       onHide: (callback: () => void) => {

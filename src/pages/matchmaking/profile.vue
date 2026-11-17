@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { useLoginRefresh } from '@/composables/use-login'
 import { computed, ref } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { campuses, genders } from '@/types/wish'
 import AppPage from '@/components/AppPage.vue'
+import { useThemeStore } from '@/stores/theme'
 import MatchmakingForm from '@/components/MatchmakingForm.vue'
 import { useMatchmakingProfile } from '@/composables/use-matchmaking-profile'
 import { matchmakingID } from '@/utils/matchmaking'
 import type { MatchmakingPreferences } from '@/types/matchmaking'
 const activity = ref('')
+const step = ref(1)
+const theme = useThemeStore()
 const {
   page,
   traitSelections,
@@ -90,84 +94,158 @@ onPullDownRefresh(async () => {
     uni.stopPullDownRefresh()
   }
 })
+useLoginRefresh(() => reload())
 </script>
 <template>
-  <AppPage>
-    <text class="title">包分配资料</text>
-    <navigator v-if="!user.isLoggedIn" url="/pages/login/index" class="card"
-      >登录后填写资料 ›</navigator
-    >
-    <view v-if="shared" class="card shared-profile">
-      <text class="section-title">共享基础信息</text>
-      <text
-        >{{ shared.nickname || '未填写昵称' }} · {{ yearLabel }} ·
-        {{ shared.mbti || '未填写 MBTI' }}
-        ·
-        {{
-          campuses.find((item) => item.value === shared?.identity_tags?.campus)?.label ||
-          '未填写校区'
-        }}
-        ·
-        {{
-          genders.find((item) => item.value === shared?.identity_tags?.gender)?.label ||
-          '未填写性别'
-        }}</text
-      >
-      <text class="muted">昵称、校区、性别、MBTI 与学籍信息来自个人资料。</text>
-      <navigator :url="commonURL">编辑基础信息 ›</navigator>
-    </view>
-    <text v-if="busy">正在读取包分配资料…</text>
-    <text v-if="gate">{{ gate }}</text>
-    <view v-if="form" class="card">
-      <text class="muted"
-        >资料用于报名审核和向有效配对对象展示。保存资料后，请回到活动确认报名；已报名内容需在活动中更新。</text
-      >
-      <MatchmakingForm
-        :model-value="form"
-        :trait-selections="traitSelections"
-        :personal-trait-selections="personalTraitSelections"
-        :disabled="busy || !!pending || (locked && !saving)"
-        @update:model-value="edit"
-      />
-      <text v-if="pending" class="muted">上次保存结果尚未确认，请使用原请求重试。</text>
-      <text v-else-if="saving" class="muted">正在保存…</text>
-      <text v-else-if="dirty" class="muted">有改动尚未保存</text>
-      <text v-else class="muted">修改后自动保存，也可手动保存。</text>
+  <AppPage responsive-padding>
+    <view class="match-experience" :class="{ dark: theme.mode === 'dark' }">
+      <view class="match-hero">
+        <text class="content-text match-kicker">给未来的相遇</text>
+        <text class="content-text match-title">先从认识你开始</text>
+        <text class="content-text match-description">认真写下自己，也留一点空间给惊喜。</text>
+      </view>
+      <LoginLink v-if="!user.isLoggedIn" class="match-card">登录后填写资料 ›</LoginLink>
+      <text v-if="busy" class="content-text muted">正在读取包分配资料…</text>
+      <text v-if="gate" class="content-text muted">{{ gate }}</text>
+      <template v-if="form">
+        <MatchmakingForm
+          :model-value="form"
+          :step="step"
+          :trait-selections="traitSelections"
+          :personal-trait-selections="personalTraitSelections"
+          :disabled="busy || !!pending || (locked && !saving)"
+          @update:model-value="edit"
+          @update:step="step = $event"
+        >
+          <template #identity>
+            <view v-if="shared" class="shared-profile"
+              ><view class="shared-copy"
+                ><view class="shared-heading"
+                  ><text class="content-text shared-name">{{
+                    shared.nickname || '未填写昵称'
+                  }}</text
+                  ><text
+                    v-if="shared.verification === 'verified'"
+                    class="content-text identity-badge"
+                    >已认证</text
+                  ></view
+                ><text class="content-text muted"
+                  >{{
+                    campuses.find((item) => item.value === shared?.identity_tags?.campus)?.label ||
+                    '未填写校区'
+                  }}
+                  · {{ yearLabel }} · {{ shared.mbti || '未填写 MBTI' }} ·
+                  {{
+                    genders.find((item) => item.value === shared?.identity_tags?.gender)?.label ||
+                    '未填写性别'
+                  }}</text
+                ></view
+              ><navigator :url="commonURL" class="shared-edit">编辑基础资料</navigator></view
+            >
+          </template>
+          <template #submit
+            ><button
+              class="match-primary"
+              :disabled="busy || writing"
+              :loading="isPageActionPending('matchmaking-save-profile')"
+              @click="runPageAction(() => saveForm(), 'matchmaking-save-profile')"
+            >
+              {{ pending ? '原样重试保存' : '保存包分配资料' }}
+            </button></template
+          >
+        </MatchmakingForm>
+        <view class="save-status" aria-live="polite"
+          ><text v-if="pending" class="content-text">上次保存结果尚未确认，请使用原请求重试。</text
+          ><text v-else-if="saving" class="content-text">正在保存…</text
+          ><text v-else-if="dirty" class="content-text">有改动尚未保存</text
+          ><text v-else class="content-text">修改后自动保存，也可手动保存。</text
+          ><button
+            v-if="step !== 3 || pending"
+            class="save-link"
+            :disabled="busy || writing"
+            :loading="isPageActionPending('matchmaking-save-draft')"
+            @click="runPageAction(() => saveForm(), 'matchmaking-save-draft')"
+          >
+            {{ pending ? '原样重试保存' : '保存当前资料' }}
+          </button></view
+        >
+      </template>
       <button
-        :disabled="busy || writing"
-        :loading="isPageActionPending('matchmaking-save-profile')"
-        @click="runPageAction(() => saveForm(), 'matchmaking-save-profile')"
+        v-if="!form && !busy && user.isLoggedIn"
+        :loading="isPageActionPending('matchmaking-profile-reload')"
+        @click="runPageAction(reload, 'matchmaking-profile-reload')"
       >
-        {{ pending ? '原样重试保存' : '保存包分配资料' }}
+        重新读取资料
       </button>
+      <button
+        v-if="activity"
+        :disabled="busy || writing"
+        :loading="isPageActionPending('matchmaking-profile-return')"
+        @click="runPageAction(returnToActivity, 'matchmaking-profile-return')"
+      >
+        保存并返回活动
+      </button>
+      <AppNotice :message="error" kind="error" /><AppNotice :message="notice" kind="info" />
     </view>
-    <button
-      v-if="!form && !busy && user.isLoggedIn"
-      :loading="isPageActionPending('matchmaking-profile-reload')"
-      @click="runPageAction(reload, 'matchmaking-profile-reload')"
-    >
-      重新读取资料
-    </button>
-    <button
-      v-if="activity"
-      :disabled="busy || writing"
-      :loading="isPageActionPending('matchmaking-profile-return')"
-      @click="runPageAction(returnToActivity, 'matchmaking-profile-return')"
-    >
-      保存并返回活动
-    </button>
-    <AppNotice :message="error" kind="error" />
-    <AppNotice :message="notice" kind="info" />
   </AppPage>
 </template>
-<style scoped>
-.card {
-  display: grid;
+<style scoped lang="scss">
+@use '@/styles/matchmaking.scss';
+.shared-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 24rpx;
+  margin-bottom: 32rpx;
+  padding-bottom: 32rpx;
+  border-bottom: 1rpx solid var(--theme-line);
 }
-.muted {
+.shared-copy {
+  min-width: 0;
+}
+.shared-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 8rpx;
+}
+.shared-name {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+.identity-badge {
+  padding: 4rpx 12rpx;
+  border-radius: 12rpx;
+  background: var(--match-soft);
+  color: var(--match-accent);
+  font-size: 22rpx;
+}
+.shared-edit {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 12rpx 0;
+  font-size: 24rpx;
+  color: var(--match-accent);
+}
+.save-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  margin: 24rpx 0;
+  color: var(--theme-muted);
   font-size: 24rpx;
   line-height: 1.7;
-  opacity: 0.75;
+}
+.save-status .save-link {
+  margin: 0;
+  padding: 8rpx;
+  border: 0;
+  background: transparent;
+  color: var(--match-accent);
+  font-size: 24rpx;
+  line-height: 1.5;
 }
 </style>

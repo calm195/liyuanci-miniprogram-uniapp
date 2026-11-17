@@ -23,6 +23,9 @@ export interface MatchmakingActivity {
   summary?: MatchmakingActivitySummary
 }
 
+export type MatchmakingTraitCategory = 'personality' | 'interest' | 'lifestyle' | 'uncategorized'
+export type MatchmakingTraitCategories = Record<string, MatchmakingTraitCategory>
+
 export interface MatchmakingProfile {
   name: string
   gender: 'male' | 'female'
@@ -43,6 +46,8 @@ export interface MatchmakingProfile {
   introduction: string
   ideal_traits?: string[]
   personal_traits?: string[]
+  personal_trait_categories?: MatchmakingTraitCategories
+  ideal_trait_categories?: MatchmakingTraitCategories
   preferred_campuses?: string[]
   preferred_mbti?: string[]
   enrollment_year?: number
@@ -75,9 +80,13 @@ export interface MatchmakingTraitSelection {
   name: string
   status: 'approved' | 'pending' | 'rejected'
   reason: string
+  category?: MatchmakingTraitCategory
+  enabled?: boolean
 }
 
 export interface MatchmakingTraitSuggestion {
+  category?: MatchmakingTraitCategory
+  enabled?: boolean
   id: string
   name: string
   heat: number
@@ -135,7 +144,11 @@ export interface MatchmakingTask {
   body?: string
 }
 
+export type MatchmakingResultState =
+  'not_enrolled' | 'pending_review' | 'waiting' | 'paired' | 'unmatched' | 'ended'
+
 export interface MatchmakingDetail {
+  result_state?: MatchmakingResultState
   activity: MatchmakingActivity
   enrollment?: MatchmakingEnrollment
   pair?: MatchmakingPair
