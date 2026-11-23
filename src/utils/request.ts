@@ -95,14 +95,26 @@ export async function request<T>(options: RequestOptions): Promise<T> {
       )
     // 游标是不透明字符串，点号等合法查询字符不能当作路径穿越。
     const pathname = options.url.split('?')[0]!
-    const invalidPath = pathname.split('/').some((part) => {
-      try {
-        const decoded = decodeURIComponent(part)
-        return decoded === '.' || decoded === '..'
-      } catch {
-        return true
+    let decodedPath = pathname
+    let invalidPath = false
+    // 代理与服务端可能分别解码，逐层检查编码分隔符后的点段。
+    try {
+      decodedPath = decodeURIComponent(decodedPath)
+    } catch {
+      invalidPath = true
+    }
+    while (!invalidPath) {
+      if (decodedPath.split(/[\\/]/).some((part) => part === '.' || part === '..')) {
+        invalidPath = true
+        break
       }
-    })
+      // 后续仅解码可能影响路径归一化的字符，保留资源标识中的字面百分号。
+      const next = decodedPath.replace(/%(?:25|2e|2f|5c)/gi, (part) =>
+        String.fromCharCode(Number.parseInt(part.slice(1), 16)),
+      )
+      if (next === decodedPath) break
+      decodedPath = next
+    }
     if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%~.!'()*-]*$/.test(options.url) || invalidPath)
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()

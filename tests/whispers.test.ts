@@ -243,6 +243,33 @@ test('REQ-018：页面作用域未知结果保留原键原体，仅内存重试�
   assert.equal(next.draft.value, '')
   await assert.rejects(next.send('interactionBlockCreate', input))
 })
+test('树洞写入遇到损坏回执、超时状态或限流时使用同一请求重试', async () => {
+  for (const [code, status] of [
+    [-2, 0],
+    [200, 200],
+    [408, 408],
+    [429, 429],
+  ]) {
+    session.setToken('synthetic-scope-retry')
+    const sent: Record<string, unknown>[] = []
+    let first = true
+    const api = await whispersRuntime(async (options) => {
+      sent.push(options)
+      if (first) {
+        first = false
+        throw new WhisperTestError('合成失败', code!, '', '', status!)
+      }
+      return { accepted: true }
+    }, session)
+    const scope = api.createWhisperScope()
+    const input = { data: { source: { kind: 'public_profile', id: key } }, key }
+    await assert.rejects(scope.send('interactionBlockCreate', input))
+    assert.ok(scope.pending.value)
+    await scope.retry()
+    assert.deepEqual(sent[0], sent[1])
+    scope.close()
+  }
+})
 test('REQ-018：共享配置与Workspace只接受最新读取，同账号换会话立即清理', async () => {
   setActivePinia(createPinia())
   session.setToken('synthetic-store')

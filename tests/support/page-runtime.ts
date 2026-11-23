@@ -58,6 +58,18 @@ export async function settle() {
   for (let i = 0; i < 25; i++) await Promise.resolve()
 }
 
+export async function actionRecoveryStore(
+  user: { user: { id: string } | null; validated: boolean },
+  session: { getEpoch: () => number; getToken: () => string },
+) {
+  const { createPinia, defineStore } = await import('pinia')
+  const module = await loadRuntime(
+    readFileSync(new URL('../../src/stores/action-recovery.ts', import.meta.url), 'utf8'),
+    { defineStore, useUserStore: () => user, session },
+  )
+  return module.useActionRecoveryStore(createPinia())
+}
+
 export async function profileDraftStore(context?: {
   session: { getEpoch: () => number; getToken: () => string }
   user: { user: { id: string } | null }

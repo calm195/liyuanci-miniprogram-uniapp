@@ -154,7 +154,12 @@ async function submit() {
     notice.value = '举报已受理，等待处理；这不代表已认定违规或永久保存证据。'
   } catch (failure) {
     if (!active()) return
-    if (failure instanceof RequestError && failure.statusCode >= 400 && failure.statusCode < 500) {
+    if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      ![408, 429].includes(failure.statusCode)
+    ) {
       pending = null
       uncertain.value = false
       writing.value = false

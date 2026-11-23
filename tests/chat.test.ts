@@ -333,6 +333,25 @@ test('REQ-007：503/弱网重试复用client_message_id、正文、写代次和�
   assert.deepEqual(writes(s.calls)[1]!.header, writes(s.calls)[0]!.header)
   assert.equal(s.page.attempt.value, null)
 })
+test('聊天发送遇到超时状态和限流时保留原始消息及幂等键', async () => {
+  for (const status of [408, 429]) {
+    const s = await setup()
+    let first = true
+    s.setCommand(async () => {
+      if (first) {
+        first = false
+        throw new s.RequestError(status)
+      }
+      return { message_id: 'synthetic-outgoing', status: 'pending_scan', delivery_seq: null }
+    })
+    s.page.draft.value = '原消息'
+    await s.page.send()
+    assert.ok(s.page.attempt.value)
+    await s.page.send(true)
+    assert.deepEqual(writes(s.calls)[0], writes(s.calls)[1])
+    assert.equal(s.page.attempt.value, null)
+  }
+})
 test('REQ-007/018：409不自动重写，只读、失效资格和空白消息不能发送', async () => {
   const s = await setup()
   s.page.draft.value = '  '
@@ -749,6 +768,29 @@ test('聊天已读只确认可见末条：上翻和后台新消息保持未读�
   s.hooks.hide!()
   await s.page.acknowledgeRead()
   assert.equal(writes(s.calls).length, count + 1)
+})
+
+test('聊天已读离页后重新进入可继续确认，旧回执不能解除新请求的锁', async () => {
+  const s = await setup()
+  s.setTarget({ ...conversation, last_read_seq: 0 })
+  const completions: ((value: unknown) => void)[] = []
+  s.setCommand(() => new Promise((resolve) => completions.push(resolve)))
+  s.pages.push({ items: [deliveredRaw('first', 1)], next_after_seq: 1 })
+  const oldRead = s.poll()
+  await settle()
+  assert.equal(completions.length, 1)
+  s.hooks.hide!()
+  s.pages.push({ items: [deliveredRaw('first', 1)], next_after_seq: 1 })
+  s.hooks.show!()
+  await settle()
+  assert.equal(completions.length, 2)
+  completions[0]!({ id: conversation.id, last_read_seq: 1 })
+  await oldRead
+  await s.page.acknowledgeRead()
+  assert.equal(completions.length, 2)
+  completions[1]!({ id: conversation.id, last_read_seq: 1 })
+  await settle()
+  assert.deepEqual(writes(s.calls)[0], writes(s.calls)[1])
 })
 
 test('聊天读取响应在隐藏或换会话后返回，不提交阅读确认', async () => {

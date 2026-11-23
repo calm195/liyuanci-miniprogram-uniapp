@@ -18,6 +18,8 @@ import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
+import { useActionRecoveryStore } from '@/stores/action-recovery'
+import type { WishActionRecovery } from '@/stores/action-recovery'
 import WishSupportButton from '@/components/WishSupportButton.vue'
 import { getWish, getPublicWish, changeWishState } from '@/api/wishes'
 import type { WishLifecycleAction } from '@/api/wishes'
@@ -38,6 +40,7 @@ import { openWishActionGate, type WishActionReady } from '@/composables/use-wish
 import { isShareBrowseOnly, prepareSharedWishBackStack } from '@/utils/shared-wish-navigation'
 
 const user = useUserStore()
+const recovery = useActionRecoveryStore()
 const recordView = useContentView('wish')
 const hiddenWishes = useHiddenWishes()
 const menuOpen = ref(false)
@@ -50,6 +53,7 @@ const publicShare = ref<WishPublicContent | null>(null)
 const wish = ref<WishResult | null>(null)
 const busy = ref(false)
 const writing = ref(false)
+const pendingAction = ref<WishActionRecovery | null>(null)
 const error = ref('')
 const notice = ref('')
 const actionError = ref('')
@@ -190,6 +194,7 @@ const operations = {
 function allowed(action: WishLifecycleAction) {
   return (
     !sharedEntry.value &&
+    !pendingAction.value &&
     !config.useMock &&
     config.wishWritesReady &&
     canWishAction(user.user, user.validated, currentWish.value, id.value, operations[action])
@@ -493,26 +498,77 @@ async function act(action: WishLifecycleAction, target?: 'matching' | 'published
     // 确认弹窗也可能跨越会话或页面生命周期，确认后再次核对当前对象与动作。
     if (!isCurrent() || currentWish.value !== selected || !allowed(action)) return
     if (action === 'rollback' && !target) return
-    await changeWishState(
-      selected,
+    pendingAction.value = {
+      kind: 'wish',
+      wish: { id: selected.id, version: selected.version },
       action,
-      `wish-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      action === 'rollback' && target ? { target, refresh_expiry: refresh } : undefined,
-    )
-    if (!isCurrent()) return
+      key: `wish-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      ...(action === 'rollback' && target ? { rollback: { target, refresh_expiry: refresh } } : {}),
+      epoch,
+      owner: owner || '',
+    }
+    if (!recovery.save(`wish:${id.value}`, pendingAction.value)) {
+      pendingAction.value = null
+      error.value = '当前会话未确认或已有待确认操作，请重新进入页面核对。'
+      return
+    }
+    await executeAction(isCurrent, writeId)
+  } catch (failure) {
+    if (isCurrent()) error.value = failure instanceof Error ? failure.message : '操作未完成。'
+  } finally {
+    if (writeId === writeGeneration) writing.value = false
+  }
+}
+async function executeAction(active: () => boolean, writeId: number) {
+  const command = pendingAction.value
+  if (!command) return
+  try {
+    await changeWishState(command.wish, command.action, command.key, command.rollback)
+    if (!active()) return
+    recovery.remove(`wish:${command.wish.id}`, command.key)
+    pendingAction.value = null
     await load()
-    if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
+    if (visible && command.epoch === session.getEpoch() && writeId === writeGeneration)
       notice.value = '操作已受理，请以重新读取的心愿状态为准。'
   } catch (failure) {
-    if (!isCurrent()) return
-    clearProjection()
-    if (failure instanceof RequestError && failure.statusCode === 409) {
-      await load()
-      if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
-        notice.value = '心愿状态已变化，已重新读取，请确认后手动操作。'
-    } else {
-      error.value = '操作未完成，请刷新当前资格和心愿后重试。'
-    }
+    if (!active()) return
+    const status = failure instanceof RequestError ? failure.statusCode : 0
+    if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+      recovery.remove(`wish:${command.wish.id}`, command.key)
+      pendingAction.value = null
+      clearProjection()
+      if (status === 409) {
+        await load()
+        if (visible && command.epoch === session.getEpoch() && writeId === writeGeneration)
+          notice.value = '心愿状态已变化，已重新读取，请确认后手动操作。'
+      } else error.value = '操作未完成，请刷新当前资格和心愿后重试。'
+    } else error.value = '操作结果尚未确认，请使用原请求重试。'
+  }
+}
+async function retryAction() {
+  const command = pendingAction.value
+  if (
+    !command ||
+    !visible ||
+    busy.value ||
+    writing.value ||
+    !user.validated ||
+    command.epoch !== session.getEpoch() ||
+    command.owner !== user.user?.id
+  )
+    return
+  const writeId = ++writeGeneration
+  const current = generation
+  const active = () =>
+    visible &&
+    current === generation &&
+    writeId === writeGeneration &&
+    command.epoch === session.getEpoch() &&
+    command.owner === user.user?.id
+  writing.value = true
+  error.value = ''
+  try {
+    await executeAction(active, writeId)
   } finally {
     if (writeId === writeGeneration) writing.value = false
   }
@@ -522,6 +578,7 @@ function leave() {
   visible = false
   generation++
   writeGeneration++
+  pendingAction.value = null
   clearProjection()
   busy.value = false
   writing.value = false
@@ -531,12 +588,22 @@ function leave() {
   error.value = ''
 }
 watch(
-  () => user.user?.id,
+  [() => user.user?.id, () => session.getEpoch()],
   () => {
     if (sharedEntry.value) return
-    if (wish.value && snapshotOwner.value !== (user.user?.id || '')) {
+    if (
+      pendingAction.value &&
+      (pendingAction.value.owner !== user.user?.id ||
+        pendingAction.value.epoch !== session.getEpoch())
+    )
+      pendingAction.value = null
+    if (
+      wish.value &&
+      (snapshotOwner.value !== (user.user?.id || '') || snapshotEpoch.value !== session.getEpoch())
+    ) {
       generation++
       writeGeneration++
+      pendingAction.value = null
       clearProjection()
       writing.value = false
       busy.value = false
@@ -551,7 +618,11 @@ onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
   commentsRequested.value = query?.section === 'comments'
 })
-onShow(() => void showDetail())
+onShow(() => {
+  const saved = recovery.get(`wish:${id.value}`)
+  pendingAction.value = saved?.kind === 'wish' ? saved : null
+  void showDetail()
+})
 onHide(leave)
 onUnload(() => {
   actionReturn = null
@@ -787,7 +858,10 @@ onPullDownRefresh(async () => {
         class="card detail-actions"
       >
         <view
-          v-if="canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')"
+          v-if="
+            !pendingAction &&
+            canWishAction(user.user, user.validated, currentWish, id, 'putWishesIdContent')
+          "
           role="button"
           @click="
             runPageAction(() =>
@@ -886,7 +960,23 @@ onPullDownRefresh(async () => {
       </view>
       <AppNotice :message="notice" kind="info" />
       <AppNotice :message="actionError" kind="error" />
-      <AppNotice v-if="!sharedEntry" :message="error" kind="error" />
+      <AppNotice
+        v-if="!sharedEntry"
+        :message="error"
+        :kind="pendingAction ? 'uncertain' : 'error'"
+      />
+      <button
+        v-if="pendingAction"
+        :disabled="writing || busy"
+        class="ui-button"
+        :loading="isPageActionPending('wish-detail-retry')"
+        @click="runPageAction(retryAction, 'wish-detail-retry')"
+      >
+        使用原请求重试
+      </button>
+      <text v-if="pendingAction" class="content-text"
+        >待确认请求保留在当前会话内存中，退出登录或关闭小程序后请先核对心愿状态。</text
+      >
       <view
         v-if="sharedEntry && !browseOnly"
         class="moderation-link"

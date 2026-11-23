@@ -79,7 +79,7 @@ async function toggle() {
   } catch (failure) {
     if (visible && generation === current && session.getEpoch() === command.epoch) {
       const status = (failure as { statusCode?: number }).statusCode ?? 0
-      if (status >= 400 && status < 500) {
+      if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
         pending.value = null
         error.value = '当前内容无法收藏，请刷新后重试。'
       } else error.value = '收藏结果尚未确认，请点击原请求重试。'

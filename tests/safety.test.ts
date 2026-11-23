@@ -332,6 +332,37 @@ test('REQ-014/016：本人警告切入申诉需重新核验处罚；不确定结
   assert.equal(writes.length, 2)
   assert.deepEqual(writes[0], writes[1])
 })
+test('举报和申诉遇到超时状态或限流时保留原请求', async () => {
+  for (const status of [408, 429]) {
+    for (const page of ['report', 'safety']) {
+      const s = await setup(page, { kind: 'wish', id: 'synthetic-wish' })
+      const r = s.r
+      if (page === 'report') {
+        r.code.value = 'synthetic-code'
+        r.description.value = '合成举报'
+      } else {
+        r.openAppeal(r.warnings.value[0])
+        await settle()
+        r.body.value = '合成申诉'
+      }
+      let first = true
+      s.transport(async (input) => {
+        if (input.method && first) {
+          first = false
+          throw new RequestError(status)
+        }
+        return input.method
+          ? { id: 'synthetic-receipt', version: 1, status: 'pending' }
+          : { items: [], next_cursor: null }
+      })
+      await (page === 'report' ? r.submit() : r.appeal())
+      assert.equal(r.uncertain.value, true)
+      await (page === 'report' ? r.submit() : r.appeal())
+      const writes = s.calls.filter((input) => input.method)
+      assert.deepEqual(writes[0], writes[1])
+    }
+  }
+})
 test('REQ-014/018：举报使用服务端类型与202受理语义，未填写说明不传空字段', async () => {
   const s = await setup('report', { kind: 'wish', id: 'synthetic-wish' })
   const r = s.r

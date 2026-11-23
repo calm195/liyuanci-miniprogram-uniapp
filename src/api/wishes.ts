@@ -30,7 +30,7 @@ export function setWishSupport(id: string, supported: boolean) {
 
 export type WishLifecycleAction = 'withdraw' | 'rollback' | 'complete' | 'exception-exit'
 export function changeWishState(
-  wish: WishResult,
+  wish: Pick<WishResult, 'id' | 'version'>,
   action: WishLifecycleAction,
   key: string,
   rollback?: { target: 'matching' | 'published'; refresh_expiry: boolean },

@@ -47,6 +47,14 @@ async function toggle() {
   try {
     const state = await setWishSupport(id, intent)
     if (!active()) return
+    // 只接受能确认本次意图的回执；异常正文可能发生在服务端已执行之后。
+    if (
+      !state ||
+      state.supported !== intent ||
+      !Number.isSafeInteger(state.support_count) ||
+      state.support_count < 0
+    )
+      throw new Error('点赞回执无法确认')
     result.value = state
     retry.value = undefined
     uni.$emit('app:notice', {
@@ -57,7 +65,11 @@ async function toggle() {
   } catch (failure) {
     if (!active()) return
     const unknown =
-      !(failure instanceof RequestError) || !failure.statusCode || failure.statusCode >= 500
+      !(failure instanceof RequestError) ||
+      !failure.statusCode ||
+      (failure.statusCode >= 200 && failure.statusCode < 300) ||
+      [408, 429].includes(failure.statusCode) ||
+      failure.statusCode >= 500
     retry.value = unknown ? intent : undefined
     uni.$emit('app:notice', {
       message: unknown

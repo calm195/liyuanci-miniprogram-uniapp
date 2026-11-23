@@ -38,7 +38,10 @@ export function applyToWish(id: string, contentVersion: number, message: string,
     silent: true,
   })
 }
-export function withdrawApplication(application: WishApplication, key: string) {
+export function withdrawApplication(
+  application: Pick<WishApplication, 'id' | 'version'>,
+  key: string,
+) {
   return request<WishApplication>({
     url: `/applications/${encodeURIComponent(application.id)}/withdraw`,
     method: 'POST',
@@ -46,7 +49,11 @@ export function withdrawApplication(application: WishApplication, key: string) {
     header: { 'Idempotency-Key': key },
   })
 }
-export function acceptApplication(application: WishApplication, wishVersion: number, key: string) {
+export function acceptApplication(
+  application: Pick<WishApplication, 'id' | 'version'>,
+  wishVersion: number,
+  key: string,
+) {
   return request<MatchResult>({
     url: `/applications/${encodeURIComponent(application.id)}/accept`,
     method: 'POST',

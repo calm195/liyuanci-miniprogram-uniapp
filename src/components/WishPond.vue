@@ -288,7 +288,7 @@ async function retryWrite() {
   } catch (failure) {
     if (!isCurrent()) return
     const status = failure instanceof RequestError ? failure.statusCode || failure.code : 0
-    if (status >= 400 && status < 500) {
+    if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
       pendingWrite.value = null
       cancelEdit()
       if (status === 409) {

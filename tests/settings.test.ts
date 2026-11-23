@@ -744,6 +744,27 @@ test('头像失败用原文件、版本与请求标识重试，恢复默认使�
   assert.equal(r.currentMe.value.avatar_id, undefined)
   assert.equal(s.user.user?.avatar_url, undefined)
 })
+test('头像收到超时状态或限流后原样重试文件、版本和幂等键', async () => {
+  for (const status of [408, 429]) {
+    const s = await setup()
+    let first = true
+    s.transport(async () => {
+      if (first) {
+        first = false
+        throw new RequestError('合成失败', status, '', '', status)
+      }
+      return { ...actor, version: 20, avatar_id: 'synthetic-avatar' }
+    })
+    const pick = s.runtime.chooseAvatar()
+    s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
+    await pick
+    assert.ok(s.runtime.avatarPending.value)
+    await s.runtime.changeAvatar()
+    const writes = s.calls.filter((input) => input.url === '/me/avatar')
+    assert.deepEqual(writes[0], writes[1])
+    assert.equal(s.runtime.avatarPending.value, null)
+  }
+})
 
 test('头像拒绝超限及非 JPG/PNG，取消保留预览，换号和离页丢弃迟到结果', async () => {
   const s = await setup()

@@ -11,7 +11,7 @@ import type { WishPublicContent, WishResult } from '../src/types/wish.ts'
 import { shareReference } from '../src/utils/share.ts'
 import { isPublicContent } from '../src/utils/story.ts'
 import { emptyWish, wishStateLabels } from '../src/utils/wish.ts'
-import { loadRuntime } from './support/page-runtime.ts'
+import { actionRecoveryStore, loadRuntime } from './support/page-runtime.ts'
 
 const sample: WishResult = {
   id: 'synthetic-wish',
@@ -49,7 +49,11 @@ const publicWish = {
   notice_text: '',
 } satisfies WishPublicContent
 
-async function setup(query: Record<string, string> = { id: sample.id }, initial = sample) {
+async function setup(
+  query: Record<string, string> = { id: sample.id },
+  initial = sample,
+  existingRecovery?: Awaited<ReturnType<typeof actionRecoveryStore>>,
+) {
   const hooks: Record<string, (query?: Record<string, string>) => void> = {}
   const user = reactive({
     user: {
@@ -63,6 +67,8 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
   })
   let epoch = 1
   let token = 'synthetic-token'
+  const session = { getEpoch: () => epoch, getToken: () => token }
+  const recovery = existingRecovery ?? (await actionRecoveryStore(user, session))
   let row = structuredClone(initial)
   const pages: string[] = []
   let continueLogin: (() => void | Promise<void>) | undefined
@@ -138,6 +144,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
       user,
       useUserStore: () => user,
       useWishStore: () => ({}),
+      useActionRecoveryStore: () => recovery,
       useHiddenWishes,
       config,
       canWishAction,
@@ -148,7 +155,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
         gates.push({ kind, ready })
       },
       RequestError,
-      session: { getEpoch: () => epoch, getToken: () => token },
+      session,
       categories,
       campuses,
       rewards,
@@ -175,7 +182,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useLogin, useContentView, useUserStore, useWishStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
+    `const { useLogin, useContentView, useUserStore, useWishStore, useActionRecoveryStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, retryAction, pendingAction, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -194,6 +201,7 @@ async function setup(query: Record<string, string> = { id: sample.id }, initial 
     },
     loginPending: () => !!continueLogin,
     user,
+    recovery,
     RequestError,
     storage,
     setRow: (value: WishResult) => {
@@ -243,6 +251,57 @@ test('REQ-004/005：回退绑定目标版本与幂等键，刷新期限由服务
   })
   assert.ok(writes[0]!.header?.['Idempotency-Key'])
   assert.equal(page.currentWish.value.current_state, 'matching')
+})
+test('心愿状态变更结果未知时只允许用原版本、目标和幂等键重试', async () => {
+  for (const status of [0, 408, 429, 200]) {
+    const s = await setup()
+    let first = true
+    s.setCommand(async () => {
+      if (first) {
+        first = false
+        const failure = new s.RequestError('合成失败')
+        failure.statusCode = status
+        throw failure
+      }
+      return structuredClone(sample)
+    })
+    s.page.refreshExpiry.value = true
+    await s.page.act('rollback', 'published')
+    assert.ok(s.page.pendingAction.value)
+    assert.equal(s.page.allowed('complete'), false)
+    s.page.refreshExpiry.value = false
+    await s.page.act('complete')
+    await s.page.retryAction()
+    const writes = s.calls.filter((call) => call.method)
+    assert.equal(writes.length, 2)
+    assert.deepEqual(writes[0], writes[1])
+    assert.equal(s.page.pendingAction.value, null)
+  }
+})
+test('心愿详情卸载重建后恢复同一请求；清空投影后换账号也清理待确认状态', async () => {
+  const first = await setup()
+  first.setCommand(async () => {
+    throw new Error('合成断网')
+  })
+  await first.page.act('rollback', 'published')
+  const original = first.calls.find((call) => call.method)
+  first.hooks.unload!()
+  const next = await setup({ id: sample.id }, sample, first.recovery)
+  assert.ok(next.page.pendingAction.value)
+  await next.page.retryAction()
+  assert.deepEqual(
+    next.calls.find((call) => call.method),
+    original,
+  )
+  assert.equal(next.page.pendingAction.value, null)
+
+  next.setCommand(async () => {
+    throw new Error('合成断网')
+  })
+  await next.page.act('complete')
+  next.page.wish.value = null
+  next.user.user = { ...next.user.user, id: 'synthetic-other' }
+  assert.equal(next.page.pendingAction.value, null)
 })
 test('REQ-018：确认期间离开和会话变化不能提交旧动作，隐私屏障不回显正文', async () => {
   const s = await setup()

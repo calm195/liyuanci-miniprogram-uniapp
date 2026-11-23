@@ -40,12 +40,12 @@ export function parseModuleGuide(value: unknown): ModuleGuide {
 }
 export const getModuleGuide = async () =>
   parseModuleGuide(await request<unknown>({ url: '/me/module-guide' }))
-export const acknowledgeGuide = async (version: number) =>
+export const acknowledgeGuide = async (version: number, key: string) =>
   parseModuleGuide(
     await request<unknown>({
       url: '/me/module-guide/ack',
       method: 'PUT',
       data: { version },
-      header: { 'Idempotency-Key': `guide-${version}-${Date.now()}` },
+      header: { 'Idempotency-Key': key },
     }),
   )

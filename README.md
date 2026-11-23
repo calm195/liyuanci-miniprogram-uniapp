@@ -98,6 +98,8 @@ npm run build:mp-weixin
 - 非测试代码（含构建脚本与配置）不得出现里程碑、任务或需求编号（如 T00x、REQ-xxx）；注释仅用中文说明功能、业务规则与必要的技术原因，日志说明文字使用中文。接口字段、技术标识及协议值保留原名；编号追溯放在测试或docs当前文档中。
 
 - 使用中文交流，关键逻辑写中文注释；完整协作要求见 [AGENTS.md](AGENTS.md)。
+- 代码评审参考 [Vue 风格指南](https://vuejs.org/style-guide/)、[Vue 安全指南](https://vuejs.org/guide/best-practices/security.html) 和 [TypeScript 严格检查](https://www.typescriptlang.org/tsconfig/#strict)：组件明确数据与事件边界，外部数据在使用前校验，避免不可信内容注入；保留现有严格类型与 ESLint、Prettier 配置。
+- 按 [uni-app 页面生命周期](https://uniapp.dcloud.net.cn/tutorial/page.html) 处理页面显示、隐藏与销毁；请求、计时器和监听应有清理或失效机制，异步结果须核对页面和会话归属。平台差异参考 [条件编译](https://uniapp.dcloud.net.cn/tutorial/platform.html)，并验证微信目标构建。
 - 页面放在 `src/pages`，新增页面注册到 `src/pages.json`；复用组件放在 `src/components`。使用 uni-app 组件和生命周期，避免浏览器专用 DOM API。
 - API 放在 `src/api`，统一使用 `src/utils/request.ts`，业务成功码为 `0`。Pinia 管理共享状态，页面不重复实现令牌持久化。会话令牌按 API 地址隔离保存在本机，启动时恢复令牌并向服务端校验本人状态；身份和权限不使用持久化缓存。401、注销或退出清除本机会话，网络故障不误删令牌。
 - 微信登录与学生认证分别判断；业务入口还需服务端实时资格、`allowed_actions` 和业务状态授权。认证提交与心愿写入已开放，具体按钮以当前服务端动作授权为准。

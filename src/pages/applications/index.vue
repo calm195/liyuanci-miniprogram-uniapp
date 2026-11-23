@@ -7,6 +7,8 @@ import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
+import { useActionRecoveryStore } from '@/stores/action-recovery'
+import type { ApplicationManageRecovery, ApplicationSubmitRecovery } from '@/stores/action-recovery'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
 import { getWish } from '@/api/wishes'
@@ -31,6 +33,7 @@ import {
 import { wishStateLabels } from '@/utils/wish'
 
 const user = useUserStore()
+const recovery = useActionRecoveryStore()
 const wishId = ref('')
 const applicationId = ref('')
 const wish = ref<WishResult | null>(null)
@@ -45,15 +48,9 @@ const error = ref('')
 const notice = ref('')
 const readEpoch = ref(-1)
 const readOwner = ref('')
-interface ApplicationCommand {
-  id: string
-  owner: string
-  epoch: number
-  version: number
-  message: string
-  key: string
-}
-const pendingCommand = ref<ApplicationCommand | null>(null)
+const pendingCommand = ref<ApplicationSubmitRecovery | null>(null)
+const pendingManage = ref<ApplicationManageRecovery | null>(null)
+const manageRecoveryKey = () => `applications:${wishId.value || 'mine'}`
 type SubmissionStatus = ApplicationStatus | 'in_progress'
 const submitted = ref<{ owner: string; epoch: number; status: SubmissionStatus } | null>(null)
 let generation = 0
@@ -157,7 +154,10 @@ async function load(more = false) {
     cursor.value = page.next_cursor
     readEpoch.value = epoch
     readOwner.value = owner
-    if (target?.application_in_progress) pendingCommand.value = null
+    if (target?.application_in_progress && pendingCommand.value) {
+      recovery.remove(`apply:${pendingCommand.value.id}`, pendingCommand.value.key)
+      pendingCommand.value = null
+    }
     // 只标记本页已展示申请对应的通知，保留后来到达和未翻到的申请提醒。
     if (owned) {
       for (const item of incoming) {
@@ -185,6 +185,7 @@ async function load(more = false) {
 function mayAccept(application: WishApplication) {
   return (
     !config.useMock &&
+    !pendingManage.value &&
     config.wishWritesReady &&
     ownerMode.value &&
     items.value.includes(application) &&
@@ -194,6 +195,7 @@ function mayAccept(application: WishApplication) {
 function mayWithdraw(application: WishApplication) {
   return (
     !config.useMock &&
+    !pendingManage.value &&
     config.wishWritesReady &&
     !wishId.value &&
     scoped.value &&
@@ -214,11 +216,10 @@ function confirm(message: string): Promise<boolean> {
 // 写入只使用当前读取的精确对象；确认期间换页、换账号或版本变化都放弃旧操作。
 async function write(
   authorized: () => boolean,
-  command: (key: string) => Promise<unknown>,
-  success: string,
+  command: Omit<ApplicationManageRecovery, 'key' | 'owner' | 'epoch'>,
   confirmation?: string,
 ) {
-  if (busy.value || writing.value || !authorized()) return
+  if (busy.value || writing.value || pendingManage.value || !authorized()) return
   const current = generation
   const epoch = session.getEpoch()
   const owner = user.user?.id
@@ -235,19 +236,73 @@ async function write(
   try {
     if (confirmation && !(await confirm(confirmation))) return
     if (!isCurrent() || !authorized()) return
-    await command(`application-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-    if (!isCurrent()) return
-    await load()
-    if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
-      notice.value = success
+    pendingManage.value = {
+      ...command,
+      key: `application-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      owner: owner || '',
+      epoch,
+    }
+    if (!recovery.save(manageRecoveryKey(), pendingManage.value)) {
+      pendingManage.value = null
+      error.value = '当前会话未确认或已有待确认操作，请重新进入页面核对。'
+      return
+    }
+    await executeManage(isCurrent, writeId)
   } catch (failure) {
-    if (!isCurrent()) return
-    clearProjection()
-    if (failure instanceof RequestError && failure.statusCode === 409) {
-      await load()
-      if (visible && epoch === session.getEpoch() && writeId === writeGeneration)
-        notice.value = '心愿或申请状态已变化，已重新读取，请确认后手动操作。'
-    } else error.value = '操作未完成，请刷新当前资格与申请后重试。'
+    if (isCurrent()) error.value = failure instanceof Error ? failure.message : '操作未完成。'
+  } finally {
+    if (writeId === writeGeneration) writing.value = false
+  }
+}
+async function executeManage(active: () => boolean, writeId: number) {
+  const attempt = pendingManage.value
+  if (!attempt) return
+  try {
+    if (attempt.kind === 'accept') {
+      if (attempt.wishVersion === undefined) throw new Error('原请求缺少心愿版本。')
+      await acceptApplication(attempt.application, attempt.wishVersion, attempt.key)
+    } else await withdrawApplication(attempt.application, attempt.key)
+    if (!active()) return
+    recovery.remove(manageRecoveryKey(), attempt.key)
+    pendingManage.value = null
+    await load()
+    if (visible && attempt.epoch === session.getEpoch() && writeId === writeGeneration)
+      notice.value =
+        attempt.kind === 'accept' ? '已确定应愿人，请查看心愿的最新状态。' : '申请已撤销。'
+  } catch (failure) {
+    if (!active()) return
+    const status = failure instanceof RequestError ? failure.statusCode : 0
+    if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+      recovery.remove(manageRecoveryKey(), attempt.key)
+      pendingManage.value = null
+      clearProjection()
+      if (status === 409) {
+        await load()
+        if (visible && attempt.epoch === session.getEpoch() && writeId === writeGeneration)
+          notice.value = '心愿或申请状态已变化，已重新读取，请确认后手动操作。'
+      } else error.value = '操作未完成，请刷新当前资格与申请后重试。'
+    } else error.value = '操作结果尚未确认，请使用原请求重试。'
+  }
+}
+async function retryManage() {
+  const attempt = pendingManage.value
+  if (
+    !attempt ||
+    !visible ||
+    busy.value ||
+    writing.value ||
+    !user.validated ||
+    !ownsCommand(attempt)
+  )
+    return
+  const current = generation
+  const writeId = ++writeGeneration
+  const active = () =>
+    visible && current === generation && writeId === writeGeneration && ownsCommand(attempt)
+  writing.value = true
+  error.value = ''
+  try {
+    await executeManage(active, writeId)
   } finally {
     if (writeId === writeGeneration) writing.value = false
   }
@@ -265,6 +320,7 @@ async function submit() {
   const command = retry
     ? pendingCommand.value!
     : {
+        kind: 'apply' as const,
         id: currentWish.value!.id,
         owner,
         epoch,
@@ -279,6 +335,7 @@ async function submit() {
     return target?.id === command.id && target.application_in_progress === true
   }
   const saveReceipt = (status: SubmissionStatus) => {
+    recovery.remove(`apply:${command.id}`, command.key)
     pendingCommand.value = null
     submitted.value = { owner, epoch, status }
     message.value = ''
@@ -291,6 +348,11 @@ async function submit() {
   }
   // 无回执时只核对当前状态或重放原留言、版本与幂等键。
   pendingCommand.value = command
+  if (!recovery.save(`apply:${command.id}`, command)) {
+    pendingCommand.value = null
+    error.value = '当前会话未确认或已有待确认操作，请重新进入页面核对。'
+    return
+  }
   writing.value = true
   error.value = ''
   notice.value = ''
@@ -317,7 +379,8 @@ async function submit() {
         return
       }
     }
-    if (status >= 400 && status < 500 && status !== 408) {
+    if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+      recovery.remove(`apply:${command.id}`, command.key)
       pendingCommand.value = null
       await load()
       if (isCurrent()) {
@@ -335,18 +398,19 @@ async function submit() {
 async function accept(application: WishApplication) {
   const target = currentWish.value
   if (!target) return
+  const snapshot = { id: application.id, version: application.version }
+  const targetVersion = target.version
   await write(
     () => currentWish.value === target && mayAccept(application),
-    (key) => acceptApplication(application, target.version, key),
-    '已确定应愿人，请查看心愿的最新状态。',
+    { kind: 'accept', application: snapshot, wishVersion: targetVersion },
     '确定后将建立唯一匹配，其他未终结申请会失效。是否选择这位应愿人？',
   )
 }
 async function withdraw(application: WishApplication) {
+  const snapshot = { id: application.id, version: application.version }
   await write(
     () => mayWithdraw(application),
-    (key) => withdrawApplication(application, key),
-    '申请已撤销。',
+    { kind: 'withdraw', application: snapshot },
     '是否撤销这条应愿申请？撤销后旧审核不会恢复该申请。',
   )
 }
@@ -369,9 +433,10 @@ function leave() {
   notice.value = ''
 }
 watch(
-  () => user.user?.id,
+  [() => user.user?.id, () => session.getEpoch()],
   () => {
     if (!ownsCommand(pendingCommand.value)) pendingCommand.value = null
+    if (!ownsCommand(pendingManage.value)) pendingManage.value = null
     if (!ownsCommand(submitted.value)) submitted.value = null
     if (readOwner.value && readOwner.value !== user.user?.id) {
       generation++
@@ -391,11 +456,17 @@ onLoad((query) => {
 })
 onShow(() => {
   visible = true
+  const savedSubmit = recovery.get(`apply:${wishId.value}`)
+  pendingCommand.value = savedSubmit?.kind === 'apply' ? savedSubmit : null
+  const savedManage = recovery.get(manageRecoveryKey())
+  pendingManage.value =
+    savedManage?.kind === 'accept' || savedManage?.kind === 'withdraw' ? savedManage : null
   void load()
 })
 onHide(leave)
 onUnload(() => {
   pendingCommand.value = null
+  pendingManage.value = null
   submitted.value = null
   leave()
 })
@@ -489,6 +560,18 @@ useLoginRefresh(() => load())
     >
       核实并重试原申请
     </button>
+    <button
+      v-if="pendingManage && ownsCommand(pendingManage)"
+      class="ui-button"
+      :disabled="busy || writing"
+      :loading="isPageActionPending('applications-manage-retry')"
+      @click="runPageAction(retryManage, 'applications-manage-retry')"
+    >
+      使用原请求重试操作
+    </button>
+    <text v-if="pendingManage || mayRetry" class="ui-copy"
+      >待确认请求保留在当前会话内存中，退出登录或关闭小程序后请先核对申请状态。</text
+    >
     <text v-if="!busy && scoped && !rows.length && (!wishId || ownerMode)" class="ui-copy">{{
       applicationId ? '这条申请暂不可查看' : '暂无可展示的申请'
     }}</text>
@@ -564,6 +647,6 @@ useLoginRefresh(() => load())
       加载下一页
     </button>
     <AppNotice :message="notice" kind="info" />
-    <AppNotice :message="error" kind="error" />
+    <AppNotice :message="error" :kind="pendingManage ? 'uncertain' : 'error'" />
   </AppPage>
 </template>

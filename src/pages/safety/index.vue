@@ -312,7 +312,12 @@ async function appeal() {
     if (visible && scoped.value) notice.value = '申诉已受理，等待复核；当前处罚仍以服务端状态为准。'
   } catch (failure) {
     if (!active()) return
-    if (failure instanceof RequestError && failure.statusCode >= 400 && failure.statusCode < 500) {
+    if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      ![408, 429].includes(failure.statusCode)
+    ) {
       pending = null
       uncertain.value = false
       writing.value = false

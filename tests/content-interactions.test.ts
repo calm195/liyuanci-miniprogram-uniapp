@@ -73,6 +73,107 @@ test('收藏未知结果保留目标与幂等键，重试成功后才显示已�
   dispose()
 })
 
+test('收藏遇到超时状态或限流时保留原始意图和键', async () => {
+  for (const status of [408, 429]) {
+    const props = reactive({ kind: 'wish', targetId: 'wish-a', favorited: false })
+    const calls: unknown[][] = []
+    let first = true
+    const runtime = await loadRuntime(
+      pageScript(new URL('../src/components/FavoriteButton.vue', import.meta.url)) +
+        '\nexport { toggle, pending }',
+      {
+        defineProps: () => props,
+        defineEmits: () => () => {},
+        onUnmounted: () => {},
+        interactionKey: () => 'stable-key',
+        session: { getEpoch: () => 1, getToken: () => 'test-token' },
+        setFavorite: async (...args: unknown[]) => {
+          calls.push(args)
+          if (first) {
+            first = false
+            throw Object.assign(new Error('合成失败'), { statusCode: status })
+          }
+          return { favorited: true }
+        },
+      },
+    )
+    await runtime.toggle()
+    assert.ok(runtime.pending.value)
+    await runtime.toggle()
+    assert.deepEqual(calls[0], calls[1])
+  }
+})
+
+test('点赞回执异常、超时或限流后保持原意图', async () => {
+  for (const status of [200, 408, 429]) {
+    const props = reactive({ wishId: 'wish-a', count: 0, supported: false })
+    const calls: unknown[][] = []
+    let first = true
+    class RequestError extends Error {
+      statusCode = status
+    }
+    const runtime = await loadRuntime(
+      pageScript(new URL('../src/components/WishSupportButton.vue', import.meta.url)) +
+        '\nexport { toggle, retry }',
+      {
+        defineProps: () => props,
+        defineEmits: () => () => {},
+        onBeforeUnmount: () => {},
+        session: { getEpoch: () => 1, getToken: () => 'test-token' },
+        RequestError,
+        setWishSupport: async (...args: unknown[]) => {
+          calls.push(args)
+          if (first) {
+            first = false
+            throw new RequestError('合成失败')
+          }
+          return { supported: true, support_count: 1 }
+        },
+      },
+    )
+    await runtime.toggle()
+    assert.equal(runtime.retry.value, true)
+    props.supported = true
+    await runtime.toggle()
+    assert.deepEqual(calls[0], calls[1])
+  }
+})
+
+test('点赞成功响应的正文损坏时不报告成功，保留原意图重试', async () => {
+  for (const invalid of [
+    {},
+    { supported: true, support_count: -1 },
+    { supported: false, support_count: 0 },
+  ]) {
+    const calls: unknown[][] = []
+    let first = true
+    class RequestError extends Error {}
+    const runtime = await loadRuntime(
+      pageScript(new URL('../src/components/WishSupportButton.vue', import.meta.url)) +
+        '\nexport { toggle, retry }',
+      {
+        defineProps: () => reactive({ wishId: 'wish-a', count: 0, supported: false }),
+        defineEmits: () => () => {},
+        onBeforeUnmount: () => {},
+        session: { getEpoch: () => 1, getToken: () => 'test-token' },
+        RequestError,
+        setWishSupport: async (...args: unknown[]) => {
+          calls.push(args)
+          if (first) {
+            first = false
+            return invalid
+          }
+          return { supported: true, support_count: 1 }
+        },
+      },
+    )
+    await runtime.toggle()
+    assert.equal(runtime.retry.value, true)
+    await runtime.toggle()
+    assert.deepEqual(calls[0], calls[1])
+  }
+})
+
 test('半匿名仅选校区会省略其他标签，空标签及未知标签拒绝', () => {
   const config = {
     enabled: true,

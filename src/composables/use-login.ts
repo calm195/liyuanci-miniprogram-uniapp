@@ -23,9 +23,21 @@ export function useLogin() {
     const current = generation
     if (!visible) return
     if (user.validated && user.user && session.getToken()) {
+      const epoch = session.getEpoch()
+      const owner = user.user.id
+      // 即使已经登录，续接动作也可能在微任务执行前失去页面或会话归属。
+      const active = () =>
+        visible &&
+        current === generation &&
+        epoch === session.getEpoch() &&
+        user.validated &&
+        user.user?.id === owner
       void Promise.resolve()
-        .then(() => after?.())
+        .then(() => {
+          if (active()) return after?.()
+        })
         .catch((failure: unknown) => {
+          if (!active()) return
           uni.$emit?.('app:notice', {
             message: failure instanceof Error ? failure.message : '无法继续操作，请重试。',
             kind: 'error',

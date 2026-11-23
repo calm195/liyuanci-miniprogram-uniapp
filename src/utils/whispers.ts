@@ -97,13 +97,16 @@ export function createWhisperScope() {
       clear()
       return result
     } catch (failure) {
-      // 超时与服务内部失败无法确认事务结果，只允许原键原体重试。
+      // 回执损坏、超时与服务内部失败无法确认事务结果，只允许原键原体重试。
       if (
         active &&
         epoch === session.getEpoch() &&
         'key' in snapshot &&
         failure instanceof RequestError &&
-        (failure.code === -1 || failure.code === -3 || failure.statusCode >= 500)
+        ([-1, -2, -3].includes(failure.code) ||
+          (failure.statusCode >= 200 && failure.statusCode < 300) ||
+          [408, 429].includes(failure.statusCode) ||
+          failure.statusCode >= 500)
       )
         pending.value = { operation, input: snapshot }
       throw failure

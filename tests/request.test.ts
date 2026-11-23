@@ -302,9 +302,20 @@ test('REQ-003、018：真实列表适配透传不透明签名游标与分页，�
     `${config.apiBaseUrl}/me/wishes?state=draft&cursor=${encodeURIComponent(cursor)}&limit=50`,
   )
   const before = calls
-  for (const url of ['/../me', '/%2e%2e/me', '/./me', '//other.invalid/me'])
+  for (const url of [
+    '/../me',
+    '/%2e%2e/me',
+    '/.%2e%2fme',
+    '/value%5c..%5cme',
+    '/%252e%252e%252fme',
+    '/%25zz%252f..%252fme',
+    '/./me',
+    '//other.invalid/me',
+  ])
     await assert.rejects(request({ url }), /接口路径无效/)
   assert.equal(calls, before)
+  await request({ url: '/assets/synthetic%2Fasset?cursor=..%2Fopaque' })
+  assert.equal(sent.url, `${config.apiBaseUrl}/assets/synthetic%2Fasset?cursor=..%2Fopaque`)
 })
 
 test('REQ-002、018：实际会话API符合契约，微信code无效不撤销现有Bearer会话', async () => {
@@ -552,6 +563,16 @@ test('异步平台回调后的校验器抛错会拒绝请求，且仅显示安�
   } finally {
     Object.assign(uni, { request: original })
   }
+})
+
+test('成功状态下缺失业务码或必要回执时拒绝接受损坏响应', async () => {
+  config.useMock = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  statusCode = 200
+  data = { data: { accepted: true }, request_id: 'synthetic' }
+  await assert.rejects(request({ url: '/me', silent: true }), { statusCode: 200 })
+  data = { code: 0, data: { accepted: true } }
+  await assert.rejects(request({ url: '/me', silent: true }), { code: -2 })
 })
 
 test('当前401触发账号订阅者再次清理后仍保留过期状态和安全提示', async () => {

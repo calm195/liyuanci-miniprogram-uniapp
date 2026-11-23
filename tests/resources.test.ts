@@ -349,6 +349,32 @@ test('REQ-023：反馈初次0/改选版本、网络未知同键同体重试，40
   assert.equal(s.runtime.pending.value, null)
   assert.equal(s.runtime.choice.value, '')
 })
+test('资料反馈遭限流后保留原始请求并在重试时复用', async () => {
+  const s = await setupResourcePage('detail')
+  const limited = fixture.error_examples.find(
+    (item: { operation_id: string; http_status: number }) =>
+      item.operation_id === 'resourceFeedbackPut' && item.http_status === 429,
+  )
+  let first = true
+  s.transport(async (input) => {
+    if (first) {
+      first = false
+      return {
+        statusCode: 429,
+        data: limited.body,
+        header: { 'Cache-Control': 'no-store' },
+      }
+    }
+    return envelope({ ...sample('resourceFeedbackPut'), kind: input.data?.kind, version: 1 })
+  })
+  s.runtime.select('valid')
+  await s.runtime.submit()
+  assert.ok(s.runtime.pending.value)
+  await s.runtime.submit(true)
+  const writes = s.api.calls.filter((input: Input) => input.method === 'PUT')
+  assert.deepEqual(writes[0], writes[1])
+  assert.equal(s.runtime.pending.value, null)
+})
 test('REQ-023：403清空敏感详情，401清会话，投稿仅固定图且缺图可关闭', async () => {
   const s = await setupResourcePage('detail')
   s.transport(async () => ({

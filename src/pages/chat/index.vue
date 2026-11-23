@@ -99,7 +99,7 @@ function clearProjection() {
   nearBottom.value = true
   unreadArrival.value = false
 }
-let readSaving = false
+let readSaving: object | null = null
 let readAttempt: { seq: number; key: string; epoch: number; owner: string } | null = null
 async function acknowledgeRead() {
   const target = currentConversation.value
@@ -125,7 +125,8 @@ async function acknowledgeRead() {
       owner,
     }
   const input = readAttempt
-  readSaving = true
+  const saving = {}
+  readSaving = saving
   try {
     const result = await readConversation(id.value, input.seq, input.key)
     if (!current(visit, epoch, owner)) return
@@ -148,7 +149,7 @@ async function acknowledgeRead() {
       readAttempt = null
     // 不影响正文阅读；网络结果未知时保留同一序号和幂等键，下一次可见轮询继续确认。
   } finally {
-    readSaving = false
+    if (readSaving === saving) readSaving = null
   }
 }
 async function refresh(force = false) {
@@ -274,7 +275,12 @@ async function send(retry = false) {
     await refresh(true)
   } catch (failure) {
     if (!isCurrent()) return
-    if (failure instanceof RequestError && failure.statusCode >= 400 && failure.statusCode < 500) {
+    if (
+      failure instanceof RequestError &&
+      failure.statusCode >= 400 &&
+      failure.statusCode < 500 &&
+      ![408, 429].includes(failure.statusCode)
+    ) {
       attempt.value = null
       clearProjection()
       if ([401, 403, 404].includes(failure.statusCode)) {
@@ -312,6 +318,7 @@ function leave() {
   visible = false
   generation++
   poller.stop()
+  readSaving = null
   clearProjection()
   draft.value = ''
   attempt.value = null
@@ -327,6 +334,7 @@ watch(
     // 同账号新令牌也属于新会话，消息游标、输入和重试依据不能沿用。
     generation++
     readAttempt = null
+    readSaving = null
     poller.stop()
     clearProjection()
     draft.value = ''

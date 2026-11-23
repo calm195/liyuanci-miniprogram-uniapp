@@ -453,6 +453,21 @@ test('心愿保存超时保留照片草稿，原样重试正文、资源版本�
   assert.equal(s.page.pendingWrite.value, null)
   assert.equal(s.page.editing.value, false)
 })
+test('心愿保存遇到超时状态或限流时保留原请求', async () => {
+  for (const status of [408, 429]) {
+    const s = await setup()
+    s.config.wishWritesReady = true
+    s.page.edit(s.page.items.value[0])
+    s.setCommand(async () => {
+      throw new s.RequestError(status)
+    })
+    await s.page.save()
+    assert.ok(s.page.pendingWrite.value)
+    s.setCommand(async () => sample)
+    await s.page.retryWrite()
+    assert.deepEqual(writes(s.calls)[0], writes(s.calls)[1])
+  }
+})
 
 test('取消带上传状态的草稿后，新编辑不会继承图片忙状态', async () => {
   const s = await setup()

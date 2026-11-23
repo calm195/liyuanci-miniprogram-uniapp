@@ -407,7 +407,7 @@ async function changeAvatar(remove = false) {
       failure instanceof RequestError &&
       failure.statusCode >= 400 &&
       failure.statusCode < 500 &&
-      failure.statusCode !== 429
+      ![408, 429].includes(failure.statusCode)
     ) {
       avatarPending.value = null
       avatarError.value =

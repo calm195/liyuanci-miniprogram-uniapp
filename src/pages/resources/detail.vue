@@ -245,7 +245,7 @@ async function submit(retry = false) {
         failure instanceof RequestError &&
         failure.statusCode >= 400 &&
         failure.statusCode < 500 &&
-        failure.statusCode !== 429
+        ![408, 429].includes(failure.statusCode)
       )
         pending.value = null
       page.fail(failure)

@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { getModuleGuide, acknowledgeGuide } from '@/api/module-guide'
 import type { ModuleGuide } from '@/api/module-guide'
@@ -12,6 +12,8 @@ export const useEntryStore = defineStore('entry', () => {
   const busy = ref(false)
   const error = ref('')
   let checked = ''
+  let guideGeneration = 0
+  let pendingAck: { epoch: number; owner: string; version: number; key: string } | null = null
   let continuation: {
     run: () => void | Promise<void>
     active: () => boolean
@@ -44,14 +46,21 @@ export const useEntryStore = defineStore('entry', () => {
     uni.$emit?.('auth:ready')
     return false
   }
-  function clear() {
-    cancelLogin()
+  function clearGuide() {
+    guideGeneration++
     checked = ''
+    pendingAck = null
     guide.value = null
     guideVisible.value = false
-    loginVisible.value = false
+    busy.value = false
     error.value = ''
   }
+  function clear() {
+    cancelLogin()
+    clearGuide()
+  }
+  // 登录会更换会话，但不能取消等待登录完成的页面续接动作。
+  watch(() => session.getEpoch(), clearGuide, { flush: 'sync' })
   async function showGuide(force = false) {
     const user = useUserStore()
     const owner = user.user?.id
@@ -59,11 +68,20 @@ export const useEntryStore = defineStore('entry', () => {
     if (!owner || !user.validated || busy.value) return
     const key = `${epoch}:${owner}`
     if (!force && (checked === key || user.user?.verification !== 'verified')) return
+    const generation = guideGeneration
+    const active = () =>
+      generation === guideGeneration && epoch === session.getEpoch() && owner === user.user?.id
     busy.value = true
     error.value = ''
     try {
       const result = await getModuleGuide()
-      if (epoch !== session.getEpoch() || owner !== user.user?.id) return
+      if (!active()) return
+      if (
+        pendingAck?.epoch === epoch &&
+        pendingAck.owner === owner &&
+        result.acknowledged_version >= pendingAck.version
+      )
+        pendingAck = null
       checked = key
       guide.value = result
       guideVisible.value =
@@ -71,33 +89,62 @@ export const useEntryStore = defineStore('entry', () => {
       if (force && !result.version)
         uni.$emit?.('app:notice', { message: '使用说明正在准备中', kind: 'info' })
     } catch {
-      if (force && epoch === session.getEpoch()) {
+      if (force && active()) {
         error.value = '使用说明读取失败，请稍后重试。'
         uni.$emit?.('app:notice', { message: error.value, kind: 'error' })
       }
     } finally {
-      busy.value = false
+      if (generation === guideGeneration) busy.value = false
     }
   }
   async function confirmGuide() {
     if (!guide.value || busy.value) return
     const epoch = session.getEpoch()
+    const owner = useUserStore().user?.id
+    if (!owner) return
+    const generation = guideGeneration
+    const active = () =>
+      generation === guideGeneration &&
+      epoch === session.getEpoch() &&
+      owner === useUserStore().user?.id
+    // 结果未知时保留原版本和幂等键，直到确认回执或收到明确拒绝。
+    if (!pendingAck || pendingAck.epoch !== epoch || pendingAck.owner !== owner)
+      pendingAck = {
+        epoch,
+        owner,
+        version: guide.value.version,
+        key: `guide-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      }
+    const command = pendingAck
     busy.value = true
+    error.value = ''
     let reload = false
     try {
-      const result = await acknowledgeGuide(guide.value.version)
-      if (epoch !== session.getEpoch()) return
+      const result = await acknowledgeGuide(command.version, command.key)
+      if (!active()) return
+      if (pendingAck === command) pendingAck = null
       guide.value = result
       guideVisible.value = result.acknowledged_version < result.version
     } catch (failure) {
-      if (epoch === session.getEpoch()) {
+      if (active()) {
         reload = failure instanceof RequestError && failure.statusCode === 409
-        error.value = reload ? '使用说明已更新，请阅读后重新确认。' : '确认未完成，请重试。'
+        const rejected =
+          failure instanceof RequestError &&
+          failure.statusCode >= 400 &&
+          failure.statusCode < 500 &&
+          failure.statusCode !== 408 &&
+          failure.statusCode !== 429
+        if (rejected && pendingAck === command) pendingAck = null
+        error.value = reload
+          ? '使用说明已更新，请阅读后重新确认。'
+          : rejected
+            ? '确认未完成，请重试。'
+            : '确认结果尚未确认，请使用原请求重试。'
       }
     } finally {
-      busy.value = false
+      if (generation === guideGeneration) busy.value = false
     }
-    if (reload && epoch === session.getEpoch()) await showGuide(true)
+    if (reload && active()) await showGuide(true)
   }
   return {
     loginVisible,

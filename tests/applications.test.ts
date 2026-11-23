@@ -13,7 +13,7 @@ import {
   canAcceptApplication,
   canWithdrawApplication,
 } from '../src/utils/application.ts'
-import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
+import { actionRecoveryStore, loadRuntime, pageScript, settle } from './support/page-runtime.ts'
 
 const sample: WishApplication = {
   id: 'synthetic-application',
@@ -78,7 +78,11 @@ type Transport = {
   data?: Record<string, unknown>
   header?: Record<string, string>
 }
-async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner', applicationId?: string) {
+async function setup(
+  mode: 'apply' | 'owner' | 'mine' = 'owner',
+  applicationId?: string,
+  existingRecovery?: Awaited<ReturnType<typeof actionRecoveryStore>>,
+) {
   let target = structuredClone(mode === 'owner' ? ownedWish : publicWish)
   let resultRows = [
     structuredClone(sample),
@@ -98,6 +102,8 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner', applicationId?:
     refresh: async () => {},
   })
   const config = reactive({ useMock: false, wishWritesReady: true })
+  const session = { getEpoch: () => epoch, getToken: () => 'synthetic-token' }
+  const recovery = existingRecovery ?? (await actionRecoveryStore(user, session))
   const hooks: Record<string, (query?: { wishId: string; applicationId?: string }) => void> = {}
   const calls: Transport[] = []
   let command: (input: Transport) => Promise<unknown> = async () => ({
@@ -137,14 +143,15 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner', applicationId?:
   )
   const page = await loadRuntime(
     pageScript(new URL('../src/pages/applications/index.vue', import.meta.url)) +
-      '\nexport { load, items, rows, message, notice, error, submit, accept, withdraw, mayApply, mayRetry, applicationInProgress, currentWish, selectStatus, writing };',
+      '\nexport { load, items, rows, message, notice, error, submit, accept, withdraw, retryManage, pendingManage, mayApply, mayRetry, applicationInProgress, currentWish, selectStatus, writing };',
     {
+      useActionRecoveryStore: () => recovery,
       ...api,
       readNotification,
       getWish: wishes.getWish,
       config,
       useUserStore: () => user,
-      session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
+      session,
       RequestError,
       applicationStatusLabels,
       wishStateLabels,
@@ -174,6 +181,7 @@ async function setup(mode: 'apply' | 'owner' | 'mine' = 'owner', applicationId?:
     page,
     calls,
     user,
+    recovery,
     config,
     hooks,
     RequestError,
@@ -250,6 +258,59 @@ test('REQ-005/006：许愿人只看当前active，同意使用申请7和心愿19
   assert.ok(writes(s.calls)[0]!.header?.['Idempotency-Key'])
   assert.equal(s.page.currentWish.value.current_state, 'matching')
   assert.equal(s.page.rows.value.length, 0)
+})
+test('同意与撤销结果未知后跨隐藏保留原版本和键，手动重试相同请求', async () => {
+  for (const mode of ['owner', 'mine'] as const) {
+    for (const status of [0, 408, 429, 200]) {
+      const s = await setup(mode)
+      let first = true
+      s.setCommand(async () => {
+        if (first) {
+          first = false
+          const failure = new s.RequestError('合成失败')
+          failure.statusCode = status
+          throw failure
+        }
+        return { ...sample }
+      })
+      if (mode === 'owner') await s.page.accept(s.page.rows.value[0])
+      else await s.page.withdraw(s.page.rows.value[0])
+      assert.ok(s.page.pendingManage.value)
+      s.hooks.hide!()
+      s.hooks.show!()
+      await settle()
+      assert.ok(s.page.pendingManage.value)
+      await s.page.retryManage()
+      const sent = writes(s.calls)
+      assert.equal(sent.length, 2)
+      assert.deepEqual(sent[0], sent[1])
+      assert.equal(s.page.pendingManage.value, null)
+    }
+  }
+})
+test('申请、同意和撤销卸载重建后恢复原请求', async () => {
+  for (const mode of ['apply', 'owner', 'mine'] as const) {
+    const first = await setup(mode)
+    first.setCommand(async () => {
+      throw new Error('合成断网')
+    })
+    if (mode === 'apply') {
+      first.page.message.value = '合成原留言'
+      await first.page.submit()
+    } else if (mode === 'owner') await first.page.accept(first.page.rows.value[0])
+    else await first.page.withdraw(first.page.rows.value[0])
+    const original = writes(first.calls)[0]
+    first.hooks.unload!()
+    const next = await setup(mode, undefined, first.recovery)
+    if (mode === 'apply') {
+      assert.equal(next.page.mayRetry.value, true)
+      await next.page.submit()
+    } else {
+      assert.ok(next.page.pendingManage.value)
+      await next.page.retryManage()
+    }
+    assert.deepEqual(writes(next.calls)[0], original)
+  }
 })
 test('REQ-006：申请携当前正文版本，空留言也送审；101码点不发请求', async () => {
   const s = await setup('apply')

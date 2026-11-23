@@ -13,6 +13,7 @@ async function setup() {
     validated: false,
   })
   const events: string[] = []
+  let epoch = 1
   const entryModule = await loadRuntime(
     readFileSync(new URL('../src/stores/entry.ts', import.meta.url), 'utf8'),
     {
@@ -31,14 +32,35 @@ async function setup() {
     {
       useEntryStore: () => entry,
       useUserStore: () => user,
+      session: { getEpoch: () => epoch, getToken: () => 'synthetic-token' },
+      uni: { $emit: (event: string) => events.push(event) },
       onShow: (fn: () => void) => hooks.show!.push(fn),
       onHide: (fn: () => void) => hooks.hide!.push(fn),
       onUnload: (fn: () => void) => hooks.unload!.push(fn),
       onUnmounted: (fn: () => void) => hooks.unmount!.push(fn),
     },
   )
-  return { entry, user, events, hooks, gate: loginModule.useLogin() }
+  return { entry, user, events, hooks, gate: loginModule.useLogin(), changeSession: () => epoch++ }
 }
+
+test('已登录时离页或换会话，不续接旧页面排队的动作', async () => {
+  const s = await setup()
+  s.user.user = { id: 'synthetic-a', verification: 'verified' }
+  s.user.validated = true
+  let continued = 0
+  s.gate.requestLogin(() => continued++)
+  s.hooks.hide!.forEach((fn) => fn())
+  s.hooks.show!.forEach((fn) => fn())
+  await Promise.resolve()
+  assert.equal(continued, 0)
+  s.gate.requestLogin(() => continued++)
+  s.changeSession()
+  await Promise.resolve()
+  assert.equal(continued, 0)
+  s.gate.requestLogin(() => continued++)
+  await Promise.resolve()
+  assert.equal(continued, 1)
+})
 
 test('当前页登录成功只续接一次，取消保留当前页面，失败可重试', async () => {
   const s = await setup()
