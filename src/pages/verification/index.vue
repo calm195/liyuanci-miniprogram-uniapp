@@ -3,6 +3,8 @@ import { onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
 import AppIcon from '@/components/AppIcon.vue'
+import AppSheet from '@/components/AppSheet.vue'
+import StudentCardDraftPanel from '@/components/StudentCardDraftPanel.vue'
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
@@ -10,7 +12,14 @@ import { useUserStore } from '@/stores/user'
 import { getVerification } from '@/api/auth'
 import { RequestError } from '@/utils/request'
 import { canMeAction, validStudentNumber, verificationInput } from '@/utils/actions'
-import { uploadStudentCard, getStudentCardAsset, submitVerification } from '@/api/verification'
+import {
+  uploadStudentCard,
+  getStudentCardAsset,
+  submitVerification,
+  getVerificationDraft,
+  removeVerificationPhoto,
+  downloadVerificationPhoto,
+} from '@/api/verification'
 import type { StudentCardAsset, Verification } from '@/types/api'
 import { session } from '@/utils/session'
 import { createVisiblePoller } from '@/utils/visible-poller'
@@ -21,22 +30,30 @@ const wishReturn = useWishActionReturn('verification')
 const name = ref('')
 const studentNumber = ref('')
 const asset = ref<StudentCardAsset | null>(null)
+const candidate = ref<StudentCardAsset | null>(null)
+const updatingPhoto = ref(false)
+const readingDraft = ref(false)
 const cardPreview = ref('')
+const photoRecordOpen = ref(false)
+type VerificationSubmission = { input: ReturnType<typeof verificationInput>; key: string }
+const pendingSubmission = ref<VerificationSubmission | null>(null)
 let previewingCard = false
 const uploading = ref(false)
 const resizeCanvas = shallowRef<{ width: number; height: number } | null>(null)
 const submitting = ref(false)
 // 各动作单独显示进度；共享互斥只用于禁止并行写入，不能让无关按钮同时转圈。
-const busy = computed(() => uploading.value || submitting.value)
+const busy = computed(() => uploading.value || submitting.value || updatingPhoto.value)
 const currentReview = ref<Verification | null>(null)
 const reviewState = ref<'unknown' | 'absent' | 'present'>('unknown')
 const refreshing = ref(false)
 const querying = ref(false)
 const scanNotice = ref('')
+const photoPreviewError = ref('')
 const scanPoller = createVisiblePoller(() => queryAsset())
 const reviewPoller = createVisiblePoller(() => refreshReview(true), undefined, 10_000)
 let readingReview = false
 let scanDeadline = 0
+let draftRead = 0
 const assetEpoch = ref(-1)
 const reviewEpoch = ref(-1)
 const reviewOwner = ref('')
@@ -52,11 +69,14 @@ const canUpload = computed(() =>
 const canSubmitReal = computed(
   () =>
     config.verificationWritesReady &&
+    !pendingSubmission.value &&
     !!name.value.trim() &&
     validStudentNumber(studentNumber.value) &&
     !busy.value &&
     !refreshing.value &&
     !querying.value &&
+    !readingDraft.value &&
+    candidate.value?.scan_status !== 'pending' &&
     canMeAction(store.user, store.user?.id || '', 'postMeVerificationRequests', store.validated) &&
     reviewEpoch.value === session.getEpoch() &&
     reviewOwner.value === store.user?.id &&
@@ -66,6 +86,25 @@ const canSubmitReal = computed(
 )
 const demoStatus = ref<'draft' | 'pending' | 'rejected' | 'approved'>('draft')
 const demoMessage = ref('')
+const reviewStatus = computed(
+  () =>
+    currentReview.value?.status ??
+    (store.user?.verification === 'verified' ? 'approved' : store.user?.verification),
+)
+const applicationInReview = computed(
+  () => !config.useMock && (reviewStatus.value === 'approved' || reviewStatus.value === 'pending'),
+)
+const canFillApplication = computed(() =>
+  config.useMock
+    ? demoStatus.value === 'draft' || demoStatus.value === 'rejected'
+    : config.verificationWritesReady &&
+      !applicationInReview.value &&
+      (reviewState.value === 'absent' || currentReview.value?.status === 'rejected'),
+)
+const scanDate = computed(() => (asset.value?.scanned_at ? scanTime(asset.value.scanned_at) : ''))
+const photoBusy = computed(
+  () => busy.value || querying.value || readingDraft.value || !!pendingSubmission.value,
+)
 let generation = 0
 let visible = false
 let selectingCard = false
@@ -78,26 +117,52 @@ const canSubmitDemo = computed(
     demoStatus.value !== 'pending' &&
     demoStatus.value !== 'approved',
 )
+function scanTime(value: string) {
+  const parsed = Date.parse(value)
+  if (!Number.isFinite(parsed)) return ''
+  return (
+    new Date(parsed + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ') +
+    '（北京时间）'
+  )
+}
 function stopScanPolling() {
   scanPoller.stop()
   scanDeadline = 0
 }
+function startScanPolling() {
+  if (candidate.value?.scan_status !== 'pending' || scanDeadline) return
+  scanDeadline = Date.now() + 120_000
+  scanPoller.start()
+}
 function showScanProblem(title: string, content: string) {
   scanNotice.value = content
-  uni.$emit?.('app:notice', { message: `${title}：${content}`, kind: 'warning' })
+  uni.$emit?.('app:notice', { message: title, description: content, kind: 'warning' })
+}
+function forgetPreview() {
+  const path = cardPreview.value
+  cardPreview.value = ''
+  // #ifdef MP-WEIXIN
+  if (path) uni.getFileSystemManager().unlink({ filePath: path, fail: () => {} })
+  // #endif
 }
 function clearPrivateData() {
-  cardPreview.value = ''
+  forgetPreview()
   previewingCard = false
+  photoRecordOpen.value = false
+  pendingSubmission.value = null
   stopScanPolling()
   reviewPoller.stop()
   readingReview = false
   scanNotice.value = ''
+  photoPreviewError.value = ''
   generation++
   resizeCanvas.value = null
   name.value = ''
   studentNumber.value = ''
   asset.value = null
+  candidate.value = null
+  updatingPhoto.value = false
+  readingDraft.value = false
   assetEpoch.value = -1
   reviewEpoch.value = -1
   reviewOwner.value = ''
@@ -115,6 +180,13 @@ function acceptReview(review: Verification, epoch: number) {
   reviewState.value = 'present'
   reviewEpoch.value = epoch
   reviewOwner.value = store.user?.id || ''
+  if (review.status === 'pending' || review.status === 'approved') {
+    pendingSubmission.value = null
+    name.value = ''
+    studentNumber.value = ''
+    photoRecordOpen.value = false
+    forgetPreview()
+  }
 }
 // 审核记录独立读取；本人资格和资产扫描都不能替代审核记录版本。
 async function refreshReview(background = false) {
@@ -157,10 +229,46 @@ async function refreshReview(background = false) {
     }
   }
 }
+async function refreshDraft(reportError = true) {
+  if (!visible || config.useMock || !session.getToken()) return
+  const current = generation
+  const read = ++draftRead
+  const epoch = session.getEpoch()
+  const active = () =>
+    visible && current === generation && read === draftRead && epoch === session.getEpoch()
+  readingDraft.value = true
+  try {
+    const draft = await getVerificationDraft()
+    if (!active()) return
+    if (asset.value?.asset_id !== draft.active?.asset_id) {
+      photoRecordOpen.value = false
+      forgetPreview()
+    }
+    asset.value = draft.active
+    candidate.value = draft.candidate
+    assetEpoch.value = epoch
+    scanNotice.value = ''
+    if (candidate.value?.scan_status === 'pending') startScanPolling()
+    else stopScanPolling()
+    return draft
+  } catch {
+    if (active() && reportError) scanNotice.value = '无法读取已保存的照片，请重试。'
+  } finally {
+    if (active()) readingDraft.value = false
+  }
+}
+async function refreshPage() {
+  await refreshReview()
+  await refreshDraft()
+}
 function showCardResult(result: StudentCardAsset) {
   if (result.scan_status === 'approved') {
-    scanNotice.value = '图片扫描通过：请填写姓名和学号，然后点击「提交认证申请」，等待人工审核。'
-    uni.$emit?.('app:notice', { message: scanNotice.value, kind: 'success' })
+    scanNotice.value = ''
+    uni.$emit?.('app:notice', {
+      message: '图片扫描通过',
+      description: '可以填写学生信息并提交申请。',
+      kind: 'success',
+    })
   } else if (result.scan_status === 'rejected') {
     scanNotice.value =
       '图片扫描未通过：图片未通过安全内容检查，请重新上传清晰、完整的本人学生卡照片。'
@@ -200,7 +308,7 @@ async function resizeCardWithCanvas(path: string, width: number, height: number)
   }
 }
 async function chooseCard() {
-  if (busy.value || querying.value) return
+  if (busy.value || querying.value || pendingSubmission.value) return
   error.value = ''
   if (config.useMock) {
     asset.value = { asset_id: 'synthetic-card', scan_status: 'pending' }
@@ -237,11 +345,8 @@ async function chooseCard() {
     const path =
       typeof result.tempFilePaths === 'string' ? result.tempFilePaths : result.tempFilePaths[0]
     if (!path) return
-    // 新图片与旧扫描回执不能混用，取消选图则保留原来的图片和回执。
+    // 保留通过的照片，服务端只会在新照片通过时替换。
     stopScanPolling()
-    asset.value = null
-    assetEpoch.value = -1
-    cardPreview.value = path
     const uploaded = await uploadStudentCard(
       path,
       `card-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -254,17 +359,16 @@ async function chooseCard() {
       },
     )
     if (isCurrent()) {
-      asset.value = uploaded
+      candidate.value = uploaded
       assetEpoch.value = epoch
       scanNotice.value = ''
-      stopScanPolling()
-      showCardResult(uploaded)
-      // 自动查询只在本页本次上传后运行，到期后保留手动查询入口。
-      if (uploaded.scan_status === 'pending') {
-        uni.$emit?.('app:notice', { message: '图片已受理，等待安全扫描。', kind: 'success' })
-        scanDeadline = Date.now() + 120_000
-        scanPoller.start()
-      }
+      if (uploaded.scan_status === 'pending')
+        uni.$emit?.('app:notice', {
+          message: '照片已上传，可以离开后再查看。',
+          kind: 'info',
+        })
+      startScanPolling()
+      await refreshDraft(false)
     }
   } catch (failure) {
     if (!isCurrent()) return
@@ -282,116 +386,205 @@ async function chooseCard() {
     if (current === generation) uploading.value = false
   }
 }
-function removeCard() {
-  if (busy.value || querying.value) return
-  stopScanPolling()
-  asset.value = null
-  assetEpoch.value = -1
-  cardPreview.value = ''
-  scanNotice.value = ''
-}
-function previewCard() {
-  if (!cardPreview.value || busy.value) return
-  // #ifdef MP-WEIXIN
-  previewingCard = true
-  // #endif
-  uni.previewImage({
-    urls: [cardPreview.value],
-    current: cardPreview.value,
-    fail: () => {
-      previewingCard = false
-    },
-  })
-}
-async function queryAsset() {
-  if (config.useMock || querying.value || busy.value || !asset.value) return
-  if (assetEpoch.value !== session.getEpoch()) {
-    stopScanPolling()
+async function removeCard(photo = asset.value ?? candidate.value) {
+  if (photoBusy.value || !photo) return
+  if (config.useMock) {
     asset.value = null
+    scanNotice.value = ''
     return
   }
-  const id = asset.value.asset_id
   const current = generation
   const epoch = session.getEpoch()
-  const isCurrent = () =>
-    visible &&
-    current === generation &&
-    epoch === session.getEpoch() &&
-    asset.value?.asset_id === id
-  const previousStatus = asset.value.scan_status
-  querying.value = true
-  scanNotice.value = ''
+  updatingPhoto.value = true
   try {
-    const result = await getStudentCardAsset(id)
-    if (!isCurrent()) return
-    if (result.asset_id !== id || !['pending', 'approved', 'rejected'].includes(result.scan_status))
-      throw new Error('资产状态无效')
-    asset.value = result
+    await removeVerificationPhoto(photo.asset_id)
+    if (current !== generation || epoch !== session.getEpoch()) return
+    stopScanPolling()
+    scanNotice.value = ''
+    await refreshDraft()
+  } catch {
+    if (current === generation && epoch === session.getEpoch()) {
+      await refreshDraft(false)
+      scanNotice.value = '移除结果待确认，请核对照片状态。'
+    }
+  } finally {
+    if (current === generation) updatingPhoto.value = false
+  }
+}
+async function confirmRemovePhoto() {
+  const photo = asset.value
+  if (photoBusy.value || !photo) return
+  const epoch = session.getEpoch()
+  const confirmed = await new Promise<boolean>((resolve) =>
+    uni.showModal({
+      title: '移除学生卡照片？',
+      content: '下次提交申请前需要重新上传照片。',
+      confirmText: '移除照片',
+      cancelText: '保留照片',
+      success: (result) => resolve(result.confirm),
+      fail: () => resolve(false),
+    }),
+  )
+  if (confirmed && epoch === session.getEpoch() && asset.value?.asset_id === photo.asset_id)
+    await removeCard(photo)
+}
+function openPhotoRecord() {
+  photoPreviewError.value = ''
+  photoRecordOpen.value = true
+}
+async function previewCard() {
+  const photo = asset.value
+  if (!photo || busy.value || photo.scan_status !== 'approved') return
+  const current = generation
+  const epoch = session.getEpoch()
+  photoPreviewError.value = ''
+  updatingPhoto.value = true
+  try {
+    const path = await downloadVerificationPhoto(photo.asset_id)
+    if (
+      current !== generation ||
+      epoch !== session.getEpoch() ||
+      photo.asset_id !== asset.value?.asset_id
+    ) {
+      // #ifdef MP-WEIXIN
+      uni.getFileSystemManager().unlink({ filePath: path, fail: () => {} })
+      // #endif
+      return
+    }
+    forgetPreview()
+    cardPreview.value = path
+    // #ifdef MP-WEIXIN
+    previewingCard = true
+    // #endif
+    await uni.previewImage({ urls: [path], current: path })
+  } catch {
+    if (current === generation) {
+      previewingCard = false
+      forgetPreview()
+      photoPreviewError.value = '暂时无法查看照片，请重试。'
+    }
+  } finally {
+    if (current === generation) updatingPhoto.value = false
+  }
+}
+async function queryAsset() {
+  if (config.useMock || querying.value || busy.value || readingDraft.value) return
+  const target = candidate.value
+  if (!target) {
+    await refreshDraft()
+    return
+  }
+  const current = generation
+  const epoch = session.getEpoch()
+  const active = () => visible && current === generation && epoch === session.getEpoch()
+  querying.value = true
+  try {
+    const result = await getStudentCardAsset(target.asset_id)
+    if (!active()) return
+    if (result.asset_id !== target.asset_id) throw new Error('资产状态无效')
     if (result.scan_status !== 'pending') {
       stopScanPolling()
-      if (result.scan_status !== previousStatus) showCardResult(result)
+      const draft = await refreshDraft(false)
+      if (!active()) return
+      if (!draft) {
+        showScanProblem('暂时无法确认可用照片', '请重新读取照片。')
+      } else if (
+        result.scan_status !== target.scan_status &&
+        (result.scan_status === 'approved'
+          ? draft.active?.asset_id === result.asset_id
+          : draft.candidate?.asset_id === result.asset_id)
+      ) {
+        showCardResult(result)
+      }
     } else if (scanDeadline && Date.now() >= scanDeadline) {
       stopScanPolling()
-      showScanProblem('图片扫描时间较长', '暂未收到扫描结果，可以稍后点击「查询图片扫描状态」。')
-    } else if (!scanDeadline) {
-      scanNotice.value = '仍未收到扫描结果，可以稍后再次查询。'
+      showScanProblem('扫描时间较长', '可以稍后回来查看，或手动刷新。')
     }
-  } catch (failure) {
-    if (!isCurrent()) return
+  } catch {
+    if (!active()) return
     stopScanPolling()
-    const status = failure instanceof RequestError ? failure.statusCode || failure.code : 0
-    if (status === 404 || status === 401) asset.value = null
-    const message =
-      status === 503
-        ? '安全扫描服务暂未能完成处理。请稍后查询，若仍失败，请重新上传图片。'
-        : status === 404
-          ? '这张图片已无法查询，请重新上传。'
-          : status === 401
-            ? '登录状态已失效，请重新登录后上传图片。'
-            : '暂时无法查询扫描结果，请检查网络后重试。'
-    showScanProblem('图片扫描查询未完成', message)
+    await refreshDraft(false)
+    if (active()) showScanProblem('暂时无法查询扫描结果', '请稍后刷新。')
   } finally {
     if (current === generation) querying.value = false
   }
 }
 async function submitReal() {
   if (!canSubmitReal.value) return
+  try {
+    const input = verificationInput(name.value, studentNumber.value, asset.value, {
+      state: reviewState.value,
+      record: currentReview.value,
+    })
+    await sendSubmission({
+      input,
+      key: `verification-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    })
+  } catch (failure) {
+    error.value = failure instanceof Error ? failure.message : '请核对认证信息。'
+  }
+}
+async function retrySubmission() {
+  const command = pendingSubmission.value
+  if (!command || busy.value || refreshing.value) return
+  const current = generation
+  const epoch = session.getEpoch()
+  await refreshReview()
+  if (current !== generation || epoch !== session.getEpoch() || pendingSubmission.value !== command)
+    return
+  if (reviewState.value === 'unknown') return
+  const version =
+    currentReview.value?.status === 'rejected' ? currentReview.value.version : undefined
+  if (
+    version !== command.input.expected_version ||
+    !canMeAction(store.user, store.user?.id || '', 'postMeVerificationRequests', store.validated)
+  ) {
+    pendingSubmission.value = null
+    error.value = '审核状态已变化，请核对当前申请后继续。'
+    return
+  }
+  await sendSubmission(command)
+}
+async function sendSubmission(command: VerificationSubmission) {
+  if (busy.value) return
   const current = generation
   const epoch = session.getEpoch()
   const isCurrent = () => visible && current === generation && epoch === session.getEpoch()
   submitting.value = true
   error.value = ''
   try {
-    const input = verificationInput(name.value, studentNumber.value, asset.value, {
-      state: reviewState.value,
-      record: currentReview.value,
-    })
-    const review = await submitVerification(
-      input,
-      `verification-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    )
+    const review = await submitVerification(command.input, command.key)
     if (!isCurrent()) return
-    // POST 回执已确认审核记录；本人资格刷新失败也不能覆盖已受理状态。
     acceptReview(review, epoch)
-    uni.$emit?.('app:notice', { message: '认证申请已受理，等待人工审核。', kind: 'success' })
+    pendingSubmission.value = null
+    uni.$emit?.('app:notice', {
+      message: '认证申请已受理',
+      description: '请等待人工审核。',
+      kind: 'success',
+    })
     name.value = ''
     studentNumber.value = ''
-    cardPreview.value = ''
+    forgetPreview()
     asset.value = null
+    candidate.value = null
     void store.refresh(false, true).catch(() => {})
   } catch (failure) {
     if (!isCurrent()) return
+    const status = failure instanceof RequestError ? failure.statusCode || failure.code : 0
+    pendingSubmission.value =
+      status >= 400 && status < 500 && ![408, 429].includes(status) ? null : command
     if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
       await refreshReview()
-      if (isCurrent()) error.value = '审核记录已变化，已重新读取，请确认后手动操作。'
+      if (isCurrent()) error.value = '审核记录已变化。请核对当前记录，如需再次申请，请手动提交。'
     } else if (failure instanceof RequestError && failure.error_code === 'ASSET_NOT_READY') {
-      if (asset.value) asset.value = { asset_id: asset.value.asset_id, scan_status: 'pending' }
-      error.value = '图片扫描尚未就绪，请重新查询。'
+      await refreshDraft(false)
+      if (isCurrent()) error.value = '图片扫描尚未就绪，请刷新扫描结果。'
+    } else if (status === 409) {
+      error.value = '申请与当前账号或学号状态冲突，请核对学号并重新读取审核记录。'
     } else {
-      error.value =
-        failure instanceof RequestError && (failure.statusCode || failure.code) === 409
-          ? '申请与当前账号或学号状态冲突，请核对学号并重新读取审核记录。'
-          : '未能确认本次申请结果，请重新读取审核记录后再试。'
+      error.value = pendingSubmission.value
+        ? '申请结果待确认，可在当前页面确认上次申请。'
+        : '申请未受理，请核对填写信息后重试。'
     }
   } finally {
     if (current === generation) submitting.value = false
@@ -407,7 +600,7 @@ watch(
   () => store.user?.id,
   (id) => {
     clearPrivateData()
-    if (id && visible && !config.useMock) void refreshReview()
+    if (id && visible && !config.useMock) void refreshPage()
   },
   { flush: 'sync' },
 )
@@ -438,9 +631,10 @@ onShow(() => {
   visible = true
   if (previewingCard) {
     previewingCard = false
+    forgetPreview()
     return
   }
-  if (!config.useMock && !selectingCard) void refreshReview()
+  if (!config.useMock && !selectingCard) void refreshPage()
 })
 onHide(() => {
   if (selectingCard || previewingCard) return
@@ -454,7 +648,7 @@ onUnload(() => {
 })
 onPullDownRefresh(async () => {
   try {
-    await refreshReview()
+    await refreshPage()
   } finally {
     uni.stopPullDownRefresh()
   }
@@ -468,274 +662,211 @@ onPullDownRefresh(async () => {
       class="resize-canvas"
       :style="{ width: resizeCanvas.width + 'px', height: resizeCanvas.height + 'px' }"
     />
-    <PageHeading title="学生认证" description="学生卡仅用于资格审核，请核对当前进度后继续。" />
-    <view v-if="wishReturn.active.value" class="ui-section ui-stack">
-      <text class="ui-copy"
-        >认证通过后会返回心愿详情。等待审核期间可返回，审核通过后再继续操作。</text
-      >
-      <button
-        class="ui-button"
-        :disabled="uploading || submitting || wishReturn.returning.value"
-        :loading="wishReturn.returning.value"
-        @click="wishReturn.returnToWish"
-      >
-        返回心愿详情
-      </button>
-    </view>
-    <text v-if="config.useMock" class="ui-text-reset notice"
-      >合成演示 · 请仅填写虚构资料，不选择或上传真实学生卡</text
-    >
-    <text v-else class="ui-copy"
-      >学生卡仅用于学生资格审核。离开页面会清除已填写资料；待审不承诺完成时限。</text
-    >
-    <view class="ui-section ui-stack">
-      <text v-if="uploading || submitting || refreshing || querying" class="ui-text-reset notice">{{
-        uploading
-          ? '正在准备或上传学生卡，其他操作暂不可用。'
-          : submitting
-            ? '正在提交认证申请，其他操作暂不可用。'
-            : refreshing
-              ? '正在读取审核记录，请稍候。'
-              : '正在查询图片扫描状态，请稍候。'
-      }}</text>
-      <text class="ui-copy">账号状态：{{ store.label }}</text>
-      <text v-if="(config.useMock ? store.verification : currentReview)?.reason" class="ui-copy">
-        驳回原因：{{ (config.useMock ? store.verification : currentReview)?.reason }}
-      </text>
-      <text
-        v-if="(config.useMock ? store.verification : currentReview)?.revision_suggestion"
-        class="ui-copy"
-        >修改建议：{{
-          (config.useMock ? store.verification : currentReview)?.revision_suggestion
-        }}</text
-      >
-      <view v-if="!config.useMock">
-        <text class="ui-copy">{{
-          reviewState === 'absent'
-            ? '当前没有认证申请记录。'
-            : reviewState === 'present'
-              ? currentReview?.status === 'pending'
-                ? '认证申请已提交，等待人工审核。'
-                : currentReview?.status === 'approved'
-                  ? '学生认证已通过。'
-                  : '认证申请已驳回，可更正后重新提交。'
-              : refreshing
-                ? ''
-                : '当前审核记录尚未确认，请重新读取。'
-        }}</text>
+    <PageHeading title="身份认证" />
+    <view class="verification-layout">
+      <view v-if="wishReturn.active.value" class="verification-card">
+        <text class="verification-caption">认证通过后可继续操作心愿，也可先返回心愿详情。</text>
         <button
           class="ui-button"
-          :disabled="refreshing || busy || querying"
-          :loading="refreshing && !submitting"
-          @click="runPageAction(() => refreshReview(), 'pages-verification-index-button-1')"
+          :disabled="uploading || submitting || wishReturn.returning.value"
+          :loading="wishReturn.returning.value"
+          @click="wishReturn.returnToWish"
         >
-          重新读取审核记录
+          返回心愿详情
         </button>
       </view>
-      <text v-if="!config.useMock && !config.verificationWritesReady" class="ui-copy"
-        >认证提交暂未开放。</text
-      >
-      <text class="ui-label">学生姓名</text
-      ><input
-        v-model="name"
-        class="ui-input"
-        placeholder-class="field-placeholder"
-        :maxlength="-1"
-        placeholder="姓名（演示时填写虚构姓名）"
-        :disabled="
-          (!config.useMock && !config.verificationWritesReady) ||
-          busy ||
-          demoStatus === 'pending' ||
-          demoStatus === 'approved'
-        "
-      />
-      <text class="ui-label">学号</text
-      ><input
-        v-model="studentNumber"
-        class="ui-input"
-        :class="{ 'student-number-invalid': studentNumberError }"
-        placeholder-class="field-placeholder"
-        :maxlength="-1"
-        placeholder="学号：4位年份＋8位数字"
-        :disabled="
-          (!config.useMock && !config.verificationWritesReady) ||
-          busy ||
-          demoStatus === 'pending' ||
-          demoStatus === 'approved'
-        "
-      />
-      <text v-if="studentNumberError" class="ui-text-reset error">{{ studentNumberError }}</text>
-      <view class="student-card-upload">
+      <text v-if="config.isDev && config.useMock" class="notice">
+        合成演示 · 仅使用虚构学生资料。
+      </text>
+      <view v-if="!config.useMock && !store.isLoggedIn" class="verification-card">
+        <text class="verification-title">登录后办理认证</text>
+        <text class="verification-caption">登录后可提交申请及查看认证进度。</text>
+        <LoginLink>微信登录</LoginLink>
+      </view>
+      <template v-else>
+        <view
+          v-if="
+            applicationInReview || reviewState === 'unknown' || currentReview?.status === 'rejected'
+          "
+          class="verification-card"
+        >
+          <text class="verification-title">{{
+            reviewStatus === 'approved'
+              ? '学生认证已通过'
+              : reviewStatus === 'pending'
+                ? '待人工审核'
+                : reviewStatus === 'rejected'
+                  ? '认证申请未通过'
+                  : refreshing
+                    ? '正在读取认证进度…'
+                    : '审核记录待确认'
+          }}</text>
+          <text v-if="reviewStatus === 'pending'" class="verification-caption">
+            申请已提交，可稍后回来查看审核结果。
+          </text>
+          <text v-if="currentReview?.reason" class="verification-caption"
+            >原因：{{ currentReview.reason }}</text
+          >
+          <text v-if="currentReview?.revision_suggestion" class="verification-caption">
+            修改建议：{{ currentReview.revision_suggestion }}
+          </text>
+          <button
+            v-if="!config.useMock && reviewStatus !== 'approved'"
+            class="ui-button"
+            :disabled="refreshing || busy || querying"
+            :loading="refreshing && !submitting"
+            @click="runPageAction(() => refreshReview(), 'verification-review-refresh')"
+          >
+            刷新审核进度
+          </button>
+        </view>
+        <template v-if="canFillApplication">
+          <StudentCardDraftPanel
+            :photo="asset"
+            :candidate="candidate"
+            :scanned-at="scanDate"
+            :disabled="photoBusy"
+            :no-upload="!config.useMock && !canUpload"
+            :uploading="uploading"
+            :querying="querying"
+            :scan-message="scanNotice"
+            :choose-card="chooseCard"
+            :query-asset="queryAsset"
+            :cancel-replacement="() => removeCard(candidate)"
+            @show-record="openPhotoRecord"
+          />
+          <view class="verification-card verification-fields">
+            <text class="verification-title">学生信息</text>
+            <label for="verification-name">姓名</label>
+            <input
+              id="verification-name"
+              v-model="name"
+              :maxlength="-1"
+              class="ui-input"
+              placeholder="请输入学生卡上的姓名"
+              :disabled="busy || !!pendingSubmission"
+            />
+            <label for="verification-number">学号</label>
+            <input
+              id="verification-number"
+              v-model="studentNumber"
+              class="ui-input"
+              :maxlength="-1"
+              placeholder="4位年份＋8位数字"
+              :disabled="busy || !!pendingSubmission"
+            />
+            <text v-if="studentNumberError" class="verification-field-error">{{
+              studentNumberError
+            }}</text>
+            <text class="verification-caption">
+              照片仅用于学生资格审核。离开后，姓名和学号需重新填写。
+            </text>
+          </view>
+          <view v-if="config.isDev && config.useMock && asset?.scan_status === 'pending'">
+            <button class="ui-button" @click="scanDemo('approved')">演示：扫描通过</button>
+            <button class="ui-button" @click="scanDemo('rejected')">演示：扫描失败</button>
+          </view>
+          <button
+            v-if="!pendingSubmission"
+            class="ui-button ui-button-primary"
+            :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
+            :loading="submitting"
+            @click="runPageAction(() => submit(), 'verification-submit')"
+          >
+            {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
+          </button>
+        </template>
         <button
-          v-if="cardPreview"
-          class="card-preview-button"
+          v-if="pendingSubmission"
+          class="ui-button ui-button-primary"
+          :disabled="busy || refreshing"
+          :loading="refreshing && !submitting"
+          @click="runPageAction(retrySubmission, 'verification-submit-retry')"
+        >
+          确认上次申请
+        </button>
+        <AppNotice :message="error" kind="error" />
+        <template v-if="config.isDev && config.useMock">
+          <text v-if="demoMessage" class="verification-caption">{{ demoMessage }}</text>
+          <view v-if="demoStatus === 'pending'" class="verification-card">
+            <button class="ui-button" @click="reviewDemo(false)">演示：人工驳回</button>
+            <button class="ui-button" @click="reviewDemo(true)">演示：人工通过</button>
+          </view>
+        </template>
+      </template>
+    </view>
+    <AppSheet
+      v-if="photoRecordOpen && asset?.scan_status === 'approved'"
+      title="照片与扫描记录"
+      :busy="busy"
+      @close="photoRecordOpen = false"
+    >
+      <view class="verification-record">
+        <AppIcon name="shield" :size="52" />
+        <text class="verification-title">安全扫描通过</text>
+        <text v-if="scanDate" class="verification-caption">{{ scanDate }}</text>
+        <text class="verification-caption">本张照片可用于本次认证。</text>
+        <AppNotice :message="photoPreviewError" kind="error" />
+        <button
+          class="ui-button ui-button-primary"
           :disabled="busy"
-          aria-label="预览学生卡照片"
+          :loading="updatingPhoto"
           @click="previewCard"
         >
-          <image :src="cardPreview" class="card-preview" mode="aspectFit" /><text
-            class="preview-caption"
-            >点击预览</text
-          >
+          查看原图
         </button>
-        <view v-else class="card-upload-placeholder"
-          ><AppIcon name="shield" :size="60" /><text class="ui-section-title">上传学生卡照片</text
-          ><text class="ui-meta">请拍清姓名、学号与学校信息</text></view
-        >
-        <view class="card-upload-actions"
-          ><button
-            class="ui-button ui-button-primary"
-            :disabled="
-              busy ||
-              querying ||
-              (!config.useMock && !canUpload) ||
-              (config.useMock && (demoStatus === 'pending' || demoStatus === 'approved'))
-            "
-            :loading="uploading"
-            @click="runPageAction(() => chooseCard(), 'pages-verification-index-button-2')"
-          >
-            {{
-              uploading ? '正在上传' : cardPreview || asset ? '重新选择照片' : '选择学生卡照片'
-            }}</button
-          ><button
-            v-if="cardPreview || asset"
-            class="ui-button"
-            :disabled="busy || querying"
-            @click="removeCard"
-          >
-            移除
-          </button></view
-        >
-        <text class="ui-meta card-privacy"
-          >照片仅用于资格审核，支持 PNG/JPEG。大图会先缩小，处理后不超过 4 MiB / 400 万像素。</text
-        >
-      </view>
-      <text v-if="!config.useMock && !asset && !busy" class="ui-copy">
-        请选择清晰的 PNG/JPEG 图片，大图会自动缩小。上传成功后显示扫描查询按钮。
-      </text>
-      <text v-if="!asset && scanNotice" class="ui-copy">{{ scanNotice }}</text>
-      <text v-if="asset" class="ui-copy"
-        >图片扫描状态：{{
-          asset.scan_status === 'pending'
-            ? scanNotice || '等待安全扫描'
-            : asset.scan_status === 'approved'
-              ? '安全扫描通过，请提交认证申请'
-              : '安全扫描未通过，请重新选择'
-        }}</text
-      >
-      <text
-        v-if="asset?.scan_status === 'pending' && !config.useMock && !scanNotice"
-        class="ui-copy"
-        >图片已受理，正在自动查询扫描状态。安全扫描通过后仍须提交认证申请。</text
-      >
-      <button
-        v-if="!config.useMock && asset"
-        class="ui-button"
-        :disabled="querying || busy"
-        :loading="querying"
-        @click="runPageAction(() => queryAsset(), 'pages-verification-index-button-3')"
-      >
-        查询图片扫描状态
-      </button>
-      <view v-if="config.useMock && asset?.scan_status === 'pending'">
-        <button
-          class="ui-button"
-          @click="runPageAction(() => scanDemo('approved'), 'pages-verification-index-button-4')"
-        >
-          演示：扫描通过
-        </button>
-        <button
-          class="ui-button"
-          @click="runPageAction(() => scanDemo('rejected'), 'pages-verification-index-button-5')"
-        >
-          演示：扫描失败
+        <button class="ui-button" :disabled="photoBusy" @click="confirmRemovePhoto">
+          移除照片
         </button>
       </view>
-      <button
-        class="ui-button ui-button-primary"
-        :disabled="config.useMock ? !canSubmitDemo : !canSubmitReal"
-        :loading="submitting"
-        @click="runPageAction(() => submit(), 'pages-verification-index-button-6')"
-      >
-        {{ config.useMock ? '提交合成认证申请' : '提交认证申请' }}
-      </button>
-      <AppNotice :message="error" kind="error" />
-      <text v-if="demoMessage" class="ui-copy">{{ demoMessage }}</text>
-      <view v-if="config.useMock && demoStatus === 'pending'">
-        <button
-          class="ui-button"
-          @click="runPageAction(() => reviewDemo(false), 'pages-verification-index-button-7')"
-        >
-          演示：人工驳回
-        </button>
-        <button
-          class="ui-button"
-          @click="runPageAction(() => reviewDemo(true), 'pages-verification-index-button-8')"
-        >
-          演示：人工通过
-        </button>
-      </view>
-    </view>
+    </AppSheet>
   </AppPage>
 </template>
-
 <style scoped>
-.student-card-upload {
-  margin: 24rpx 0;
-  padding: 32rpx;
-  border: 2rpx dashed var(--theme-line);
-  border-radius: 28rpx;
-  background: var(--theme-surface);
-}
-.card-upload-placeholder {
+.verification-layout,
+.verification-card,
+.verification-record {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-  padding: 24rpx 0 32rpx;
+  min-width: 0;
+  gap: 18rpx;
 }
-.page .card-preview-button {
-  position: relative;
-  width: 100%;
-  border: 0;
-  padding: 0;
-  margin: 0 0 24rpx;
-  border-radius: 20rpx;
-  background: var(--theme-mint);
-  overflow: hidden;
-}
-.card-preview {
-  width: 100%;
-  height: 280rpx;
-}
-.preview-caption {
-  position: absolute;
-  right: 12rpx;
-  bottom: 12rpx;
+.verification-card {
+  padding: 26rpx;
+  border: 1px solid var(--theme-line);
+  border-radius: 32rpx;
   background: var(--theme-surface);
-  padding: 4rpx 14rpx;
-  border-radius: 10rpx;
-  font-size: 22rpx;
 }
-.card-upload-actions {
-  display: flex;
-  gap: 16rpx;
+.verification-title {
+  font-size: 32rpx;
+  font-weight: 700;
 }
-.card-upload-actions .ui-button {
-  flex: 1;
+.verification-caption,
+.verification-field-error {
+  color: var(--theme-muted);
+  font-size: 25rpx;
+  line-height: 1.55;
 }
-.card-privacy {
-  margin-top: 20rpx !important;
-  font-size: 22rpx;
-  text-align: center;
+.verification-field-error {
+  color: var(--theme-danger);
 }
-
+.verification-fields label {
+  font-size: 27rpx;
+  font-weight: 650;
+}
+.verification-layout text,
+.verification-layout button,
+.verification-fields input,
+.verification-record text,
+.verification-record button {
+  margin: 0;
+}
+.verification-record {
+  padding-top: 22rpx;
+}
 .resize-canvas {
   position: fixed;
   left: -10000px;
   top: 0;
-}
-input.student-number-invalid {
-  border-color: var(--theme-danger);
 }
 </style>

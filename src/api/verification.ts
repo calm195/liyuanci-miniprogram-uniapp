@@ -1,4 +1,5 @@
-import { request, RequestError } from '@/utils/request'
+import { isAllowedApiBaseUrl, request, RequestError } from '@/utils/request'
+import { config } from '@/config'
 import { session } from '@/utils/session'
 import {
   studentCardMultipart,
@@ -134,6 +135,30 @@ export function getStudentCardAsset(id: string) {
     silent: true,
     method: 'GET',
   })
+}
+export function getVerificationDraft() {
+  return request<{ active: StudentCardAsset | null; candidate: StudentCardAsset | null }>({
+    url: '/me/verification-draft',
+    method: 'GET',
+    silent: true,
+  })
+}
+export function removeVerificationPhoto(id: string) {
+  return request<{ removed: boolean }>({
+    url: `/me/student-card-assets/${encodeURIComponent(id)}/draft`,
+    method: 'DELETE',
+    silent: true,
+  })
+}
+export async function downloadVerificationPhoto(id: string) {
+  const token = session.getToken()
+  if (!token || !isAllowedApiBaseUrl(config.apiBaseUrl)) throw new Error('请重新登录后查看照片')
+  const url =
+    config.apiBaseUrl.replace(/\/$/, '') +
+    `/me/student-card-assets/${encodeURIComponent(id)}/preview`
+  const result = await uni.downloadFile({ url, header: { Authorization: `Bearer ${token}` } })
+  if (result.statusCode !== 200 || !result.tempFilePath) throw new Error('暂时无法查看照片')
+  return result.tempFilePath
 }
 // 首次省略版本；重提由调用方读取当前审核记录版本，不默认或替换版本。
 export function submitVerification(input: VerificationInput, key: string) {

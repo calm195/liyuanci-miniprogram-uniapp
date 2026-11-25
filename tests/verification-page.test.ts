@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import ts from 'typescript'
 import { reactive, ref } from 'vue'
 import { createVisiblePoller } from '../src/utils/visible-poller.ts'
+import type { StudentCardAsset } from '../src/types/api.ts'
 import { canMeAction, validStudentNumber, verificationInput } from '../src/utils/actions.ts'
 
 // 执行实际页面脚本，仅替换平台、会话及后端传输，不能作为真实联调证据。
@@ -14,15 +15,18 @@ async function setup(fromWish = false) {
   const sent: unknown[] = []
   const modals: { title: string; content: string }[] = []
   const showModal = (modal: (typeof modals)[number]) => modals.push(modal)
-  const $emit = (_event: string, value: { message: string }) => {
+  const $emit = (_event: string, value: { message: string; description?: string }) => {
     const [title, ...parts] = value.message.split('：')
-    modals.push({ title: title!, content: parts.join('：') })
+    modals.push({ title: title!, content: value.description ?? parts.join('：') })
   }
   Object.assign(globalThis, { uni: { showModal, $emit } })
-  let submit = async (input: unknown): Promise<unknown> => {
+  let submit: (input: unknown, key?: string) => Promise<unknown> = async (input) => {
     sent.push(input)
     return { request_id: 'synthetic-review', version: 1, status: 'pending' }
   }
+  let activePhoto: StudentCardAsset | null = null
+  let candidatePhoto: StudentCardAsset | null = null
+  let draftFailure = false
   let query = async (id: string): Promise<unknown> => ({ asset_id: id, scan_status: 'approved' })
   const config = reactive({ useMock: false, verificationWritesReady: false })
   let read = async (): Promise<unknown> => ({ version: 7, status: 'rejected' })
@@ -67,13 +71,36 @@ async function setup(fromWish = false) {
       canMeAction,
       validStudentNumber,
       verificationInput,
-      submitVerification: (input: unknown) => submit(input),
-      getStudentCardAsset: (id: string) => query(id),
+      submitVerification: (input: unknown, key: string) => submit(input, key),
+      getVerificationDraft: async () => {
+        if (draftFailure) throw new Error('合成草稿读取失败')
+        return { active: activePhoto, candidate: candidatePhoto }
+      },
+      getStudentCardAsset: async (id: string) => {
+        const photo = candidatePhoto
+        try {
+          const result = (await query(id)) as StudentCardAsset
+          if (photo && candidatePhoto === photo && result.asset_id === id) {
+            if (result.scan_status === 'approved') {
+              activePhoto = result
+              candidatePhoto = null
+            } else candidatePhoto = result
+          }
+          return result
+        } catch (cause) {
+          if (cause instanceof RequestError && cause.code === 404 && candidatePhoto === photo)
+            candidatePhoto = null
+          throw cause
+        }
+      },
       useUserStore: () => store,
       getVerification: () => read(),
       RequestError,
-      uploadStudentCard: async () => ({ asset_id: 'synthetic-upload', scan_status: 'pending' }),
-      session: { getEpoch: () => epoch },
+      uploadStudentCard: async () => {
+        candidatePhoto = { asset_id: 'synthetic-upload', scan_status: 'pending' }
+        return candidatePhoto
+      },
+      session: { getEpoch: () => epoch, getToken: () => (store.isLoggedIn ? 'synthetic' : '') },
       onPullDownRefresh: () => {},
       onShow: (fn: () => void) => {
         hooks.show = fn
@@ -92,9 +119,10 @@ async function setup(fromWish = false) {
   )
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
+    .replace(/^import \{\n(?: {2}[^\n]*\n)+\} from '[^']+'\n/gm, '')
     .replace(/^import .* from '(?!vue')[^']+'\n/gm, '')
     .replace("from 'vue'", `from '${import.meta.resolve('vue')}'`)
-  const source = `const { config, createVisiblePoller, useWishActionReturn, useUserStore, getVerification, RequestError, canMeAction, validStudentNumber, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy };`
+  const source = `const { config, createVisiblePoller, useWishActionReturn, useUserStore, getVerification, RequestError, canMeAction, validStudentNumber, verificationInput, submitVerification, getStudentCardAsset, uploadStudentCard, getVerificationDraft, session, onPullDownRefresh, onShow, onHide, onUnload } = globalThis.__verificationPage;\n${script}\nexport { refreshReview, refreshDraft, candidate, currentReview, reviewState, refreshing, name, studentNumber, asset, assetEpoch, error, submitReal, queryAsset, canSubmitReal, canUpload, chooseCard, uploading, submitting, querying, busy, retrySubmission, pendingSubmission, applicationInReview };`
   const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
   }).outputText
@@ -115,6 +143,13 @@ async function setup(fromWish = false) {
       const callback = scheduled.get(interval)
       scheduled.delete(interval)
       return callback
+    },
+    setDraft: (active: StudentCardAsset | null, next: StudentCardAsset | null = null) => {
+      activePhoto = active
+      candidatePhoto = next
+    },
+    failDraft: (failure: boolean) => {
+      draftFailure = failure
     },
     setSubmit: (fn: typeof submit) => {
       submit = fn
@@ -272,16 +307,24 @@ test('B14 / I1-04：冲突只重读不自动重提，缺失授权拒绝提交', 
   assert.equal(attempts, 1)
   assert.equal(page.canUpload.value, false)
 })
-test('B14 / I1-S01/S02：单次查询不自动认证，离开丢弃、重入不恢复资产、404清引用', async () => {
-  const { page, hooks, setQuery, RequestError, store } = await setup()
+test('扫描通过后重新进入可恢复本人照片，旧会话响应不会回填', async () => {
+  const { page, hooks, setDraft, setQuery, store } = await setup()
+  setDraft(null, { asset_id: 'synthetic-asset', scan_status: 'pending' })
   hooks.show!()
   await settle()
-  page.assetEpoch.value = 1
-  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'pending' }
   await page.queryAsset()
   assert.equal(page.asset.value.scan_status, 'approved')
   assert.equal(store.user.verification, 'rejected')
+  page.name.value = '样例'
+  hooks.hide!()
+  assert.equal(page.asset.value, null)
+  assert.equal(page.name.value, '')
+  hooks.show!()
+  await settle()
+  assert.equal(page.asset.value.asset_id, 'synthetic-asset')
   let resolve!: (value: unknown) => void
+  setDraft(page.asset.value, { asset_id: 'replacement', scan_status: 'pending' })
+  await page.refreshDraft()
   setQuery(
     () =>
       new Promise((done) => {
@@ -290,16 +333,11 @@ test('B14 / I1-S01/S02：单次查询不自动认证，离开丢弃、重入不�
   )
   const pending = page.queryAsset()
   hooks.hide!()
+  setDraft(null)
   hooks.show!()
-  resolve({ asset_id: 'synthetic-asset', scan_status: 'approved' })
+  resolve({ asset_id: 'replacement', scan_status: 'approved' })
   await pending
-  assert.equal(page.asset.value, null)
-  page.assetEpoch.value = 1
-  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'approved' }
-  setQuery(async () => {
-    throw new RequestError(404)
-  })
-  await page.queryAsset()
+  await settle()
   assert.equal(page.asset.value, null)
 })
 
@@ -332,7 +370,7 @@ test('T013：选图临时隐藏保留表单，扫描通过且字段完整才可�
     }
     choose({ tempFilePaths: ['synthetic-path'] })
     await pending
-    assert.equal(page.asset.value.asset_id, 'synthetic-upload')
+    assert.equal(page.candidate.value.asset_id, 'synthetic-upload')
     assert.equal(page.canSubmitReal.value, false)
     await page.queryAsset()
     assert.equal(page.canSubmitReal.value, true)
@@ -442,42 +480,58 @@ test('申请回执确认待审核，后续本人资格刷新失败也保留记�
   assert.equal(reads, 0)
 })
 
-test('图片扫描拒绝和通过都悬浮提示，分别提示重传和提交认证申请', async () => {
-  const { page, hooks, setQuery, modals } = await setup()
+test('替换照片拒绝时保留可用旧图，候选通过后更新草稿', async () => {
+  const { page, hooks, setDraft, setQuery, modals } = await setup()
+  const original = { asset_id: 'original', scan_status: 'approved' } as const
+  setDraft(original, { asset_id: 'replacement', scan_status: 'pending' })
   hooks.show!()
   await settle()
-  page.assetEpoch.value = 1
-  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'pending' }
   setQuery(async (id) => ({ asset_id: id, scan_status: 'rejected' }))
   await page.queryAsset()
   assert.equal(modals[0]?.title, '图片扫描未通过')
-  assert.match(modals[0]?.content ?? '', /安全内容检查/)
-  await page.queryAsset()
-  assert.equal(modals.length, 1)
-  page.asset.value = { asset_id: 'another-asset', scan_status: 'pending' }
+  assert.equal(page.asset.value.asset_id, 'original')
+  assert.equal(page.candidate.value.scan_status, 'rejected')
+  setDraft(original, { asset_id: 'another-asset', scan_status: 'pending' })
+  await page.refreshDraft()
   setQuery(async (id) => ({ asset_id: id, scan_status: 'approved' }))
   await page.queryAsset()
   assert.equal(modals[1]?.title, '图片扫描通过')
-  assert.match(modals[1]?.content ?? '', /提交认证申请/)
+  assert.equal(page.asset.value.asset_id, 'another-asset')
+  assert.equal(page.candidate.value, null)
 })
 
-test('扫描服务不可用时悬浮提示提示，并保留图片供手动重新查询', async () => {
-  const { page, hooks, setQuery, RequestError, modals } = await setup()
+test('扫描服务不可用时保留候选供手动刷新', async () => {
+  const { page, hooks, setDraft, setQuery, RequestError, modals } = await setup()
+  setDraft(null, { asset_id: 'synthetic-asset', scan_status: 'pending' })
   hooks.show!()
   await settle()
-  page.assetEpoch.value = 1
-  page.asset.value = { asset_id: 'synthetic-asset', scan_status: 'pending' }
   setQuery(async () => {
     throw new RequestError(503, 'DEPENDENCY_UNAVAILABLE')
   })
   await page.queryAsset()
-  assert.equal(modals[0]?.title, '图片扫描查询未完成')
-  assert.match(modals[0]?.content ?? '', /安全扫描服务暂未能完成处理/)
-  assert.equal(page.asset.value.asset_id, 'synthetic-asset')
+  assert.equal(modals[0]?.title, '暂时无法查询扫描结果')
+  assert.equal(page.candidate.value.asset_id, 'synthetic-asset')
   assert.equal(page.canSubmitReal.value, false)
   setQuery(async (id) => ({ asset_id: id, scan_status: 'approved' }))
   await page.queryAsset()
   assert.equal(modals[1]?.title, '图片扫描通过')
+})
+
+test('扫描通过但草稿读取失败时不报成功，重新读取后采用已审图片', async () => {
+  const s = await setup()
+  s.setDraft(null, { asset_id: 'candidate-photo', scan_status: 'pending' })
+  s.hooks.show!()
+  await settle()
+  s.failDraft(true)
+  await s.page.queryAsset()
+  assert.equal(s.modals.at(-1)?.title, '暂时无法确认可用照片')
+  assert.equal(s.page.candidate.value.scan_status, 'pending')
+  assert.equal(s.page.canSubmitReal.value, false)
+  s.failDraft(false)
+  await s.page.queryAsset()
+  assert.equal(s.modals.at(-1)?.title, '图片扫描通过')
+  assert.equal(s.page.asset.value.asset_id, 'candidate-photo')
+  assert.equal(s.page.candidate.value, null)
 })
 
 test('上传后自动查询，等待超过两分钟时悬浮提示并停止自动查询', async (context) => {
@@ -499,7 +553,7 @@ test('上传后自动查询，等待超过两分钟时悬浮提示并停止自�
     return { asset_id: id, scan_status: 'pending' }
   })
   await page.chooseCard()
-  assert.equal(modals[0]?.title, '图片已受理，等待安全扫描。')
+  assert.equal(modals[0]?.title, '照片已上传，可以离开后再查看。')
   await settle()
   nextScan()?.()
   await settle()
@@ -509,8 +563,33 @@ test('上传后自动查询，等待超过两分钟时悬浮提示并停止自�
   nextScan()?.()
   await settle()
   assert.equal(reads, 2)
-  assert.equal(modals[1]?.title, '图片扫描时间较长')
+  assert.equal(modals[1]?.title, '扫描时间较长')
   assert.equal(nextScan(), undefined)
   await page.queryAsset()
   assert.equal(reads, 3)
+})
+
+test('认证结果未知时先查审核记录，仍可提交则用原输入及幂等键复核', async () => {
+  const s = await setup()
+  s.config.verificationWritesReady = true
+  s.setDraft({ asset_id: 'synthetic-active', scan_status: 'approved' })
+  const attempts: unknown[][] = []
+  s.setSubmit(async (input, key) => {
+    attempts.push([input, key])
+    if (attempts.length === 1) throw new s.RequestError(504)
+    return { request_id: 'synthetic-review', version: 8, status: 'pending' }
+  })
+  s.hooks.show!()
+  await settle()
+  s.page.name.value = '合成姓名'
+  s.page.studentNumber.value = '202600001234'
+  await s.page.submitReal()
+  assert(s.page.pendingSubmission.value)
+  await s.page.submitReal()
+  assert.equal(attempts.length, 1)
+  await s.page.retrySubmission()
+  assert.deepEqual(attempts[1], attempts[0])
+  assert.equal(s.page.pendingSubmission.value, null)
+  assert.equal(s.page.applicationInReview.value, true)
+  assert.equal(s.page.name.value, '')
 })

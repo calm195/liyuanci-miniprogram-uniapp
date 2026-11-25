@@ -39,6 +39,7 @@ export interface ApiResponse<T> {
 export interface StudentCardAsset {
   asset_id: string
   scan_status: 'pending' | 'approved' | 'rejected'
+  scanned_at?: string
 }
 export interface VerificationInput {
   student_number: string
