@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { reactive } from 'vue'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
-import { identityFor } from '../src/utils/whisper-content.ts'
+import { identityFor, whisperTagsDraft } from '../src/utils/whisper-content.ts'
 import { matchesSchema } from '../src/utils/whispers-schema.ts'
 import { whisperSchemas } from '../src/utils/whispers-contract-extensions.ts'
 import { emptyWish, validateWish } from '../src/utils/wish.ts'
@@ -268,6 +268,7 @@ test('半匿名标签可从已选性别改为不公开，保留其他已选标�
     pageScript(new URL('../src/components/WhisperIdentity.vue', import.meta.url)) +
       '\nexport { pick }',
     {
+      useUserStore: () => ({ validated: false }),
       defineProps: () => ({
         mode: 'semi',
         tags: { campus: 'wushan', gender: 'female', grade: '' },
@@ -282,6 +283,7 @@ test('半匿名标签可从已选性别改为不公开，保留其他已选标�
       campuses: [{ value: 'wushan', label: '五山' }],
       genders: [{ value: 'female', label: '女' }],
       semiReady: () => true,
+      whisperTagsDraft,
     },
   )
   runtime.pick('gender', { detail: { value: 0 } })

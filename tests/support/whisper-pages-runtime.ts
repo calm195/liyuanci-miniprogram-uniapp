@@ -255,6 +255,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     refresh: [],
   }
   const platform = {
+    onShareAppMessage: () => {},
     onShow: (fn: () => unknown) => hooks.show!.push(fn),
     onHide: (fn: () => unknown) => hooks.hide!.push(fn),
     onUnload: (fn: () => unknown) => hooks.unload!.push(fn),
@@ -277,18 +278,6 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       RequestError,
       createWhisperScope: api.createWhisperScope,
       uni: { stopPullDownRefresh() {} },
-    },
-  )
-  const feed = await loadRuntime(
-    readFileSync(new URL('../../src/composables/use-whisper-feed.ts', import.meta.url), 'utf8'),
-    {
-      ...platform,
-      listWhisperPosts: api.listWhisperPosts,
-      useWhispersStore: () => module,
-      useWhisperPage: controller.useWhisperPage,
-      mergeWhisperPage: content.mergeWhisperPage,
-      canWhisperAction: api.canWhisperAction,
-      whisperKey: api.whisperKey,
     },
   )
   const postEditor = await loadRuntime(
@@ -352,23 +341,40 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
       uni: eventBus,
     },
   )
+  const hugs = await loadRuntime(
+    readFileSync(new URL('../../src/composables/use-whisper-hug.ts', import.meta.url), 'utf8'),
+    { ...api, session, useLogin: login.useLogin },
+  )
+  const feed = await loadRuntime(
+    readFileSync(new URL('../../src/composables/use-whisper-feed.ts', import.meta.url), 'utf8'),
+    {
+      ...platform,
+      listWhisperPosts: api.listWhisperPosts,
+      useWhispersStore: () => module,
+      useWhisperPage: controller.useWhisperPage,
+      mergeWhisperPage: content.mergeWhisperPage,
+      useLoginRefresh: login.useLoginRefresh,
+      useWhisperHug: hugs.useWhisperHug,
+    },
+  )
   const exports: Record<string, string> = {
     'capsules/index': 'items,cursor,ready,load,page',
     'capsules/create': 'body,date,time,second,accepted,receipt,canCreate,load,submit,page',
     'capsules/detail': 'id,record,allowed,load,command,page',
     editor:
-      'id,record,title,body,mode,tags,nickname,identityNotice,canSave,changed,load,save,submit,withdraw,commentsSetting,page',
+      'id,record,title,body,mode,tags,nickname,identityNotice,canSave,changed,identityNeedsConfirmation,confirmIdentity,load,save,submit,withdraw,commentsSetting,page',
     nickname: 'state,label,canSave,load,save,page',
     mine: 'posts,cursor,ready,load,page',
     settings:
       'tab,state,label,canSave,comments,cursor,ready,load,switchTab,withdraw,openComment,save,page,identityMode,identityTags,identityNotice,saveIdentity',
     detail:
-      'post,ownerPost,comments,cursor,commentsError,load,block,hug,hugCelebrating,edit,cancelEdit,editing,editor,page,openComment,commentEditor',
-    'comment-editor': 'id,postId,record,post,body,mode,tags,nickname,canSubmit,load,submit,page',
+      'post,ownerPost,comments,cursor,commentsError,load,block,hug,hugCelebrating,edit,cancelEdit,editing,editor,page,openComment,commentEditor,unavailable',
+    'comment-editor':
+      'id,postId,record,post,body,mode,tags,nickname,canSubmit,load,submit,saveIdentity,page',
     notifications: 'items,cursor,ready,capsule,capsuleNotice,unread,load,markRead,open,page',
     help: 'directory,load,page',
     report: 'target,typeCode,load,submit,page',
-    index: 'items,cursor,ready,busy,error,load,search,hug',
+    index: 'items,cursor,ready,busy,error,load,search,hug,retryReady,retry',
   }
   let source =
     pageScript(
@@ -398,6 +404,7 @@ export async function setup(name: string, query: Record<string, string> = {}, gu
     useWhispersStore: () => module,
     useWhisperPage: controller.useWhisperPage,
     useWhisperFeed: feed.useWhisperFeed,
+    useWhisperHug: hugs.useWhisperHug,
     useLogin: login.useLogin,
     useLoginRefresh: login.useLoginRefresh,
     useWhisperPostEditor: postEditor.useWhisperPostEditor,

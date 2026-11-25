@@ -8,11 +8,40 @@ import type {
 } from '../types/whispers.ts'
 import { whisperSchemas } from './whispers-contract-extensions.ts'
 import { matchesSchema } from './whispers-schema.ts'
+import { campuses, genders } from '../types/wish.ts'
 
 export type WhisperTagsDraft = {
   campus: Tags['campus'] | ''
   gender: Tags['gender'] | ''
   grade: string
+}
+
+export function whisperTagsDraft(identity?: IdentityInput | null): WhisperTagsDraft {
+  return { campus: '', grade: '', gender: '', ...(identity?.mode === 'semi' ? identity.tags : {}) }
+}
+
+export function whisperTagLabels(tags: WhisperTagsDraft, config: ModuleConfig | null) {
+  return {
+    campus: campuses.find((item) => item.value === tags.campus)?.label,
+    grade: config?.grade_dictionary.items.find((item) => item.code === tags.grade)?.label,
+    gender: genders.find((item) => item.value === tags.gender)?.label,
+  }
+}
+
+export function whisperIdentityPreview(
+  mode: IdentityInput['mode'],
+  tags: WhisperTagsDraft,
+  config: ModuleConfig | null,
+  approvedLabel?: string,
+  hidden?: boolean,
+  profileNickname?: string,
+) {
+  if (mode === 'named') return approvedLabel || '树洞昵称暂不可用'
+  if (mode === 'anonymous') return '小鲤鱼 · 跨帖重新分配匿名身份'
+  if (hidden) return '小鲤鱼 · 全局隐藏已开启'
+  const labels = Object.values(whisperTagLabels(tags, config)).filter(Boolean)
+  if (!labels.length) return '请选择要展示的标签'
+  return [profileNickname?.trim(), ...labels].filter(Boolean).join(' · ')
 }
 
 export const whisperStates: Record<OwnerPost['status'] | OwnerComment['status'], string> = {
@@ -58,6 +87,7 @@ export function identityFor(
     if (!nickname?.active) throw new Error('请先设置并等待树洞昵称审核通过。')
     return { mode, nickname_version: nickname.active.nickname_version }
   }
+  if (!tags.campus && !tags.grade && !tags.gender) throw new Error('保留至少一项，或选择完全匿名。')
   if (
     !semiReady(config) ||
     (tags.grade && !config.grade_dictionary.items.some((item) => item.code === tags.grade))

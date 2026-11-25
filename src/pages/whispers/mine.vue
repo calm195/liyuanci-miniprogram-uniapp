@@ -2,16 +2,19 @@
 import { useLoginRefresh } from '@/composables/use-login'
 import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
-import AppIcon from '@/components/AppIcon.vue'
+import WhisperContent from '@/components/WhisperContent.vue'
+import LoginLink from '@/components/LoginLink.vue'
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { callWhisper } from '@/api/whispers'
 import { session } from '@/utils/session'
 import { useWhispersStore } from '@/stores/whispers'
+import { useUserStore } from '@/stores/user'
 import { useWhisperPage } from '@/composables/use-whisper-page'
 import { mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
 import type { OwnerPost } from '@/types/whispers'
 const module = useWhispersStore()
+const user = useUserStore()
 const posts = ref<OwnerPost[]>([])
 const cursor = ref<string | null>(null)
 const ready = ref(false)
@@ -27,7 +30,7 @@ async function load(more = false) {
   if (more && !cursor.value) return
   const previous = more ? cursor.value! : undefined
   await page.read(async (active) => {
-    if (!session.getToken()) throw new Error('请登录后查看自己的心事。')
+    if (!session.getToken()) return
     if (!more) await module.refresh()
     if (!active()) return
     if (!module.config?.enabled) throw new Error('悄悄话尚未开放或当前不可用。')
@@ -50,82 +53,105 @@ useLoginRefresh(() => load())
 </script>
 <template>
   <AppPage responsive-padding>
-    <PageHeading title="我的心事" description="每一段表达，都值得被认真对待。" />
-    <view v-for="post in posts" :key="post.id" class="ui-section ce-group">
-      <text class="ui-copy post-heading">{{ post.title || '未命名悄悄话' }}</text>
-      <view class="post-meta"
-        ><text class="ui-copy author-tag">帖主</text
-        ><text class="ui-copy">{{ whisperStates[post.status] }}</text></view
+    <PageHeading title="我的心事" />
+    <view class="whisper-mine-list">
+      <view v-for="post in posts" :key="post.id" class="whisper-mine-card">
+        <navigator
+          v-if="post.title || post.body || post.allowed_actions.length"
+          class="whisper-mine-link"
+          hover-class="tap-feedback"
+          :url="`/pages/whispers/detail?id=${encodeURIComponent(post.id)}&manage=1`"
+        >
+          <WhisperContent v-if="post.title || post.body" :content="post" preview />
+          <text v-else class="whisper-mine-state">这条心事暂时无法查看</text>
+          <view class="whisper-mine-meta">
+            <text>{{ whisperStates[post.status] }}</text
+            ><text>查看心事 ›</text>
+          </view>
+        </navigator>
+        <template v-else>
+          <text class="whisper-mine-state">{{ whisperStates[post.status] }}</text>
+          <text class="whisper-mine-meta">这条心事暂时无法查看。</text>
+        </template>
+        <text v-if="post.review_result?.reason" class="ui-meta notice">{{
+          post.review_result.reason
+        }}</text>
+        <text v-if="post.review_result?.revision_suggestion" class="ui-meta notice">{{
+          post.review_result.revision_suggestion
+        }}</text>
+      </view>
+      <view v-if="!posts.length && !user.isLoggedIn" class="whisper-mine-card">
+        <LoginLink class="ui-link">登录后查看我的心事</LoginLink>
+      </view>
+      <view v-else-if="busy && !posts.length" class="whisper-mine-card">
+        <text class="whisper-mine-meta">正在加载我的心事…</text>
+      </view>
+      <view v-else-if="ready && !posts.length && !error" class="whisper-mine-card empty-state">
+        <text class="whisper-mine-meta">还没有心事。</text>
+      </view>
+      <button
+        v-if="cursor"
+        class="ui-button"
+        :disabled="busy || writing || retryReady"
+        :loading="isPageActionPending('whisper-mine-more')"
+        @click="runPageAction(() => load(true), 'whisper-mine-more')"
       >
-      <text v-if="post.body" class="ui-copy own-post-excerpt">{{ post.body }}</text>
-      <text v-if="post.review_result?.reason" class="ui-meta notice">{{
-        post.review_result.reason
-      }}</text>
-      <text v-if="post.review_result?.revision_suggestion" class="ui-meta notice">{{
-        post.review_result.revision_suggestion
-      }}</text>
-      <navigator
-        class="ui-link small-link"
-        :url="`/pages/whispers/detail?id=${encodeURIComponent(post.id)}&manage=1`"
-        >查看心事 ›</navigator
+        加载下一页
+      </button>
+      <AppNotice :message="error" kind="error" />
+      <button
+        v-if="error"
+        class="ui-button"
+        :disabled="busy"
+        :loading="isPageActionPending('whisper-mine-reload')"
+        @click="runPageAction(() => load(), 'whisper-mine-reload')"
       >
+        重新读取
+      </button>
+      <navigator url="/pages/whispers/editor" class="ui-button ui-button-primary">
+        ＋ 写心事
+      </navigator>
     </view>
-    <view v-if="ready && !posts.length && !busy && !error" class="empty-state"
-      ><AppIcon name="chat" :size="52" /><text class="ui-copy"
-        >还没有心事，想说的话可以慢慢写。</text
-      ></view
-    >
-    <button
-      v-if="cursor"
-      class="ui-button"
-      :disabled="busy || writing || retryReady"
-      :loading="isPageActionPending('whisper-mine-more')"
-      @click="runPageAction(() => load(true), 'whisper-mine-more')"
-    >
-      加载下一页
-    </button>
-    <AppNotice :message="error" kind="error" />
-    <navigator url="/pages/whispers/editor" class="ui-button ui-button-primary"
-      >＋ 说说心事</navigator
-    >
   </AppPage>
 </template>
 <style scoped>
-.ui-section.ce-group {
+.whisper-mine-list {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 24rpx;
+}
+.whisper-mine-card {
   min-width: 0;
+  padding: 28rpx;
+  border: 1px solid var(--theme-line);
+  border-radius: 34rpx;
+  background: var(--theme-surface);
 }
-
-.post-heading {
+.whisper-mine-card .whisper-mine-link {
   display: block;
-  font-size: 34rpx;
-  font-weight: 600;
-  margin-bottom: 16rpx;
+  margin: 0;
+  color: var(--theme-ink);
 }
-.post-meta {
+.whisper-mine-state {
+  display: block;
+  margin: 0 0 12rpx;
+  color: var(--theme-ink);
+  font-size: 28rpx;
+  font-weight: 650;
+}
+.whisper-mine-meta {
   display: flex;
-  align-items: center;
-  gap: 16rpx;
-  margin-bottom: 24rpx;
-  font-size: 24rpx;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin: 12rpx 0 0;
   color: var(--theme-muted);
+  font-size: 24rpx;
 }
-.author-tag {
-  padding: 4rpx 14rpx;
+.whisper-mine-meta text {
+  margin: 0;
+}
+.whisper-mine-link .whisper-mine-meta text:last-child {
   color: var(--theme-teal);
-  background: var(--theme-mint);
-  border-radius: 12rpx;
-}
-.small-link {
-  display: block;
-  margin-top: 24rpx;
-}
-.own-post-excerpt {
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 </style>

@@ -79,12 +79,14 @@ function cancel() {
       aria-label="回复内容"
       @input="input"
     />
+    <slot name="identity" />
     <view v-if="editable || canCancel" class="comment-composer-footer">
       <view v-if="editable" class="comment-composer-meta">
         <text v-if="identityLabel" class="comment-composer-identity">{{ identityLabel }}</text>
         <text class="comment-composer-count">{{ characterCount }} / {{ countLimit }}</text>
       </view>
       <view class="comment-composer-actions">
+        <slot name="actions" />
         <button
           v-if="canCancel"
           class="comment-composer-cancel"

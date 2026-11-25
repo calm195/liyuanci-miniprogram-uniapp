@@ -79,6 +79,32 @@ test('REQ-010：暖评500码点可提交，超长／全空白／孤立代理项�
     dictionary_version: 4,
   })
 })
+test('暖评内调整身份保留原文，使用明确保存的单项标签并沿用同账号偏好', async () => {
+  const s = await setup('comment-editor', { postId })
+  const editor = s.runtime
+  editor.body.value = '保留这条尚未发送的暖评'
+  assert.equal(editor.saveIdentity('semi', { campus: '', grade: '', gender: '' }), false)
+  assert.equal(editor.mode.value, 'anonymous')
+  assert.equal(editor.saveIdentity('semi', { campus: 'wushan', grade: '', gender: '' }), true)
+  assert.equal(editor.body.value, '保留这条尚未发送的暖评')
+  assert.deepEqual(
+    s.preference.readCommentIdentityPreference('synthetic-owner', s.moduleConfig, s.nickname())
+      .identity,
+    { mode: 'semi', tags: { campus: 'wushan' }, dictionary_version: 4 },
+  )
+  assert.equal(
+    s.preference.readCommentIdentityPreference('other-owner', s.moduleConfig, s.nickname()).identity
+      .mode,
+    'anonymous',
+  )
+  await editor.submit()
+  assert.deepEqual(s.calls.find((call) => call.method === 'POST')?.data?.identity, {
+    mode: 'semi',
+    tags: { campus: 'wushan' },
+    dictionary_version: 4,
+  })
+  assert.equal(editor.saveIdentity('anonymous', { campus: '', grade: '', gender: '' }), false)
+})
 test('REQ-010：编辑先读本人暖评，不信路由父帖，跨正文重提使用独立本人版本与最新父上下文', async () => {
   const s = await setup('comment-editor', { id: commentId, postId: '不可用的路由父帖' })
   s.setComment({
@@ -225,7 +251,7 @@ async function hugPage() {
 }
 test('REQ-010：抱抱使用目标状态、父帖版本和本人抱抱版本，采用权威总数而非本地加减', async () => {
   const s = await hugPage()
-  await s.runtime.hug(true)
+  await s.runtime.hug(postId)
   assert.deepEqual(s.calls.find((x) => x.method === 'PUT')!.data, {
     active: true,
     expected_post_version: 8,
@@ -233,7 +259,7 @@ test('REQ-010：抱抱使用目标状态、父帖版本和本人抱抱版本，�
   })
   assert.equal(s.runtime.post.value.hug_count, 6)
   assert.deepEqual(s.runtime.post.value.my_hug, { active: true, version: 5 })
-  await s.runtime.hug(false)
+  await s.runtime.hug(postId)
   assert.deepEqual(s.calls.filter((x) => x.method === 'PUT')[1]!.data, {
     active: false,
     expected_post_version: 8,
@@ -249,7 +275,7 @@ test('详情爱心烟花等抱抱回执，自动关闭，取消和离页清理�
     if (input.method === 'PUT') throw new RequestError('合成超时', -1)
     return original(input)
   })
-  await s.runtime.hug(true)
+  await s.runtime.hug(postId)
   assert.equal(s.runtime.hugCelebrating.value, false)
   assert.equal(s.runtime.page.retryReady.value, true)
   s.transport(original)
@@ -257,9 +283,9 @@ test('详情爱心烟花等抱抱回执，自动关闭，取消和离页清理�
   assert.equal(s.runtime.hugCelebrating.value, true)
   mock.timers.tick(1000)
   assert.equal(s.runtime.hugCelebrating.value, false)
-  await s.runtime.hug(false)
+  await s.runtime.hug(postId)
   assert.equal(s.runtime.hugCelebrating.value, false)
-  await s.runtime.hug(true)
+  await s.runtime.hug(postId)
   assert.equal(s.runtime.hugCelebrating.value, true)
   s.hide()
   assert.equal(s.runtime.hugCelebrating.value, false)
@@ -272,7 +298,7 @@ test('REQ-010：自抱、游客与缺动作不发送；抱抱冲突只重读，�
     allowed_actions: ['whisperHugSet'],
   })
   await self.runtime.load()
-  await self.runtime.hug(true)
+  await self.runtime.hug(postId)
   assert.equal(
     self.calls.some((x) => x.method === 'PUT'),
     false,
@@ -284,7 +310,7 @@ test('REQ-010：自抱、游客与缺动作不发送；抱抱冲突只重读，�
       throw new RequestError('合成旧版本', 409, 'VERSION_CONFLICT', '', 409)
     return original(input)
   })
-  await s.runtime.hug(true)
+  await s.runtime.hug(postId)
   assert.equal(s.calls.filter((x) => x.method === 'PUT').length, 1)
   assert.equal(s.runtime.post.value.my_hug.active, false)
   assert.equal(s.runtime.page.retryReady.value, false)
@@ -296,7 +322,7 @@ test('REQ-010：自抱、游客与缺动作不发送；抱抱冲突只重读，�
     allowed_actions: [],
   })
   await guest.runtime.load()
-  await guest.runtime.hug(true)
+  await guest.runtime.hug(postId)
   assert.equal(
     guest.calls.some((x) => x.method === 'PUT'),
     false,
@@ -311,16 +337,16 @@ test('REQ-010/014：抱抱连点互斥、未知结果原请求重试；暖评屏
         finish = resolve
       }),
   )
-  const first = s.runtime.hug(true)
+  const first = s.runtime.hug(postId)
   await settle()
-  await s.runtime.hug(false)
+  await s.runtime.hug(postId)
   assert.equal(s.calls.filter((x) => x.method === 'PUT').length, 1)
   finish({ post_id: postId, hug_count: 10, my_hug: { active: true, version: 5 } })
   await first
   s.transport(async () => {
     throw new RequestError('合成超时', -1)
   })
-  await s.runtime.hug(false)
+  await s.runtime.hug(postId)
   await s.runtime.page.retry()
   const writes = s.calls.filter((x) => x.method === 'PUT')
   assert.deepEqual(writes[1], writes[2])
@@ -357,13 +383,10 @@ test('广场卡片直接抱抱与取消，列表只采用权威回执并串行�
         }
       : original(input),
   )
-  await Promise.all([
-    s.runtime.hug(s.runtime.items.value[0]),
-    s.runtime.hug(s.runtime.items.value[0]),
-  ])
+  await Promise.all([s.runtime.hug(postId), s.runtime.hug(postId)])
   assert.equal(s.calls.filter((x) => x.url.endsWith('/hugs')).length, 1)
   assert.equal(s.runtime.items.value[0].hug_count, 99)
-  await s.runtime.hug(s.runtime.items.value[0])
+  await s.runtime.hug(postId)
   assert.equal(s.runtime.items.value[0].hug_count, 70)
   assert.equal(s.runtime.items.value[0].my_hug.active, false)
 })

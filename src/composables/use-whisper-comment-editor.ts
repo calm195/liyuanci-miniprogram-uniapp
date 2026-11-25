@@ -3,10 +3,13 @@ import { callWhisper } from '@/api/whispers'
 import { session } from '@/utils/session'
 import { useWhispersStore } from '@/stores/whispers'
 import { useUserStore } from '@/stores/user'
-import { readCommentIdentityPreference } from '@/utils/whisper-comment-preference'
+import {
+  readCommentIdentityPreference,
+  saveCommentIdentityPreference,
+} from '@/utils/whisper-comment-preference'
 import { useWhisperPage } from '@/composables/use-whisper-page'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
-import { identityFor, whisperText, whisperStates } from '@/utils/whisper-content'
+import { identityFor, whisperTagsDraft, whisperText, whisperStates } from '@/utils/whisper-content'
 import type { WhisperTagsDraft } from '@/utils/whisper-content'
 import type { IdentityInput, NicknameState, OwnerComment, PublicPost } from '@/types/whispers'
 
@@ -21,7 +24,7 @@ export function useWhisperCommentEditor() {
   const post = ref<PublicPost | null>(null)
   const body = ref('')
   const mode = ref<IdentityInput['mode']>('anonymous')
-  const tags = ref<WhisperTagsDraft>({ campus: '', gender: '', grade: '' })
+  const tags = ref(whisperTagsDraft())
   const nickname = ref<NicknameState | null>(null)
   const identityNotice = ref('')
   const identitySnapshot = ref<IdentityInput | null>(null)
@@ -32,7 +35,7 @@ export function useWhisperCommentEditor() {
     post.value = null
     body.value = ''
     mode.value = 'anonymous'
-    tags.value = { campus: '', gender: '', grade: '' }
+    tags.value = whisperTagsDraft()
     nickname.value = null
     identityNotice.value = ''
     identitySnapshot.value = null
@@ -54,15 +57,38 @@ export function useWhisperCommentEditor() {
           canWhisperAction('OwnerComment', record.value, 'whisperCommentUpdate')
         : true),
   )
+  function applyIdentity(identity?: IdentityInput | null) {
+    mode.value = identity?.mode ?? 'anonymous'
+    tags.value = whisperTagsDraft(identity)
+  }
+  function saveIdentity(nextMode: IdentityInput['mode'], nextTags: WhisperTagsDraft) {
+    if (id.value || locked.value || !canSubmit.value || !session.getToken()) return false
+    try {
+      const identity = saveCommentIdentityPreference(
+        user.user?.id,
+        nextMode,
+        nextTags,
+        module.config,
+        nickname.value,
+      )
+      identitySnapshot.value = identity
+      applyIdentity(identity)
+      identityNotice.value = ''
+      error.value = ''
+      notice.value = '评论身份已保存。本条暖评会使用新的选择。'
+      return true
+    } catch (failure) {
+      error.value = failure instanceof Error ? failure.message : '评论身份未保存，请重试。'
+      return false
+    }
+  }
   function accept(result: OwnerComment) {
     if ((id.value && result.id !== id.value) || result.post_id !== post.value?.id)
       throw new Error('返回的暖评目标不匹配，请刷新。')
     id.value = result.id
     record.value = result
     body.value = result.body ?? ''
-    mode.value = result.identity_input?.mode ?? 'anonymous'
-    if (result.identity_input?.mode === 'semi')
-      tags.value = { campus: '', gender: '', grade: '', ...result.identity_input.tags }
+    applyIdentity(result.identity_input)
     notice.value = `请求已受理：${whisperStates[result.status]}；是否公开以当前审核结果为准。`
   }
   async function load(preserveDraft = false) {
@@ -96,9 +122,7 @@ export function useWhisperCommentEditor() {
         }
         postId.value = own.post_id
         body.value = own.body ?? ''
-        mode.value = own.identity_input?.mode ?? 'anonymous'
-        if (own.identity_input?.mode === 'semi')
-          tags.value = { campus: '', gender: '', grade: '', ...own.identity_input.tags }
+        applyIdentity(own.identity_input)
         if (
           draft &&
           own.body !== null &&
@@ -123,14 +147,8 @@ export function useWhisperCommentEditor() {
       if (!active()) return
       if (!id.value) {
         const saved = readCommentIdentityPreference(user.user?.id, module.config, nickname.value)
-        mode.value = saved.identity.mode
         identitySnapshot.value = saved.identity
-        tags.value = {
-          campus: '',
-          gender: '',
-          grade: '',
-          ...(saved.identity.mode === 'semi' ? saved.identity.tags : {}),
-        }
+        applyIdentity(saved.identity)
         identityNotice.value = saved.notice
       } else {
         const original = record.value?.identity_input
@@ -171,17 +189,7 @@ export function useWhisperCommentEditor() {
             : '评论身份已变化，请重新读取后再发送。',
         )
       const identity = original
-        ? identityFor(
-            original.mode,
-            {
-              campus: '',
-              gender: '',
-              grade: '',
-              ...(original.mode === 'semi' ? original.tags : {}),
-            },
-            module.config,
-            nickname.value,
-          )
+        ? identityFor(original.mode, whisperTagsDraft(original), module.config, nickname.value)
         : identityFor(mode.value, tags.value, module.config, nickname.value)
       const data = {
         body: whisperText(body.value),
@@ -279,6 +287,7 @@ export function useWhisperCommentEditor() {
     retryReady,
     locked,
     canSubmit,
+    saveIdentity,
     open,
     close,
     load,

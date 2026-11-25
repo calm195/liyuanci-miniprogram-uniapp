@@ -17,18 +17,8 @@ onShow(() => {
 useLoginRefresh(() => load())
 </script>
 <template>
-  <AppPage responsive-padding
-    ><PageHeading
-      title="说说心事"
-      description="先选择你希望展示的身份，再写下想说的话。" /><WhisperPostEditor :editor="editor"
-  /></AppPage>
+  <AppPage responsive-padding>
+    <PageHeading :title="id ? '编辑心事' : '写心事'" />
+    <WhisperPostEditor :editor="editor" />
+  </AppPage>
 </template>
-
-<style scoped>
-.ui-section.ce-group {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-  min-width: 0;
-}
-</style>

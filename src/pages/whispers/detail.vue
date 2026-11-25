@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { useLogin, useLoginRefresh } from '@/composables/use-login'
 import { useWhisperCommentEditor } from '@/composables/use-whisper-comment-editor'
-import WhisperCommentEditor from '@/components/WhisperCommentEditor.vue'
+import WhisperCommentPanel from '@/components/WhisperCommentPanel.vue'
+import WhisperHugButton from '@/components/WhisperHugButton.vue'
 import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
 import AppIcon from '@/components/AppIcon.vue'
 import WhisperContent from '@/components/WhisperContent.vue'
-import WhisperReplies from '@/components/WhisperReplies.vue'
-import CommentThread from '@/components/CommentThread.vue'
-import ContentStats from '@/components/ContentStats.vue'
 import FavoriteButton from '@/components/FavoriteButton.vue'
 import { useContentView } from '@/composables/use-content-view'
 import WhisperPostEditor from '@/components/WhisperPostEditor.vue'
@@ -19,17 +17,13 @@ import { session } from '@/utils/session'
 import { callWhisper } from '@/api/whispers'
 import { useWhispersStore } from '@/stores/whispers'
 import { useWhisperPage } from '@/composables/use-whisper-page'
+import { useWhisperHug } from '@/composables/use-whisper-hug'
 import { mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
 import type { OwnerPost, PublicPost, PublicComment } from '@/types/whispers'
 const { requestLogin } = useLogin()
 const commentEditor = useWhisperCommentEditor()
 let pendingComment: { id?: string; rootId?: string; replyId?: string } | null = null
-const commentLocated = computed(
-  () =>
-    commentEditor.anchor.value === `${commentEditor.rootId.value}:${commentEditor.replyId.value}`,
-)
-
 const module = useWhispersStore()
 const recordView = useContentView('whisper_post')
 const id = ref('')
@@ -71,8 +65,27 @@ function clearPublic() {
   commentsError.value = ''
   seen.clear()
 }
-const page = useWhisperPage(clear)
-const { busy, writing, error, notice, retryReady } = page
+const page = useWhisperPage(clear, () => {
+  if (!manage.value) void load()
+})
+const { busy, writing, error, notice, retryReady, readStatus } = page
+const actionsLocked = computed(() => busy.value || writing.value || retryReady.value)
+const unavailable = computed(() => readStatus.value === 403 || readStatus.value === 404)
+const canBlock = computed(() =>
+  canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate'),
+)
+const canReportPost = computed(
+  () =>
+    !!post.value &&
+    !post.value.viewer_is_author &&
+    canWhisperAction('PublicPost', post.value, 'whisperReportCreate'),
+)
+const canBlockPost = computed(() => !!post.value && !post.value.viewer_is_author && canBlock.value)
+const canWriteComment = computed(
+  () =>
+    !!post.value?.comments_open &&
+    (canWhisperAction('PublicPost', post.value, 'whisperCommentCreate') || !session.getToken()),
+)
 async function edit() {
   if ((!ownerPost.value && !post.value?.viewer_is_author) || editor.locked.value) return
   editor.id.value = id.value
@@ -169,43 +182,19 @@ async function openComment(rootId = '', replyId = '', commentId = '') {
   }
   await commentEditor.open({ postId: target, rootId, replyId, id: commentId })
 }
-async function hug(active: boolean) {
-  const target = post.value
-  if (
-    !target ||
-    target.viewer_is_author ||
-    !target.my_hug ||
-    !canWhisperAction('PublicPost', target, 'whisperHugSet')
-  )
-    return
-  await page.write(
-    'whisperHugSet',
-    {
-      path: { post_id: target.id },
-      data: {
-        active,
-        expected_post_version: target.version,
-        expected_hug_version: target.my_hug.version,
-      },
-      key: whisperKey(),
-    },
-    (result) => {
-      if (result.post_id !== target.id || post.value?.id !== target.id)
-        throw new Error('抱抱回执目标不匹配，请刷新。')
-      // 总数和本人状态均采用权威回执，不用本地加减推算。
-      const justHugged = !post.value.my_hug?.active && result.my_hug.active
-      post.value = { ...post.value, hug_count: result.hug_count, my_hug: result.my_hug }
-      notice.value = result.my_hug.active ? '已送出抱抱。' : '已取消抱抱。'
-      if (justHugged) {
-        hugCelebrating.value = true
-        hugTimer = globalThis.setTimeout(stopHugCelebration, 1000)
-      } else if (!result.my_hug.active) {
-        stopHugCelebration()
-      }
-    },
-    () => load(),
-  )
-}
+const hug = useWhisperHug(
+  page,
+  (targetId) => (post.value?.id === targetId ? post.value : null),
+  (updated, wasActive) => {
+    post.value = updated
+    stopHugCelebration()
+    if (!wasActive && updated.my_hug?.active) {
+      hugCelebrating.value = true
+      hugTimer = globalThis.setTimeout(stopHugCelebration, 1000)
+    }
+  },
+  () => load(),
+)
 async function block(comment?: PublicComment) {
   if (comment && !comments.value.includes(comment)) return
   const target = comment ?? post.value
@@ -233,6 +222,9 @@ async function block(comment?: PublicComment) {
     },
     () => load(),
   )
+}
+function scrollToComments() {
+  void uni.pageScrollTo({ selector: '#whisper-comments', duration: 200 })
 }
 onLoad((query) => {
   id.value = typeof query?.id === 'string' ? query.id : ''
@@ -271,13 +263,8 @@ useLoginRefresh(() => load())
         >♥</text
       >
     </view>
-    <PageHeading
-      v-if="editing || post || ownerPost"
-      :title="
-        (editing ? editor.record.value?.title : (post?.title ?? ownerPost?.title)) || '未命名悄悄话'
-      "
-    />
     <view v-if="editing" class="edit-section">
+      <PageHeading title="编辑心事" />
       <button
         class="ui-button"
         :disabled="editor.locked.value"
@@ -288,180 +275,183 @@ useLoginRefresh(() => load())
       </button>
       <WhisperPostEditor :editor="editor" />
     </view>
-    <view v-else-if="!post && ownerPost" class="ui-section ce-group">
-      <text class="ui-copy">{{ whisperStates[ownerPost.status] }}</text>
-      <text v-if="ownerPost.body" class="ui-copy whitespace-pre-wrap">{{ ownerPost.body }}</text>
-      <text v-if="ownerPost.review_result?.reason" class="ui-meta notice">{{
-        ownerPost.review_result.reason
-      }}</text>
-      <text v-if="ownerPost.review_result?.revision_suggestion" class="ui-meta notice">{{
-        ownerPost.review_result.revision_suggestion
-      }}</text>
-    </view>
-    <view v-if="post && !editing" class="ui-section ce-group"
-      ><WhisperContent :content="post" hide-title /><text class="ui-copy"
-        >暖评 {{ post.comment_count }} · 抱抱 {{ post.hug_count }}</text
-      >
-      <button
-        v-if="
-          post.comments_open &&
-          (canWhisperAction('PublicPost', post, 'whisperCommentCreate') || !session.getToken())
-        "
-        class="ui-button ui-button-primary"
-        :disabled="busy || writing || retryReady"
-        :loading="isPageActionPending('whisper-inline-compose')"
-        @click="runPageAction(() => openComment(), 'whisper-inline-compose')"
-      >
-        写暖评
-      </button>
-      <button
-        v-if="
-          !post.viewer_is_author &&
-          post.my_hug &&
-          canWhisperAction('PublicPost', post, 'whisperHugSet')
-        "
-        class="ui-button hug-button"
-        :aria-label="post.my_hug.active ? '取消抱抱' : '抱抱'"
-        :disabled="busy || writing || retryReady"
-        :loading="isPageActionPending('pages-whispers-detail-button-2')"
-        @click="runPageAction(() => hug(!post!.my_hug!.active), 'pages-whispers-detail-button-2')"
-      >
-        <AppIcon name="heart" :active="post.my_hug.active" :size="34" />
-        抱抱
-      </button>
-      <view class="moderation-actions">
-        <navigator
-          v-if="
-            !post.viewer_is_author && canWhisperAction('PublicPost', post, 'whisperReportCreate')
-          "
-          class="ui-link moderation-link"
-          :url="`/pages/whispers/report?kind=whisper_post&id=${encodeURIComponent(post.id)}`"
-          >举报</navigator
-        >
-        <button
-          v-if="
-            !post.viewer_is_author &&
-            canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
-          "
-          class="moderation-link"
-          :disabled="busy || writing || retryReady"
-          :loading="isPageActionPending('pages-whispers-detail-button-3')"
-          @click="runPageAction(() => block(), 'pages-whispers-detail-button-3')"
-        >
-          屏蔽发布者
-        </button>
+    <view v-else class="whisper-detail">
+      <template v-if="post">
+        <view class="whisper-detail-card">
+          <WhisperContent :content="post" />
+          <view class="post-interactions">
+            <WhisperHugButton :post="post" :toggle="hug" :disabled="actionsLocked" />
+            <button class="post-action" @click="scrollToComments">
+              <AppIcon name="chat" :size="28" /><text>评论 {{ post.comment_count }}</text>
+            </button>
+            <view class="post-favorite">
+              <FavoriteButton
+                kind="whisper_post"
+                :target-id="post.id"
+                :favorited="post.favorited"
+                compact
+              />
+            </view>
+          </view>
+        </view>
+        <view id="whisper-comments">
+          <WhisperCommentPanel
+            :post="post"
+            :comments="comments"
+            :editor="commentEditor"
+            :can-write="canWriteComment"
+            :can-block="canBlock"
+            :has-more="!!cursor"
+            :loading="busy"
+            :disabled="actionsLocked"
+            :error="commentsError"
+            :open-comment="openComment"
+            :load-more="() => load(true)"
+            :reload="() => load()"
+            :block="block"
+          />
+        </view>
+        <view v-if="canReportPost || canBlockPost" class="moderation-actions">
+          <navigator
+            v-if="canReportPost"
+            class="ui-link moderation-link"
+            :url="`/pages/whispers/report?kind=whisper_post&id=${encodeURIComponent(post.id)}`"
+            >举报</navigator
+          >
+          <button
+            v-if="canBlockPost"
+            class="moderation-link"
+            :disabled="actionsLocked"
+            :loading="isPageActionPending('whisper-block-author')"
+            @click="runPageAction(() => block(), 'whisper-block-author')"
+          >
+            屏蔽发布者
+          </button>
+        </view>
+      </template>
+      <view v-else-if="ownerPost" class="whisper-detail-card whisper-detail-status">
+        <text class="whisper-status-title" role="heading">{{
+          ownerPost.title || '这条心事暂时无法查看'
+        }}</text>
+        <text class="ui-meta">{{ whisperStates[ownerPost.status] }}</text>
+        <text v-if="ownerPost.body" class="ui-copy whitespace-pre-wrap">{{ ownerPost.body }}</text>
+        <text v-if="ownerPost.review_result?.reason" class="ui-meta notice">{{
+          ownerPost.review_result.reason
+        }}</text>
+        <text v-if="ownerPost.review_result?.revision_suggestion" class="ui-meta notice">{{
+          ownerPost.review_result.revision_suggestion
+        }}</text>
       </view>
-      <ContentStats :views="post.view_count" :comments="post.comment_count" />
-      <FavoriteButton kind="whisper_post" :target-id="post.id" :favorited="post.favorited" />
-      <text v-if="!post.comments_open" class="ui-copy">评论已关闭，已公开合规评论仅供阅读。</text>
-    </view>
-    <button
-      v-if="!editing && (ownerPost?.allowed_actions.length || post?.viewer_is_author)"
-      class="ui-button"
-      :disabled="busy || writing || retryReady || editor.locked.value"
-      :loading="isPageActionPending('whisper-own-edit')"
-      @click="runPageAction(edit, 'whisper-own-edit')"
-    >
-      {{
-        post?.viewer_is_author || ownerPost?.allowed_actions.includes('whisperPostUpdate')
-          ? '编辑'
-          : '管理帖子'
-      }}
-    </button>
-    <view
-      v-if="
-        !editing && commentEditor.expanded.value && commentEditor.rootId.value && !commentLocated
-      "
-      class="comment-recovery"
-    >
-      <text class="ui-meta">目标暖评暂不在当前列表，编辑内容保留在这里。</text>
+      <template v-else-if="unavailable">
+        <view class="whisper-detail-card">
+          <text class="whisper-status-title" role="heading">这条心事暂时无法查看</text>
+        </view>
+        <navigator url="/pages/whispers/index" open-type="switchTab" class="ui-button">
+          返回悄悄话列表
+        </navigator>
+      </template>
+      <view v-else-if="busy" class="whisper-detail-card">
+        <text class="ui-state">正在加载这条心事…</text>
+      </view>
+      <template v-else-if="error || notice">
+        <view class="whisper-detail-card">
+          <text class="whisper-status-title" role="heading">暂时无法打开这条心事</text>
+        </view>
+        <button
+          v-if="error && !retryReady"
+          class="ui-button"
+          :loading="isPageActionPending('whisper-detail-reload')"
+          @click="runPageAction(() => load(), 'whisper-detail-reload')"
+        >
+          重新读取
+        </button>
+        <navigator url="/pages/whispers/index" open-type="switchTab" class="ui-button">
+          返回悄悄话列表
+        </navigator>
+      </template>
       <button
-        v-if="cursor"
+        v-if="ownerPost?.allowed_actions.length || post?.viewer_is_author"
         class="ui-button"
-        :disabled="busy || writing || retryReady"
-        :loading="isPageActionPending('whisper-reply-find-root')"
-        @click="runPageAction(() => load(true), 'whisper-reply-find-root')"
+        :disabled="actionsLocked || editor.locked.value"
+        :loading="isPageActionPending('whisper-own-edit')"
+        @click="runPageAction(edit, 'whisper-own-edit')"
       >
-        加载更多暖评
+        {{
+          post?.viewer_is_author || ownerPost?.allowed_actions.includes('whisperPostUpdate')
+            ? '编辑心事'
+            : '管理帖子'
+        }}
       </button>
     </view>
-    <WhisperCommentEditor
-      v-if="!editing && (!commentEditor.rootId.value || !commentLocated)"
-      :editor="commentEditor"
-    />
-    <text v-if="!editing && post" class="ui-section-title comments-heading">暖评与回复</text>
-    <CommentThread
-      v-for="comment in editing ? [] : comments"
-      :key="comment.id"
-      :label="comment.identity.label"
-      :body="comment.body"
-      :author="comment.identity.is_author"
-      :time="comment.published_at"
-      :tags="comment.identity.tags"
-      ><WhisperReplies
-        v-if="post"
-        :post="post"
-        :root="comment"
-        :editor="commentEditor"
-        :report-url="
-          canWhisperAction('PublicComment', comment, 'whisperReportCreate')
-            ? `/pages/whispers/report?kind=whisper_comment&id=${encodeURIComponent(comment.id)}&postId=${encodeURIComponent(comment.post_id)}`
-            : undefined
-        "
-        :can-block="
-          !comment.viewer_is_author &&
-          canWhisperAction('Workspace', module.workspace, 'interactionBlockCreate')
-        "
-        :block-disabled="busy || writing || retryReady"
-        :block-loading="isPageActionPending('pages-whispers-detail-button-4' + ':' + comment.id)"
-        @reply="(rootId, replyId) => openComment(rootId, replyId)"
-        @block="
-          runPageAction(() => block(comment), 'pages-whispers-detail-button-4' + ':' + comment.id)
-        "
-      ></WhisperReplies
-    ></CommentThread>
-    <text v-if="!editing && post && !comments.length && !busy && !commentsError" class="ui-copy"
-      >当前页暂无公开暖评。</text
-    >
-    <button
-      v-if="cursor"
-      class="ui-button"
-      :disabled="busy || writing || retryReady"
-      :loading="isPageActionPending('pages-whispers-detail-button-5')"
-      @click="runPageAction(() => load(true), 'pages-whispers-detail-button-5')"
-    >
-      加载下一页暖评</button
-    ><AppNotice :message="commentsError" kind="error" />
     <button
       v-if="retryReady"
       class="ui-button"
       :disabled="writing"
-      :loading="isPageActionPending('pages-whispers-detail-button-6')"
-      @click="runPageAction(page.retry, 'pages-whispers-detail-button-6')"
+      :loading="isPageActionPending('whisper-detail-retry')"
+      @click="runPageAction(page.retry, 'whisper-detail-retry')"
     >
-      使用原请求重试</button
-    ><AppNotice :message="notice" kind="info" /><AppNotice :message="error" kind="error" />
+      使用原请求重试
+    </button>
+    <AppNotice :message="notice" kind="info" />
+    <AppNotice v-if="!unavailable" :message="error" kind="error" />
   </AppPage>
 </template>
 <style scoped>
-.ui-section.ce-group {
+.whisper-detail,
+.whisper-detail-status {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
+  gap: 24rpx;
   min-width: 0;
 }
-
-.ui-button.hug-button {
+.whisper-detail-card {
+  min-width: 0;
+  padding: 28rpx;
+  border: 1px solid var(--theme-line);
+  border-radius: 34rpx;
+  background: var(--theme-surface);
+}
+.whisper-status-title {
+  margin: 0;
+  color: var(--theme-ink);
+  font-size: 36rpx;
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+.post-interactions {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: start;
+  gap: 10rpx;
+  margin-top: 28rpx;
+  padding-top: 8rpx;
+  border-top: 1px solid var(--theme-line);
+}
+.post-favorite {
   display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+button.post-action {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
-  background: #ffbd59;
-  color: #532c00;
+  gap: 6rpx;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4rpx;
+  border: 0;
+  background: transparent;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  white-space: nowrap;
 }
-.ui-button.hug-button[disabled] {
-  background: var(--theme-warning);
-  color: var(--theme-warning-ink);
+button.post-action::after {
+  border: 0;
+}
+.post-action text {
+  margin: 0;
 }
 .hug-firework {
   position: fixed;
@@ -524,14 +514,21 @@ useLoginRefresh(() => load())
   align-items: center;
   flex-wrap: wrap;
   gap: 24rpx;
-  margin-top: 28rpx;
-  padding-top: 24rpx;
-  border-top: 1rpx solid var(--theme-line);
+  padding: 0 8rpx;
 }
-.edit-section {
-  margin-top: 24rpx;
+.moderation-actions .moderation-link {
+  display: flex;
+  align-items: center;
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4rpx;
+  border: 0;
+  background: transparent;
+  color: var(--theme-muted);
+  font-size: 24rpx;
 }
-.comments-heading {
-  margin: 32rpx 0 20rpx;
+.moderation-actions button::after {
+  border: 0;
 }
 </style>

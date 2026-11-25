@@ -7,7 +7,12 @@ import AppIcon from '@/components/AppIcon.vue'
 import { interactionKey, setFavorite } from '@/api/interactions'
 import type { ContentKind } from '@/types/interactions'
 import { session } from '@/utils/session'
-const props = defineProps<{ kind: ContentKind; targetId: string; favorited?: boolean }>()
+const props = defineProps<{
+  kind: ContentKind
+  targetId: string
+  favorited?: boolean
+  compact?: boolean
+}>()
 const emit = defineEmits<{ change: [active: boolean] }>()
 const active = ref(props.favorited === true)
 const busy = ref(false)
@@ -90,7 +95,7 @@ async function toggle() {
 }
 </script>
 <template>
-  <view class="favorite-control"
+  <view class="favorite-control" :class="{ compact }"
     ><button
       class="favorite-button"
       :disabled="busy"
@@ -99,7 +104,7 @@ async function toggle() {
       @click.stop="runPageAction(toggle, 'favorite-toggle')"
     >
       <AppIcon name="star" :active="active" :size="32" /><text>{{
-        pending ? '原请求重试' : active ? '已收藏' : '收藏'
+        pending ? (compact ? '重试收藏' : '原请求重试') : active ? '已收藏' : '收藏'
       }}</text></button
     ><AppNotice :message="error" kind="uncertain"
   /></view>
@@ -126,5 +131,17 @@ button.favorite-button {
 }
 .favorite-button text {
   margin: 0;
+}
+.favorite-control.compact {
+  min-width: 0;
+  align-items: flex-end;
+}
+.compact button.favorite-button {
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 4rpx;
+  font-size: 24rpx;
+  white-space: nowrap;
 }
 </style>

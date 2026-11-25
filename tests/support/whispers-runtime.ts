@@ -1,10 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { loadRuntime } from './page-runtime.ts'
-import {
-  whisperOperations,
-  whisperSchemas,
-  whisperWrites,
-} from '../../src/utils/whispers-contract.ts'
+import { whisperWrites } from '../../src/utils/whispers-contract.ts'
+import { whisperOperations, whisperSchemas } from '../../src/utils/whispers-contract-extensions.ts'
 import { contentSearchParams } from '../../src/utils/content-search.ts'
 import { matchesSchema } from '../../src/utils/whispers-schema.ts'
 

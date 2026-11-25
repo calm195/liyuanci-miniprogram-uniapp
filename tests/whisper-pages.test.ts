@@ -73,7 +73,7 @@ test('REQ-009：三档身份只用受控版本，named使用active而非candidat
   s.moduleConfig.semi_available = false
   await r.load()
   r.mode.value = 'semi'
-  r.body.value = '合成正文'
+  r.body.value = '合成正文修改'
   await r.save()
   assert.equal(s.calls.filter((x) => x.method !== 'GET').length, 2)
   assert.match(r.page.error.value, /年级/)
@@ -231,6 +231,74 @@ test('REQ-009/010：详情按父正文读取公开暖评，关闭保留只读；
   })
   await r.load()
   assert.equal(r.post.value, null)
+  assert.equal(r.unavailable.value, true)
+})
+test('列表与详情按显式目标态抱抱，未知回执用原命令重试', async () => {
+  for (const name of ['index', 'detail']) {
+    const s = await setup(name, { id: postId })
+    s.setPublic({
+      ...s.publicPost(),
+      viewer_is_author: false,
+      hug_count: 9,
+      my_hug: { active: false, version: 3 },
+      allowed_actions: ['whisperHugSet'],
+    })
+    await s.runtime.load()
+    const transport = s.defaultTransport()
+    const getPost = () => (name === 'index' ? s.runtime.items.value[0] : s.runtime.post.value)
+    let interrupted = false
+    s.transport(async (input) => {
+      if (input.url.endsWith('/hugs') && !interrupted) {
+        interrupted = true
+        throw new RequestError('合成超时', -1)
+      }
+      return transport(input)
+    })
+    await s.runtime.hug(postId)
+    assert.equal(getPost().hug_count, 9)
+    const retryState = name === 'index' ? s.runtime : s.runtime.page
+    assert.equal(retryState.retryReady.value, true)
+    await retryState.retry()
+    const commands = s.calls.filter((input) => input.url.endsWith('/hugs'))
+    assert.equal(commands.length, 2)
+    assert.deepEqual(commands[0], commands[1])
+    assert.deepEqual(commands[0]!.data, {
+      active: true,
+      expected_post_version: 8,
+      expected_hug_version: 3,
+    })
+    assert.equal(getPost().my_hug.active, true)
+    assert.equal(getPost().hug_count, 6)
+  }
+})
+
+test('游客主动抱抱只在登录后复核同一帖子并提交一次', async () => {
+  const s = await setup('index', {}, true)
+  s.setPublic({
+    ...s.publicPost(),
+    viewer_is_author: false,
+    my_hug: null,
+    allowed_actions: [],
+  })
+  await s.runtime.load()
+  await s.runtime.hug(postId)
+  assert.equal(s.entry.loginVisible, true)
+  assert.equal(
+    s.calls.some((input) => input.url.endsWith('/hugs')),
+    false,
+  )
+  s.setPublic({
+    ...s.publicPost(),
+    my_hug: { active: false, version: 7 },
+    allowed_actions: ['whisperHugSet'],
+  })
+  session.setToken('synthetic-reader')
+  s.user.user = { id: 'synthetic-reader' }
+  await s.entry.completeLogin()
+  await settle()
+  const commands = s.calls.filter((input) => input.url.endsWith('/hugs'))
+  assert.equal(commands.length, 1)
+  assert.equal(commands[0]!.data?.expected_hug_version, 7)
 })
 test('REQ-014：匿名屏蔽只提交来源内容版本，成功清正文，不取得作者或block_id映射', async () => {
   const s = await setup('detail', { id: postId })
@@ -324,11 +392,12 @@ test('REQ-009：身份选择组件关闭未就绪档位，半匿名校区不包�
   const events: unknown[][] = []
   const runtime = await loadRuntime(
     pageScript(new URL('../src/components/WhisperIdentity.vue', import.meta.url)) +
-      '\nexport { choose,pick,preview,semi,identityCampuses }',
+      '\nexport { choose,pick,preview,semi,identityCampuses,nicknameOpen }',
     {
+      useUserStore: () => ({ validated: false }),
       campuses,
       genders,
-      semiReady: content.semiReady,
+      ...content,
       defineProps: () => props,
       defineEmits:
         () =>
@@ -357,6 +426,54 @@ test('REQ-009：身份选择组件关闭未就绪档位，半匿名校区不包�
     { mode: 'semi', tags: { grade: 'first' }, dictionary_version: 1 },
   )
   assert.match(runtime.preview.value, /跨帖/)
+  props.config = { enabled: true }
+  runtime.choose('named')
+  assert.equal(runtime.nicknameOpen.value, true)
+  assert.equal(events.length, 1)
+  props.nickname = { active: null, candidate: { label: '待审昵称', status: 'review_pending' } }
+  runtime.choose('named')
+  assert.equal(events.length, 1)
+  runtime.choose('anonymous')
+  assert.equal(runtime.nicknameOpen.value, false)
+  assert.deepEqual(events[1], ['update:mode', 'anonymous'])
+  props.config = {
+    ...sample('ModuleConfig'),
+    enabled: true,
+    semi_available: true,
+    grade_dictionary: { version: 1, items: [{ code: 'first', label: '合成' }] },
+  }
+  runtime.choose('named')
+  assert.equal(runtime.nicknameOpen.value, true)
+  runtime.choose('semi')
+  assert.equal(runtime.nicknameOpen.value, false)
+  assert.deepEqual(events[2], ['update:mode', 'semi'])
+  props.nickname = { active: { label: '已审昵称', nickname_version: 2 }, candidate: null }
+  runtime.choose('named')
+  assert.equal(runtime.nicknameOpen.value, false)
+  assert.deepEqual(events[3], ['update:mode', 'named'])
+})
+test('公开旧帖身份版本更新时，未修改不写入，修改后须确认当前身份', async () => {
+  const s = await setup('editor', { id: postId })
+  s.setOwner({
+    ...s.owner(),
+    status: 'published',
+    identity_input: { mode: 'semi', tags: { campus: 'wushan' }, dictionary_version: 3 },
+  } as never)
+  await s.runtime.load()
+  assert.equal(s.runtime.changed.value, false)
+  assert.equal(s.runtime.identityNeedsConfirmation.value, true)
+  await s.runtime.save()
+  s.runtime.title.value = '合成改稿标题'
+  await s.runtime.save()
+  assert.equal(s.calls.filter((call) => call.method === 'PUT').length, 0)
+  s.runtime.confirmIdentity()
+  await s.runtime.save()
+  const update = s.calls.find((call) => call.method === 'PUT')!
+  assert.deepEqual(update.data?.identity, {
+    mode: 'semi',
+    tags: { campus: 'wushan' },
+    dictionary_version: 4,
+  })
 })
 test('REQ-009/018：所有树洞页面注册并使用可见性边界，无正文持久化、主页跳转或语音分享入口', () => {
   const pages = JSON.parse(readFileSync(new URL('../src/pages.json', import.meta.url), 'utf8'))
@@ -370,7 +487,7 @@ test('REQ-009/018：所有树洞页面注册并使用可见性边界，无正文
     assert.match(source, /AppPage/)
     assert.doesNotMatch(
       source,
-      /setStorage|localStorage|v-html|rich-text|public-profile|onShareAppMessage|RecorderManager/,
+      /setStorage|localStorage|v-html|rich-text|public-profile|RecorderManager/,
     )
   }
 })

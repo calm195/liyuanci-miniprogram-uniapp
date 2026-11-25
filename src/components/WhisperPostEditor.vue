@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import WhisperIdentity from '@/components/WhisperIdentity.vue'
+import { useUserStore } from '@/stores/user'
+import { whisperStates } from '@/utils/whisper-content'
 import type { useWhisperPostEditor } from '@/composables/use-whisper-post-editor'
+const user = useUserStore()
 const props = defineProps<{ editor: ReturnType<typeof useWhisperPostEditor> }>()
 const {
   module,
@@ -12,6 +15,8 @@ const {
   tags,
   nickname,
   identityNotice,
+  identityNeedsConfirmation,
+  confirmIdentity,
   page,
   busy,
   writing,
@@ -20,82 +25,111 @@ const {
   retryReady,
   locked,
   canSave,
+  changed,
   allowed,
   save,
   submit,
   withdraw,
   commentsSetting,
 } = props.editor
-import { whisperStates } from '@/utils/whisper-content'
+async function saveDraft() {
+  if (!changed.value || locked.value) return
+  if (record.value?.status === 'published' && !identityNeedsConfirmation.value) {
+    const confirmed = await new Promise<boolean>((resolve) =>
+      uni.showModal({
+        title: '保存为草稿？',
+        content: '保存后，这条心事和原评论将暂时撤下。重新提交并通过审核后，心事会再次公开。',
+        confirmText: '保存草稿',
+        cancelText: '继续编辑',
+        success: (result) => resolve(result.confirm),
+        fail: () => resolve(false),
+      }),
+    )
+    if (!confirmed) return
+  }
+  await save()
+}
 </script>
 <template>
   <view class="post-editor">
-    <text v-if="record" class="ui-copy">{{ whisperStates[record.status] }}</text>
+    <text v-if="record" class="editor-status">当前状态 · {{ whisperStates[record.status] }}</text>
     <text v-if="record?.review_result?.reason" class="ui-copy"
       >审核原因：{{ record.review_result.reason }}</text
     >
     <text v-if="record?.review_result?.revision_suggestion" class="ui-copy"
       >修改建议：{{ record.review_result.revision_suggestion }}</text
     >
-    <text v-if="!id && module.workspace?.verification !== 'verified'" class="ui-copy"
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link"
+      >登录后{{ id ? '编辑心事' : '写心事' }}</LoginLink
+    >
+    <text v-else-if="!id && module.workspace?.verification !== 'verified'" class="ui-copy"
       >发帖需要有效学生认证。</text
     >
     <navigator
-      v-if="!id && module.workspace?.verification !== 'verified'"
+      v-if="user.isLoggedIn && !id && module.workspace?.verification !== 'verified'"
       class="ui-link"
       url="/pages/verification/index"
       >学生认证</navigator
     >
-    <view v-if="canSave" class="ui-section ce-group">
-      <text class="ui-label">标题</text>
+    <view v-if="canSave" class="editor-fields">
+      <label for="whisper-title" class="editor-label">标题</label>
       <input
+        id="whisper-title"
         v-model="title"
         class="ui-input"
         :maxlength="-1"
         :disabled="locked"
-        placeholder="烦恼和心事都可以说一说"
+        placeholder="给心事起个名字"
         placeholder-class="field-placeholder"
       />
-      <text class="ui-meta input-hint">给心事起个名字，最多40个字</text>
-      <text class="ui-label">详情</text>
+      <text class="editor-count">{{ Array.from(title).length }} / 40</text>
+      <label for="whisper-body" class="editor-label">正文</label>
       <textarea
+        id="whisper-body"
         v-model="body"
         class="ui-textarea"
         :maxlength="-1"
         :disabled="locked"
-        placeholder="写下你的心事，最多500个字"
+        placeholder="写下想说的话"
         placeholder-class="field-placeholder"
       />
-      <text class="ui-copy">{{ Array.from(body).length }} / 500</text>
-      <text class="ui-copy"
-        >不自动保存到本地；保存草稿不会公开。公开后改稿会立即撤下整帖与评论读取，需重新提交审核。</text
-      >
+      <text class="editor-count">{{ Array.from(body).length }} / 500</text>
     </view>
     <text v-else-if="record?.body" class="ui-copy whitespace-pre-wrap">{{ record.body }}</text>
     <WhisperIdentity
       v-if="canSave"
       v-model:mode="mode"
       v-model:tags="tags"
+      v-model:nickname="nickname"
       :config="module.config"
-      :nickname="nickname"
       :disabled="locked"
+      :original-nickname-unavailable="identityNeedsConfirmation && mode === 'named'"
+      profile-defaults
     />
-    <text v-if="identityNotice" class="ui-copy">{{ identityNotice }}</text>
+    <text v-if="identityNotice" class="editor-status">{{ identityNotice }}</text>
+    <view v-if="canSave && identityNeedsConfirmation" class="editor-fields">
+      <text class="editor-status"
+        >原身份资料已更新。修改这条心事前，请确认当前选项或重新选择。</text
+      >
+      <button class="ui-button" :disabled="locked" @click="confirmIdentity">
+        {{
+          mode === 'named' && nickname?.active ? `采用「${nickname.active.label}」` : '确认当前身份'
+        }}
+      </button>
+    </view>
     <button
       v-if="canSave"
-      class="ui-button"
-      :disabled="locked"
-      :loading="isPageActionPending('pages-whispers-editor-button-2')"
-      @click="runPageAction(save, 'pages-whispers-editor-button-2')"
+      class="ui-button ui-button-primary"
+      :disabled="locked || !changed || identityNeedsConfirmation"
+      :loading="isPageActionPending('whisper-save-draft')"
+      @click="runPageAction(saveDraft, 'whisper-save-draft')"
     >
-      保存草稿（不会提交）
+      保存草稿
     </button>
-    <text v-if="allowed('whisperPostSubmit')" class="ui-copy"
-      >提交即授权：当前版本审核合格后自动公开。</text
-    >
+    <text v-if="allowed('whisperPostSubmit')" class="editor-status">草稿通过审核后会公开。</text>
     <button
       v-if="allowed('whisperPostSubmit')"
-      class="ui-button ui-button-primary"
+      class="ui-button"
       :disabled="locked"
       :loading="isPageActionPending('pages-whispers-editor-button-3')"
       @click="runPageAction(submit, 'pages-whispers-editor-button-3')"
@@ -120,13 +154,13 @@ import { whisperStates } from '@/utils/whisper-content'
     >
       {{ record?.comments_open ? '关闭评论' : '恢复评论' }}
     </button>
-    <text v-if="record" class="ui-copy"
-      >关闭评论保留已公开合规评论只读，恢复不会补发已取消评论。</text
-    >
+    <text v-if="allowed('whisperCommentsSetting')" class="editor-status">
+      关闭评论后，已公开的暖评仍可阅读。
+    </text>
     <button
       v-if="retryReady"
       class="ui-button ui-button-primary"
-      :disabled="(locked && !retryReady) || writing"
+      :disabled="writing"
       :loading="isPageActionPending('pages-whispers-editor-button-6')"
       @click="runPageAction(page.retry, 'pages-whispers-editor-button-6')"
     >
@@ -137,28 +171,43 @@ import { whisperStates } from '@/utils/whisper-content'
   </view>
 </template>
 <style scoped>
-.post-editor {
+.post-editor,
+.editor-fields {
   display: flex;
   flex-direction: column;
-  gap: 20rpx;
-}
-
-.ui-section.ce-group {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
   min-width: 0;
+  gap: 18rpx;
 }
-
-.field-label {
-  display: block;
-  font-weight: 600;
-  margin: 16rpx 0;
+.editor-fields {
+  gap: 12rpx;
+  padding: 28rpx;
+  border: 1px solid var(--theme-line);
+  border-radius: 34rpx;
+  background: var(--theme-surface);
 }
-.input-hint {
-  display: block;
-  font-size: 24rpx;
+.editor-label {
+  color: var(--theme-ink);
+  font-size: 29rpx;
+  font-weight: 650;
+}
+.editor-fields input,
+.editor-fields textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.editor-fields textarea {
+  min-height: 210rpx;
+}
+.editor-count,
+.editor-status {
+  margin: 0;
   color: var(--theme-muted);
-  margin: 12rpx 0 24rpx;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+.editor-count {
+  align-self: flex-end;
 }
 </style>

@@ -1,5 +1,5 @@
 import { pageTicket } from '@/utils/page-scope'
-import { ref, watch } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
@@ -27,14 +27,20 @@ export function whisperFailure(failure: unknown): string {
 }
 
 // 离页和换会话时清稿，当前页刷新保留同会话内容，异步结果仅回填当前可见页面。
-export function useWhisperPage(clear: () => void) {
+export function useWhisperPage(
+  clear: () => void,
+  reloadAsGuest?: () => void,
+  { embedded = false } = {},
+) {
   const user = useUserStore()
   const busy = ref(false)
   const writing = ref(false)
   const error = ref('')
+  const readStatus = ref(0)
   const notice = ref('')
   const retryReady = ref(false)
-  let visible = false
+  // 表单内的按需面板可在页面 onShow 之后挂载。
+  let visible = embedded
   let generation = 0
   let scope: ReturnType<typeof createWhisperScope> | null = null
   let acceptRetry: ((result: unknown) => void | Promise<void>) | null = null
@@ -56,6 +62,7 @@ export function useWhisperPage(clear: () => void) {
     writing.value = false
     retryReady.value = false
     error.value = ''
+    readStatus.value = 0
     notice.value = ''
   }
   async function read(task: (active: () => boolean) => Promise<void>, more = false) {
@@ -64,6 +71,7 @@ export function useWhisperPage(clear: () => void) {
     const active = ticket()
     if (!more) notice.value = ''
     error.value = ''
+    readStatus.value = 0
     busy.value = true
     try {
       if (config.useMock) throw new Error('树洞需连接真实服务，合成模式不加载业务资料。')
@@ -78,6 +86,7 @@ export function useWhisperPage(clear: () => void) {
           failure.code === -3
         )
           clear()
+        readStatus.value = failure instanceof RequestError ? failure.statusCode : 0
         error.value = whisperFailure(failure)
       }
     } finally {
@@ -178,6 +187,28 @@ export function useWhisperPage(clear: () => void) {
   }
   onHide(leave)
   onUnload(leave)
+  if (embedded) onUnmounted(leave)
   watch([() => session.getEpoch(), () => user.user?.id], reset, { flush: 'sync' })
-  return { busy, writing, error, notice, retryReady, read, write, retry, reset, onRefresh }
+  if (reloadAsGuest) {
+    // 先清除旧账号投影和待续接操作，再以游客身份重新读取当前页面。
+    watch(
+      () => session.getEpoch(),
+      () => {
+        if (visible && !session.getToken()) reloadAsGuest()
+      },
+    )
+  }
+  return {
+    busy,
+    writing,
+    error,
+    readStatus,
+    notice,
+    retryReady,
+    read,
+    write,
+    retry,
+    reset,
+    onRefresh,
+  }
 }

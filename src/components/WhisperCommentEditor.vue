@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick, onUnmounted, ref, watch } from 'vue'
 import type { useWhisperCommentEditor } from '@/composables/use-whisper-comment-editor'
-import { whisperStates } from '@/utils/whisper-content'
+import { whisperIdentityPreview, whisperStates, whisperTagsDraft } from '@/utils/whisper-content'
 import CommentComposer from '@/components/CommentComposer.vue'
+import WhisperIdentity from '@/components/WhisperIdentity.vue'
+import WhisperIdentityPreview from '@/components/WhisperIdentityPreview.vue'
+import { useUserStore } from '@/stores/user'
+import type { IdentityInput } from '@/types/whispers'
 const props = defineProps<{ editor: ReturnType<typeof useWhisperCommentEditor> }>()
+const user = useUserStore()
 const {
+  module,
   id,
+  postId,
   rootId,
+  replyId,
   record,
   post,
   body,
   mode,
+  tags,
   nickname,
   identityNotice,
   expanded,
@@ -23,15 +32,37 @@ const {
   canSubmit,
   submit,
 } = props.editor
-const identityLabel = computed(() => {
-  if (mode.value !== 'named') return mode.value === 'semi' ? '半匿名' : '完全匿名'
+const modeNames = { anonymous: '完全匿名', semi: '半匿名', named: '树洞昵称' }
+const preview = computed(() => {
   const original = record.value?.identity_input
-  if (
+  const unavailable =
     original?.mode === 'named' &&
     original.nickname_version !== nickname.value?.active?.nickname_version
+  return whisperIdentityPreview(
+    mode.value,
+    tags.value,
+    module.config,
+    unavailable ? undefined : nickname.value?.active?.label,
+    user.user?.hide_identity_tags,
+    user.user?.nickname,
   )
-    return '原昵称已不可用'
-  return nickname.value?.active?.label || '树洞昵称'
+})
+const adjusting = ref(false)
+const draftMode = ref<IdentityInput['mode']>('anonymous')
+const draftTags = ref(whisperTagsDraft())
+function adjustIdentity() {
+  if (id.value || !canSubmit.value || locked.value) return
+  draftMode.value = mode.value
+  draftTags.value = { ...tags.value }
+  focusComposer.value = false
+  uni.hideKeyboard()
+  adjusting.value = true
+}
+function saveIdentity() {
+  if (props.editor.saveIdentity(draftMode.value, draftTags.value)) adjusting.value = false
+}
+watch([expanded, id, postId, rootId, replyId], () => {
+  adjusting.value = false
 })
 const instance = getCurrentInstance()
 const focusComposer = ref(false)
@@ -74,14 +105,45 @@ watch(
       :title="rootId ? '回复这条暖评' : id ? '编辑我的暖评' : '写一条暖评'"
       :editable="canSubmit"
       :disabled="locked"
+      :submit-disabled="locked || adjusting"
       :loading="isPageActionPending('pages-whispers-comment-editor-button-2')"
-      :submit-label="id ? '保存修改' : '发送'"
-      :identity-label="identityLabel"
+      :submit-label="id ? '保存修改' : '发送暖评'"
       :maxlength="-1"
       :focus="focusComposer"
       @close="editor.close"
       @submit="runPageAction(submit, 'pages-whispers-comment-editor-button-2')"
     >
+      <template v-if="canSubmit" #identity>
+        <text class="comment-identity-caption">本条暖评身份 · {{ modeNames[mode] }}</text>
+        <WhisperIdentityPreview v-if="!adjusting" :value="preview" />
+        <view v-else class="comment-identity-settings">
+          <WhisperIdentity
+            v-model:mode="draftMode"
+            v-model:tags="draftTags"
+            v-model:nickname="nickname"
+            :config="module.config"
+            :disabled="locked"
+            profile-defaults
+            comment
+          />
+          <text class="comment-identity-caption">保存后用于本条及此设备上的新暖评。</text>
+          <view class="comment-identity-actions">
+            <button class="ui-button" @click="adjusting = false">取消</button>
+            <button class="ui-button ui-button-primary" :disabled="locked" @click="saveIdentity">
+              保存评论身份
+            </button>
+          </view>
+        </view>
+      </template>
+      <template v-if="canSubmit && !id && !adjusting" #actions>
+        <button
+          class="ui-button comment-adjust-identity"
+          :disabled="locked"
+          @click="adjustIdentity"
+        >
+          调整身份
+        </button>
+      </template>
       <template v-if="record || (post && !post.comments_open)" #context>
         <text v-if="record" class="ui-copy">{{ whisperStates[record.status] }}</text>
         <text v-if="record?.review_result?.reason" class="ui-copy"
@@ -132,3 +194,28 @@ watch(
     </CommentComposer>
   </view>
 </template>
+<style scoped>
+.comment-identity-caption {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 24rpx;
+  line-height: 1.5;
+}
+.comment-identity-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+  min-width: 0;
+}
+.comment-identity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+.comment-identity-actions button,
+button.comment-adjust-identity {
+  width: auto;
+  min-height: 44px;
+  margin: 0;
+}
+</style>

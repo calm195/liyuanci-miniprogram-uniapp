@@ -12,16 +12,20 @@ import {
   readCommentIdentityPreference,
   saveCommentIdentityPreference,
 } from '@/utils/whisper-comment-preference'
-import type { WhisperTagsDraft } from '@/utils/whisper-content'
 import { useWhispersStore } from '@/stores/whispers'
 import { useWhisperPage } from '@/composables/use-whisper-page'
 import { canWhisperAction, whisperKey } from '@/utils/whispers'
-import { whisperText, mergeWhisperPage, whisperStates } from '@/utils/whisper-content'
+import {
+  whisperText,
+  mergeWhisperPage,
+  whisperStates,
+  whisperTagsDraft,
+} from '@/utils/whisper-content'
 import type { IdentityInput, NicknameState, OwnerComment } from '@/types/whispers'
 const module = useWhispersStore()
 const user = useUserStore()
 const identityMode = ref<IdentityInput['mode']>('anonymous')
-const identityTags = ref<WhisperTagsDraft>({ campus: '', gender: '', grade: '' })
+const identityTags = ref(whisperTagsDraft())
 const identityNotice = ref('')
 const tab = ref<'nickname' | 'comments'>('nickname')
 const state = ref<NicknameState | null>(null)
@@ -38,7 +42,7 @@ const page = useWhisperPage(() => {
   ready.value = false
   seen.clear()
   identityMode.value = 'anonymous'
-  identityTags.value = { campus: '', gender: '', grade: '' }
+  identityTags.value = whisperTagsDraft()
   identityNotice.value = ''
 })
 const { busy, writing, error, notice, retryReady } = page
@@ -61,7 +65,7 @@ async function load(more = false) {
   const previous = more ? cursor.value! : undefined
   const selected = tab.value
   await page.read(async (active) => {
-    if (!session.getToken()) throw new Error('请登录后管理悄悄话设置。')
+    if (!session.getToken()) return
     if (!more) await module.refresh()
     if (!active()) return
     if (!module.config?.enabled) throw new Error('悄悄话尚未开放或当前不可用。')
@@ -75,12 +79,7 @@ async function load(more = false) {
           result,
         )
         identityMode.value = saved.identity.mode
-        identityTags.value = {
-          campus: '',
-          gender: '',
-          grade: '',
-          ...(saved.identity.mode === 'semi' ? saved.identity.tags : {}),
-        }
+        identityTags.value = whisperTagsDraft(saved.identity)
         identityNotice.value = saved.notice
       }
     } else {
@@ -190,8 +189,9 @@ useLoginRefresh(() => load())
 </script>
 <template>
   <AppPage responsive-padding>
-    <PageHeading title="悄悄话设置" description="设置评论身份，管理昵称与暖评。" />
-    <view class="settings-tabs">
+    <PageHeading title="悄悄话设置" />
+    <LoginLink v-if="!user.isLoggedIn" class="ui-link">登录后设置评论身份</LoginLink>
+    <view v-else class="settings-tabs">
       <button
         class="ui-button"
         :class="{ selected: tab === 'nickname' }"
@@ -212,19 +212,21 @@ useLoginRefresh(() => load())
       </button>
     </view>
     <view v-if="tab === 'nickname' && state" class="identity-settings">
-      <text class="ui-section-title">评论身份</text>
-      <text class="ui-meta">用于此设备上的新评论；已发布内容保持原有身份。</text>
+      <text class="identity-settings-title" role="heading">评论身份</text>
+      <text class="identity-settings-caption">用于这台设备上你之后发送的暖评。</text>
       <WhisperIdentity
         v-model:mode="identityMode"
         v-model:tags="identityTags"
+        v-model:nickname="state"
         :config="module.config"
-        :nickname="state"
-        :disabled="locked"
+        :disabled="locked || !user.validated"
+        profile-defaults
+        comment
       />
       <AppNotice :message="identityNotice" kind="info" />
       <button
         class="ui-button ui-button-primary"
-        :disabled="locked"
+        :disabled="locked || !user.validated"
         :loading="isPageActionPending('whisper-settings-identity')"
         @click="runPageAction(saveIdentity, 'whisper-settings-identity')"
       >
@@ -341,8 +343,18 @@ useLoginRefresh(() => load())
   gap: 16rpx;
   margin: 28rpx 0;
 }
-.identity-settings :deep(.ui-section) {
+.identity-settings-title,
+.identity-settings-caption {
   margin: 0;
+}
+.identity-settings-title {
+  color: var(--theme-ink);
+  font-size: 36rpx;
+  font-weight: 680;
+}
+.identity-settings-caption {
+  color: var(--theme-muted);
+  font-size: 25rpx;
 }
 .ui-section.ce-group {
   display: flex;

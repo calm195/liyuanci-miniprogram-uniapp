@@ -1,5 +1,5 @@
 import { config } from '@/config'
-import { identityFor } from '@/utils/whisper-content'
+import { identityFor, whisperTagsDraft } from '@/utils/whisper-content'
 import type { WhisperTagsDraft } from '@/utils/whisper-content'
 import { matchesSchema } from '@/utils/whispers-schema'
 import { whisperSchemas } from '@/utils/whispers-contract-extensions'
@@ -33,13 +33,10 @@ export function readCommentIdentityPreference(
       (identity.mode === 'semi' && identity.dictionary_version !== module?.grade_dictionary.version)
     )
       throw new Error('身份设置已变化')
-    const tags: WhisperTagsDraft = {
-      campus: '',
-      gender: '',
-      grade: '',
-      ...(identity.mode === 'semi' ? identity.tags : {}),
+    return {
+      identity: identityFor(identity.mode, whisperTagsDraft(identity), module, nickname),
+      notice: '',
     }
-    return { identity: identityFor(identity.mode, tags, module, nickname), notice: '' }
   } catch {
     return {
       ...anonymous,
