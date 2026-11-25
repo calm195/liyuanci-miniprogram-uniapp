@@ -5,13 +5,18 @@ import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
 import { matchmakingID, matchmakingMbtis } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
+import ProfileIdentityCard from '@/components/ProfileIdentityCard.vue'
+import AppSheet from '@/components/AppSheet.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
+import { downloadRandomAvatar, drawRandomProfile } from '@/api/random-profile'
+import type { RandomProfile } from '@/api/random-profile'
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 import { useProfileDraftStore } from '@/stores/profile-drafts'
+import type { ProfileIdentityDraft } from '@/stores/profile-drafts'
 import { RequestError } from '@/utils/request'
 import { whisperKey } from '@/utils/whispers'
 import { updateProfile } from '@/api/settings'
@@ -27,7 +32,7 @@ onLoad((query) => {
 })
 async function returnToActivity() {
   if (!activity.value) return
-  if ((hasUnsavedChanges.value || gradeNumberError.value) && !(await act())) return
+  if ((hasUnsavedChanges.value || gradeNumberError.value) && !(await savePersonalProfile())) return
   uni.navigateBack({
     fail: () => uni.redirectTo({ url: `/pages/matchmaking/detail?id=${activity.value}` }),
   })
@@ -63,11 +68,156 @@ function copyAssessment() {
   })
 }
 const avatarDraft = ref('')
+type AvatarChoice = NonNullable<NonNullable<ProfileIdentityDraft['choice']>['avatar']>
+const identityChoice = ref<ProfileIdentityDraft['choice']>(null)
+const restoreAvatar = ref(false)
+const preparingIdentity = ref(false)
+const profilePartiallySaved = ref(false)
+const randomSheetOpen = ref(false)
+const randomChoice = ref<RandomProfile | null>(null)
+const randomBusy = ref(false)
+const randomError = ref('')
+let previousRandom: RandomProfile | null = null
+let randomGeneration = 0
+const choosingWechatProfile = ref(false)
+const wechatAvatar = ref('')
+const wechatCapabilities = ref({ avatar: false, nickname: false })
+let wechatEpoch = -1
+const displayedNickname = computed(() => identityChoice.value?.nickname ?? nickname.value)
+const displayedAvatar = computed(() =>
+  restoreAvatar.value
+    ? ''
+    : identityChoice.value?.avatar?.src || avatarDraft.value || currentMe.value?.avatar_url,
+)
+const identityDirty = computed(
+  () =>
+    !!(
+      restoreAvatar.value ||
+      avatarDraft.value ||
+      identityChoice.value?.avatar ||
+      displayedNickname.value !== nickname.value
+    ),
+)
+const identityBusy = computed(
+  () => busy.value || writing.value || selectingAvatar.value || preparingIdentity.value,
+)
+const identityChoicesLocked = computed(
+  () => identityBusy.value || !!avatarPending.value || !!profilePending.value,
+)
+function cancelIdentityChoice() {
+  identityChoice.value = null
+  avatarDraft.value = ''
+  restoreAvatar.value = false
+  avatarError.value = ''
+}
+function editNickname(value: string) {
+  identityChoice.value = { avatar: identityChoice.value?.avatar ?? null, nickname: value }
+}
+function acceptIdentityChoice(avatar: AvatarChoice | null, name: string | null) {
+  if (avatar) {
+    avatarDraft.value = ''
+    restoreAvatar.value = false
+  }
+  identityChoice.value = {
+    avatar: avatar ?? identityChoice.value?.avatar ?? null,
+    nickname: name ?? identityChoice.value?.nickname ?? null,
+  }
+  avatarError.value = ''
+}
+function stageDefaultAvatar() {
+  if (identityChoicesLocked.value) return
+  avatarDraft.value = ''
+  if (identityChoice.value) identityChoice.value = { ...identityChoice.value, avatar: null }
+  restoreAvatar.value = true
+  avatarError.value = ''
+}
+function cancelWechatProfile() {
+  choosingWechatProfile.value = false
+  wechatAvatar.value = ''
+  wechatEpoch = -1
+  avatarError.value = ''
+}
+async function openRandomProfile() {
+  if (!visible || randomSheetOpen.value || identityChoicesLocked.value || !allowed('putMeProfile'))
+    return
+  randomSheetOpen.value = true
+  await randomProfile()
+}
+function closeRandomProfile() {
+  randomGeneration++
+  randomSheetOpen.value = false
+  randomChoice.value = null
+  randomBusy.value = false
+  randomError.value = ''
+}
+async function randomProfile() {
+  if (
+    !randomSheetOpen.value ||
+    randomBusy.value ||
+    randomChoice.value?.canReroll === false ||
+    identityChoicesLocked.value ||
+    !allowed('putMeProfile')
+  )
+    return
+  const current = ++randomGeneration
+  const epoch = session.getEpoch()
+  const owner = user.user?.id
+  const active = () =>
+    visible &&
+    current === randomGeneration &&
+    epoch === session.getEpoch() &&
+    owner === user.user?.id
+  randomBusy.value = true
+  randomError.value = ''
+  try {
+    const result = await drawRandomProfile(previousRandom)
+    if (!active()) return
+    randomChoice.value = result
+    previousRandom = result
+  } catch {
+    if (active()) randomError.value = '暂时无法抽取随机资料，请重试。'
+  } finally {
+    if (current === randomGeneration) randomBusy.value = false
+  }
+}
+function acceptRandomProfile() {
+  const choice = randomChoice.value
+  if (!choice || randomBusy.value || identityChoicesLocked.value || !allowed('putMeProfile')) return
+  acceptIdentityChoice({ src: choice.imageUrl, randomImagePath: choice.imagePath }, choice.nickname)
+  closeRandomProfile()
+}
+function startWechatProfile() {
+  if (identityChoicesLocked.value) return
+  wechatEpoch = session.getEpoch()
+  wechatAvatar.value = ''
+  choosingWechatProfile.value = true
+  avatarError.value = ''
+}
+function acceptWechatAvatar(event: { detail: { avatarUrl?: string } }) {
+  if (choosingWechatProfile.value && wechatEpoch === session.getEpoch())
+    wechatAvatar.value = event.detail.avatarUrl || ''
+}
+function acceptWechatProfile(event: unknown) {
+  if (!choosingWechatProfile.value || wechatEpoch !== session.getEpoch()) return
+  const name =
+    (event as { detail?: { value?: { nickname?: string } } }).detail?.value?.nickname?.trim() ?? ''
+  if (Array.from(name).length > 40) {
+    avatarError.value = '昵称最多 40 字。'
+    return
+  }
+  if (!wechatAvatar.value && !name) {
+    avatarError.value = '请选择头像或填写昵称。'
+    return
+  }
+  acceptIdentityChoice(wechatAvatar.value ? { src: wechatAvatar.value } : null, name || null)
+  cancelWechatProfile()
+}
+
 const selectingAvatar = ref(false)
 let avatarPickerHid = false
 let finishAvatarPicker: (() => void) | undefined
 const avatarError = ref('')
-const avatarPending = ref<{ path: string; version: number; key: string } | null>(null)
+const avatarPending = ref<ProfileIdentityDraft['pending']>(null)
 const identityCampus = ref<IdentityTags['campus']>('any')
 const identityGrade = ref('')
 const enrollmentYear = ref(0)
@@ -192,6 +342,15 @@ function clear() {
   nickname.value = ''
   mbti.value = ''
   avatarDraft.value = ''
+  identityChoice.value = null
+  restoreAvatar.value = false
+  preparingIdentity.value = false
+  profilePartiallySaved.value = false
+  closeRandomProfile()
+  previousRandom = null
+  choosingWechatProfile.value = false
+  wechatAvatar.value = ''
+  wechatEpoch = -1
   selectingAvatar.value = false
   avatarPickerHid = false
   finishAvatarPicker?.()
@@ -209,7 +368,7 @@ function clear() {
   readEpoch.value = -1
 }
 async function load() {
-  if (busy.value || writing.value || selectingAvatar.value) return
+  if (busy.value || writing.value || selectingAvatar.value || preparingIdentity.value) return
   const current = ++generation
   const epoch = session.getEpoch()
   let owner = user.user?.id
@@ -262,6 +421,13 @@ async function load() {
       educationLevel.value = values.education_level ?? educationLevel.value
       gradeOverride.value = values.grade_override ?? gradeOverride.value
       profilePending.value = draft.pending
+      if (draft.identity) {
+        identityChoice.value = draft.identity.choice
+        avatarDraft.value = draft.identity.avatarPath
+        restoreAvatar.value = draft.identity.restoreAvatar
+        avatarPending.value = draft.identity.pending
+        profilePartiallySaved.value = draft.identity.avatarSaved
+      }
       drafts.saveCommon(null)
     }
   } catch {
@@ -284,7 +450,7 @@ function confirm(title: string, content: string): Promise<boolean> {
   )
 }
 async function chooseAvatar() {
-  if (busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile')) return
+  if (identityChoicesLocked.value || !allowed('putMeProfile')) return
   const current = generation
   const epoch = session.getEpoch()
   const active = () => visible && current === generation && epoch === session.getEpoch()
@@ -337,14 +503,17 @@ async function chooseAvatar() {
   } finally {
     if (active()) selectingAvatar.value = false
   }
-  if (active()) await changeAvatar()
+  if (active()) {
+    restoreAvatar.value = false
+    if (identityChoice.value) identityChoice.value = { ...identityChoice.value, avatar: null }
+  }
 }
-async function changeAvatar(remove = false) {
+async function changeAvatar(remove = false, confirmed = false) {
   const snapshot = currentMe.value
   if (!snapshot || busy.value || writing.value || selectingAvatar.value || !allowed('putMeProfile'))
     return
   const path = remove ? '' : avatarDraft.value
-  if (remove ? !snapshot.avatar_id && !snapshot.avatar_url : !path) return
+  if (remove ? !avatarPending.value && !snapshot.avatar_id && !snapshot.avatar_url : !path) return
   const current = generation
   const epoch = session.getEpoch()
   const active = () =>
@@ -358,7 +527,8 @@ async function changeAvatar(remove = false) {
   notice.value = ''
   let reload = false
   try {
-    if (remove && !pending && !(await confirm('恢复默认头像', '确定使用默认头像？'))) return
+    if (remove && !pending && !confirmed && !(await confirm('恢复默认头像', '确定使用默认头像？')))
+      return
     if (!active() || !allowed('putMeProfile')) return
     const command = pending ?? { path, version: snapshot.version, key: whisperKey() }
     avatarPending.value = command
@@ -381,6 +551,7 @@ async function changeAvatar(remove = false) {
     me.value = { ...updated, allowed_actions: [...updated.allowed_actions] }
     avatarPending.value = null
     avatarDraft.value = ''
+    restoreAvatar.value = false
     if (updated.version > expectedReceiptVersion) notice.value = '已同步当前头像。'
     else if (path && !updated.avatar_url)
       notice.value = '头像已更新，图片暂不可读取，可下拉重试加载。'
@@ -388,11 +559,15 @@ async function changeAvatar(remove = false) {
   } catch (failure) {
     if (!active()) return
     if (failure instanceof RequestError && failure.error_code === 'UPLOAD_DOMAIN_NOT_ALLOWED') {
-      avatarError.value = '微信未授权此头像上传地址，请联系管理员核对上传域名。'
+      avatarError.value = '头像暂时无法上传，请稍后再试。'
     } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_FILE_UNREADABLE') {
-      avatarPending.value = null
       avatarDraft.value = ''
-      avatarError.value = '微信无法读取所选图片，请重新选择头像。'
+      if (identityChoice.value?.avatar?.randomImagePath) {
+        avatarError.value = '随机头像临时文件已失效，请再次保存。'
+      } else {
+        avatarPending.value = null
+        avatarError.value = '微信无法读取所选图片，请重新选择头像。'
+      }
     } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_TIMEOUT') {
       avatarError.value = '等待头像保存结果超时，请使用原请求重试确认。'
     } else if (failure instanceof RequestError && failure.error_code === 'VERSION_CONFLICT') {
@@ -452,7 +627,7 @@ function queueSave() {
   globalThis.clearTimeout(saveTimer)
   saveQueued = true
   saveTimer = globalThis.setTimeout(() => {
-    if (!writing.value && !selectingAvatar.value) void act(false)
+    if (!writing.value && !selectingAvatar.value && !preparingIdentity.value) void act(false)
   }, 600)
 }
 function editVisibility(value: boolean) {
@@ -551,7 +726,7 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
 }
 
 async function act(manual = true) {
-  if (!visible || busy.value || writing.value || selectingAvatar.value) return false
+  if (!visible || identityBusy.value) return false
   if (gradeNumberError.value && !profilePending.value) {
     error.value = gradeNumberError.value
     return false
@@ -587,8 +762,11 @@ async function act(manual = true) {
     await saveCommon()
     if (!active()) return false
     if (gradeNumberError.value && !error.value) error.value = gradeNumberError.value
-    const saved = !hasUnsavedChanges.value && !error.value
-    if (saved && manual) notice.value = '资料已保存。'
+    const saved = !profileDirty.value && !profilePending.value && !error.value
+    if (saved) {
+      profilePartiallySaved.value = false
+      if (manual) notice.value = '资料已保存。'
+    }
     return saved
   } finally {
     if (active()) {
@@ -597,6 +775,57 @@ async function act(manual = true) {
       if (saveQueued) queueSave()
     }
   }
+}
+async function savePersonalProfile() {
+  if (!visible || identityBusy.value || !allowed('putMeProfile')) return false
+  const choice = identityChoice.value
+  const current = generation
+  const epoch = session.getEpoch()
+  const owner = user.user?.id
+  const active = () =>
+    visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
+  if (
+    choice?.nickname !== undefined &&
+    choice.nickname !== null &&
+    (!choice.nickname.trim() || Array.from(choice.nickname).length > 40)
+  ) {
+    avatarError.value = '请填写 1–40 字的昵称。'
+    return false
+  }
+  if (profilePending.value && !(await act())) return false
+  if (!active()) return false
+  if (choice?.avatar && !avatarDraft.value) {
+    preparingIdentity.value = true
+    try {
+      const path = choice.avatar.randomImagePath
+        ? await downloadRandomAvatar(choice.avatar.randomImagePath)
+        : choice.avatar.src
+      if (!active()) return false
+      avatarDraft.value = path
+      // 下载地址对应不可变素材，临时文件失效后仍用原版本与幂等键确认上传。
+      if (avatarPending.value) avatarPending.value = { ...avatarPending.value, path }
+    } catch {
+      if (active()) avatarError.value = '暂时无法下载随机头像，请再次保存。'
+      return false
+    } finally {
+      if (active()) preparingIdentity.value = false
+    }
+  }
+  const hadAvatar = !!(avatarDraft.value || restoreAvatar.value)
+  if (hadAvatar) {
+    const remove = restoreAvatar.value
+    await changeAvatar(remove, true)
+    if (!active() || avatarError.value || avatarPending.value) return false
+    if (remove) restoreAvatar.value = false
+  }
+  if (choice) {
+    identityChoice.value = null
+    if (choice.nickname !== null) nickname.value = choice.nickname
+  }
+  if (hadAvatar && profileDirty.value) profilePartiallySaved.value = true
+  const saved = await act()
+  if (active() && hadAvatar && !saved) profilePartiallySaved.value = true
+  return saved
 }
 function preserveDraft() {
   const snapshot = currentMe.value
@@ -617,9 +846,19 @@ function preserveDraft() {
     values.education_level = educationLevel.value
   if (gradeOverride.value !== (snapshot.grade_override ?? ''))
     values.grade_override = gradeOverride.value
+  const identity =
+    identityDirty.value || avatarPending.value || profilePartiallySaved.value
+      ? {
+          choice: identityChoice.value,
+          avatarPath: avatarDraft.value,
+          restoreAvatar: restoreAvatar.value,
+          pending: avatarPending.value,
+          avatarSaved: profilePartiallySaved.value,
+        }
+      : undefined
   drafts.saveCommon(
-    Object.keys(values).length || profilePending.value
-      ? { values, pending: profilePending.value }
+    Object.keys(values).length || profilePending.value || identity
+      ? { values, pending: profilePending.value, identity }
       : null,
   )
 }
@@ -649,6 +888,12 @@ watch(
 )
 onShow(() => {
   academicYear.value = currentAcademicYear()
+  // #ifdef MP-WEIXIN
+  wechatCapabilities.value = {
+    avatar: uni.canIUse?.('button.open-type.chooseAvatar') ?? false,
+    nickname: uni.canIUse?.('input.type.nickname') ?? false,
+  }
+  // #endif
   visible = true
   if (avatarPickerHid || selectingAvatar.value) {
     avatarPickerHid = false
@@ -659,8 +904,8 @@ onShow(() => {
   void load()
 })
 onHide(() => {
-  // 微信原生相册或相机临时遮住页面，选图回调仍需在当前会话校验并提交。
-  if (selectingAvatar.value) avatarPickerHid = true
+  // 原生选图临时遮住页面，恢复后再校验并展示预览。
+  if (selectingAvatar.value || choosingWechatProfile.value) avatarPickerHid = true
   else {
     // 离开前提交已编辑且尚未发出的内容，迟到回执仍按页面代次丢弃。
     if (saveQueued) void act(false)
@@ -668,7 +913,10 @@ onHide(() => {
   }
 })
 onUnload(leave)
-const hasUnsavedChanges = computed(() => !!(profileDirty.value || profilePending.value))
+const hasUnsavedChanges = computed(
+  () =>
+    !!(profileDirty.value || profilePending.value || identityDirty.value || avatarPending.value),
+)
 async function refreshProfileDraft() {
   if (busy.value || writing.value || selectingAvatar.value) return
   const snapshot = currentMe.value
@@ -722,58 +970,94 @@ useLoginRefresh(() => load())
     <LoginLink v-if="!user.isLoggedIn" class="ui-section small-link"> 微信登录 › </LoginLink>
 
     <text v-if="busy" class="ui-copy">加载中…</text>
-    <template v-if="currentMe"
-      ><view class="ui-section settings-group">
-        <text class="ui-section-title">账号资料与公开设置</text>
-        <view class="avatar-settings">
-          <ProfileAvatar
-            :src="avatarDraft || currentMe.avatar_url"
-            :size="96"
-            class="profile-avatar"
+    <template v-if="currentMe">
+      <ProfileIdentityCard
+        :avatar="displayedAvatar"
+        :nickname="displayedNickname"
+        :changed="identityDirty"
+        :editable="allowed('putMeProfile')"
+        :disabled="identityBusy"
+        :choices-locked="identityChoicesLocked"
+        :has-pending="!!(avatarPending || profilePending)"
+        :can-restore="!!(currentMe.avatar_id || currentMe.avatar_url) && !restoreAvatar"
+        :wechat-available="wechatCapabilities.avatar || wechatCapabilities.nickname"
+        :can-save="hasUnsavedChanges"
+        :save-label="
+          avatarPending || profilePending
+            ? '确认保存结果'
+            : profilePartiallySaved
+              ? '继续保存资料'
+              : '保存资料'
+        "
+        :choose-avatar="chooseAvatar"
+        :save="savePersonalProfile"
+        @wechat="startWechatProfile"
+        @random="openRandomProfile"
+        @restore="stageDefaultAvatar"
+        @cancel="cancelIdentityChoice"
+        @nickname="editNickname"
+      >
+        <text v-if="avatarPending && !identityBusy" class="ui-meta">头像保存结果待确认。</text>
+        <text v-else-if="profilePartiallySaved" class="ui-meta">头像已保存，其余资料待保存。</text>
+        <AppNotice :message="avatarError" kind="error" />
+      </ProfileIdentityCard>
+      <!-- #ifdef MP-WEIXIN -->
+      <AppSheet v-if="choosingWechatProfile" title="使用微信资料" @close="cancelWechatProfile">
+        <form class="profile-choice-sheet" @submit="acceptWechatProfile">
+          <ProfileAvatar v-if="wechatAvatar" :src="wechatAvatar" :size="100" />
+          <button
+            v-if="wechatCapabilities.avatar"
+            class="ui-button"
+            open-type="chooseAvatar"
+            @chooseavatar="acceptWechatAvatar"
+          >
+            {{ wechatAvatar ? '重新选择微信头像' : '选择微信头像' }}
+          </button>
+          <label v-if="wechatCapabilities.nickname" for="wechat-nickname">微信昵称</label>
+          <input
+            v-if="wechatCapabilities.nickname"
+            id="wechat-nickname"
+            class="ui-input"
+            name="nickname"
+            type="nickname"
+            placeholder="选择微信昵称或手动填写"
           />
-          <view v-if="allowed('putMeProfile')" class="avatar-actions">
+          <AppNotice :message="avatarError" kind="error" />
+          <button class="ui-button ui-button-primary" form-type="submit">使用所选资料</button>
+        </form>
+      </AppSheet>
+      <!-- #endif -->
+      <AppSheet v-if="randomSheetOpen" title="随机头像和昵称" @close="closeRandomProfile">
+        <view class="profile-choice-sheet">
+          <view v-if="randomChoice" class="random-preview">
+            <ProfileAvatar :src="randomChoice.imageUrl" :size="108" />
+            <text>{{ randomChoice.nickname }}</text>
+          </view>
+          <text v-else-if="randomBusy" class="ui-copy">正在抽取…</text>
+          <AppNotice :message="randomError" kind="error" />
+          <view class="random-actions">
             <button
+              v-if="randomChoice?.canReroll || (!randomChoice && randomError)"
               class="ui-button"
-              :disabled="busy || writing || selectingAvatar"
-              :loading="isPageActionPending('settings-select-avatar')"
-              @click="runPageAction(chooseAvatar, 'settings-select-avatar')"
+              :loading="randomBusy"
+              :disabled="randomBusy || identityChoicesLocked"
+              @click="randomProfile"
             >
-              {{ avatarDraft ? '重新选图' : '选择头像' }}
+              {{ randomChoice ? '换一组' : '重试' }}
             </button>
             <button
-              v-if="avatarDraft && (!writing || isPageActionPending('settings-save-avatar'))"
-              class="ui-button"
-              :disabled="busy || writing || selectingAvatar"
-              :loading="isPageActionPending('settings-save-avatar')"
-              @click="runPageAction(() => changeAvatar(), 'settings-save-avatar')"
+              v-if="randomChoice"
+              class="ui-button ui-button-primary"
+              :disabled="randomBusy || identityChoicesLocked"
+              @click="acceptRandomProfile"
             >
-              重试头像上传
-            </button>
-            <button
-              v-else-if="!avatarDraft && (currentMe.avatar_id || currentMe.avatar_url)"
-              class="ui-button"
-              :disabled="busy || writing || selectingAvatar"
-              :loading="isPageActionPending('settings-remove-avatar')"
-              @click="runPageAction(() => changeAvatar(true), 'settings-remove-avatar')"
-            >
-              {{ avatarPending && !writing ? '重试恢复默认头像' : '恢复默认头像' }}
+              使用这组资料
             </button>
           </view>
         </view>
-        <text v-if="avatarDraft" class="ui-text-reset notice">{{
-          writing ? '正在保存头像…' : '当前为头像预览，保存后生效。'
-        }}</text>
-        <AppNotice :message="avatarError" kind="error" />
-        <text class="ui-copy">昵称</text>
-        <input
-          v-model="nickname"
-          class="ui-input"
-          placeholder-class="field-placeholder"
-          :maxlength="-1"
-          :disabled="busy || (writing && !saving) || !allowed('putMeProfile')"
-          placeholder="填写昵称"
-          @input="queueSave"
-        />
+      </AppSheet>
+      <view class="ui-section settings-group">
+        <text class="ui-section-title">公开资料</text>
         <picker
           class="ui-picker"
           :range="campuses.map((item) => item.label)"
@@ -920,20 +1204,21 @@ useLoginRefresh(() => load())
         <text v-if="!allowed('putMeProfile')" class="ui-copy">当前账号没有修改资料的权限。</text>
       </view></template
     >
-    <text v-if="profilePending && !saving" class="ui-text-reset notice"
-      >上次保存结果尚未确认，点「保存资料」可原样重试。</text
+    <view
+      v-if="allowed('putMeProfile') && (saving || profileDirty || profilePending)"
+      class="ui-section"
     >
-    <view v-if="allowed('putMeProfile')" class="ui-section">
-      <text class="ui-meta">修改后自动保存，也可手动保存。</text>
       <text v-if="saving" class="ui-meta">正在保存资料…</text>
-      <text v-else-if="hasUnsavedChanges" class="ui-meta">有改动尚未保存</text>
+      <text v-else-if="profilePending" class="ui-meta">上次保存结果待确认。</text>
+      <text v-else class="ui-meta">公开资料有改动尚未保存。</text>
       <button
-        class="ui-button ui-button-primary"
-        :disabled="busy || writing || selectingAvatar"
-        :loading="isPageActionPending('settings-save-profile')"
-        @click="runPageAction(() => act(), 'settings-save-profile')"
+        v-if="!saving"
+        class="ui-button"
+        :disabled="identityBusy"
+        :loading="isPageActionPending('settings-save-common')"
+        @click="runPageAction(() => act(), 'settings-save-common')"
       >
-        保存资料
+        {{ profilePending ? '确认上次保存' : '保存其他资料' }}
       </button>
     </view>
     <AppNotice :message="notice" kind="info" />
@@ -952,20 +1237,33 @@ useLoginRefresh(() => load())
   margin: 0;
 }
 
-.avatar-settings {
+.profile-choice-sheet {
   display: flex;
-  align-items: center;
-  gap: 24rpx;
-  margin-bottom: 24rpx;
+  flex-direction: column;
+  gap: 14rpx;
+  padding: 18rpx 2rpx;
 }
-.avatar-actions {
+.profile-choice-sheet input,
+.profile-choice-sheet button,
+.random-preview text {
+  margin: 0;
+}
+.random-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14rpx;
+  padding: 20rpx;
+  background: var(--theme-mint);
+  border-radius: 20rpx;
+}
+.random-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
 }
-.avatar-actions button {
-  margin: 0;
-  font-size: 24rpx;
+.random-actions button {
+  flex: 1 0 auto;
 }
 .profile-card,
 .assessment {

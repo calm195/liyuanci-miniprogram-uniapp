@@ -5,9 +5,21 @@ import { session } from '@/utils/session'
 import type { MatchmakingPreferences } from '@/types/matchmaking'
 import type { ProfileUpdate } from '@/types/settings'
 
+export interface ProfileIdentityDraft {
+  choice: {
+    avatar: { src: string; randomImagePath?: string } | null
+    nickname: string | null
+  } | null
+  avatarPath: string
+  restoreAvatar: boolean
+  pending: { path: string; version: number; key: string } | null
+  avatarSaved: boolean
+}
+
 export interface CommonProfileDraft {
   values: Partial<ProfileUpdate>
   pending: { input: ProfileUpdate; key: string } | null
+  identity?: ProfileIdentityDraft
 }
 
 // 草稿与未知结果只保存在当前账号内存中；页面销毁仍可恢复，退出会话立即清除。

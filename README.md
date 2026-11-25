@@ -121,7 +121,7 @@ npm run build:mp-weixin
 
 资料托管文件使用刚获取的服务端签名地址下载，不向 COS 发送业务令牌；需要在微信后台配置下载合法域名。支持文件保存、重进详情定位本地文件、文档打开与文件转发，外链资料仍可复制链接。头像支持 JPG/PNG、2 MiB 内且不超过 4 Mi 像素，宽高须大于20像素。
 
-体验版头像上传使用微信 `uploadFile`，需要在微信公众平台的 `uploadFile` 合法域名中登记 `VITE_API_BASE_URL` 的 HTTPS 源站，例如 `https://kurous.cn`。普通 API 所用的 `request` 合法域名单独配置。私有头像使用后端签发的短效 COS 地址回显，另需登记 COS 下载域名。
+体验版头像上传使用微信 `uploadFile`，需要在微信公众平台的 `uploadFile` 合法域名中登记 `VITE_API_BASE_URL` 的 HTTPS 源站，例如 `https://kurous.cn`。普通 API 所用的 `request` 合法域名单独配置。使用系统随机头像保存资料时，微信会先从同一 API 源站下载素材，须将该源站也登记在 `downloadFile` 合法域名中。私有头像使用后端签发的短效 COS 地址回显，另需登记 COS 下载域名。
 
 ### 操作提示
 

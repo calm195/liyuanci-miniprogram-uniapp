@@ -26,6 +26,19 @@ type Input = {
 }
 const settingsPage = new URL('../src/pages/settings/index.vue', import.meta.url)
 const blacklistPage = new URL('../src/pages/blacklist/index.vue', import.meta.url)
+const apiBaseUrl = 'https://synthetic.invalid/api/v1'
+const randomFirst = {
+  avatar_id: '10000000-0000-4000-8000-000000000001',
+  image_path: '/random-profiles/images/20000000-0000-4000-8000-000000000001',
+  nickname: '安静的荷叶',
+  can_reroll: true,
+}
+const randomSecond = {
+  avatar_id: '10000000-0000-4000-8000-000000000002',
+  image_path: '/random-profiles/images/20000000-0000-4000-8000-000000000002',
+  nickname: '温柔的锦鲤',
+  can_reroll: true,
+}
 
 async function setup(
   query: Record<string, string> = {},
@@ -103,6 +116,31 @@ async function setup(
       },
     },
   )
+  const downloads: { url: string; header?: Record<string, string> }[] = []
+  let download: (
+    index: number,
+  ) => Promise<{ statusCode: number; tempFilePath: string }> = async () => ({
+    statusCode: 200,
+    tempFilePath: 'synthetic-avatar',
+  })
+  const config = { useMock: false, apiBaseUrl }
+  const randomApi = await loadRuntime(
+    readFileSync(new URL('../src/api/random-profile.ts', import.meta.url), 'utf8'),
+    {
+      config,
+      isAllowedApiBaseUrl: (url: string) => url === apiBaseUrl,
+      request: async (input: Input) => {
+        calls.push(input)
+        return transport(input)
+      },
+      uni: {
+        downloadFile: (options: (typeof downloads)[number]) => {
+          downloads.push(options)
+          return download(downloads.length)
+        },
+      },
+    },
+  )
   type PickedImage = { tempFilePath: string; size: number }
   let choose:
     | {
@@ -124,12 +162,11 @@ async function setup(
   const matchmakingDirty = computed(() => matchmakingForm.value.age !== savedPreferences.age)
   const matchmakingError = ref('')
   let failMatchmaking = false
-  const config = { useMock: false }
   const runtime = await loadRuntime(
     pageScript(page) +
       (page === blacklistPage
         ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
-        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,enrollmentYear,educationLevel,gradeOverride,selectEducation,restoreAutomaticGrade,adjustGradeNumber }'),
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,enrollmentYear,educationLevel,gradeOverride,selectEducation,restoreAutomaticGrade,adjustGradeNumber,stageDefaultAvatar,displayedAvatar,editNickname,displayedNickname,savePersonalProfile,cancelIdentityChoice,profilePartiallySaved,randomSheetOpen,randomChoice,randomBusy,randomError,openRandomProfile,randomProfile,closeRandomProfile,acceptRandomProfile }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
@@ -165,6 +202,7 @@ async function setup(
       }),
       ...api,
       ...avatarApi,
+      ...randomApi,
       ...helpers,
       RequestError,
       getWish: (id: string) => {
@@ -228,6 +266,10 @@ async function setup(
     },
     config,
     workspace,
+    downloads,
+    download: (fn: typeof download) => {
+      download = fn
+    },
     chooseImage: (image: PickedImage, type = 'png', width = 256, height = 256) => {
       imageWidth = width
       imageHeight = height
@@ -674,7 +716,7 @@ test('REQ-014/018：解除超时禁止新写，原键原体重试，离页清掉
   assert.equal(s.calls.filter((x) => x.method === 'DELETE').length, 2)
 })
 
-test('头像原生选图返回自动保存，采用服务器回执且重新读取后仍生效', async () => {
+test('头像原生选图返回后等待确认，采用服务器回执且重新读取后仍生效', async () => {
   const s = await setup()
   const r = s.runtime
   r.nickname.value = '未保存昵称'
@@ -692,6 +734,9 @@ test('头像原生选图返回自动保存，采用服务器回执且重新读�
   assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
   s.hooks.show!()
   await picking
+  assert.equal(s.calls.filter((call) => call.url === '/me/avatar').length, 0)
+  assert.equal(r.avatarDraft.value, 'synthetic-avatar-local')
+  await r.changeAvatar()
   const sent = s.calls.find((call) => call.url === '/me/avatar')!
   assert.equal(sent.method, 'POST')
   assert.equal(sent.filePath, 'synthetic-avatar-local')
@@ -731,6 +776,7 @@ test('头像失败用原文件、版本与请求标识重试，恢复默认使�
   const pick = r.chooseAvatar()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
   await pick
+  await r.changeAvatar()
   assert.match(r.avatarError.value, /超时.*原请求重试/)
   await r.changeAvatar()
   assert.match(r.avatarError.value, /仍在处理/)
@@ -758,6 +804,7 @@ test('头像收到超时状态或限流后原样重试文件、版本和幂等�
     const pick = s.runtime.chooseAvatar()
     s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
     await pick
+    await s.runtime.changeAvatar()
     assert.ok(s.runtime.avatarPending.value)
     await s.runtime.changeAvatar()
     const writes = s.calls.filter((input) => input.url === '/me/avatar')
@@ -828,6 +875,7 @@ test('头像重试接受后续变更的最新本人投影，签名缺省时保�
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local', size: 256 })
   await pick
   await r.changeAvatar()
+  await r.changeAvatar()
   assert.equal(r.currentMe.value.version, 21)
   assert.equal(r.avatarPending.value, null)
   assert.match(r.notice.value, /同步当前头像/)
@@ -835,6 +883,7 @@ test('头像重试接受后续变更的最新本人投影，签名缺省时保�
   pick = r.chooseAvatar()
   s.chooseImage({ tempFilePath: 'synthetic-avatar-local-2', size: 256 })
   await pick
+  await r.changeAvatar()
   assert.equal(r.avatarPending.value, null)
   assert.equal(r.currentMe.value.avatar_id, 'synthetic-avatar-id')
   assert.match(r.notice.value, /图片暂不可读取/)
@@ -978,4 +1027,287 @@ test('资料冷启动身份读取跨会话代次，旧结果不回填且释放�
   assert.equal(s.runtime.currentMe.value, null)
   assert.equal(s.runtime.nickname.value, '')
   assert.equal(s.runtime.busy.value, false)
+})
+
+test('默认头像和手填昵称先预览，确认后依次使用头像回执版本保存昵称', async () => {
+  const s = await setup()
+  const r = s.runtime
+  s.user.user = {
+    ...actor,
+    avatar_id: 'synthetic-avatar',
+    avatar_url: 'https://synthetic.invalid/avatar',
+  }
+  await r.load()
+  r.stageDefaultAvatar()
+  r.editNickname('预览昵称')
+  assert.equal(r.displayedAvatar.value, '')
+  assert.equal(r.displayedNickname.value, '预览昵称')
+  assert.equal(
+    s.calls.filter((entry) => entry.method === 'DELETE' || entry.method === 'PUT').length,
+    0,
+  )
+  r.cancelIdentityChoice()
+  assert.equal(r.displayedAvatar.value, 'https://synthetic.invalid/avatar')
+  assert.equal(r.displayedNickname.value, actor.nickname)
+  r.stageDefaultAvatar()
+  r.editNickname('确认昵称')
+  s.transport(async (input) => {
+    if (input.method === 'DELETE') return { ...actor, version: 20 }
+    if (input.url === '/me/profile') return { ...actor, ...input.data, version: 21 }
+  })
+  assert.equal(await r.savePersonalProfile(), true)
+  const changes = s.calls.filter((entry) => entry.method === 'DELETE' || entry.method === 'PUT')
+  assert.deepEqual(
+    changes.map((entry) => entry.method),
+    ['DELETE', 'PUT'],
+  )
+  assert.deepEqual(changes[0]!.data, { expected_version: 19 })
+  assert.equal(changes[1]!.data?.expected_version, 20)
+  assert.equal(changes[1]!.data?.nickname, '确认昵称')
+})
+
+test('头像已保存而昵称结果未知时，重试只发送原昵称请求', async () => {
+  const s = await setup()
+  const r = s.runtime
+  s.user.user = { ...actor, avatar_id: 'synthetic-avatar' }
+  await r.load()
+  let profileAttempts = 0
+  s.transport(async (input) => {
+    if (input.method === 'DELETE') return { ...actor, version: 20 }
+    if (input.url === '/me/profile') {
+      if (++profileAttempts === 1) throw new RequestError('合成超时', -1)
+      return { ...actor, ...input.data, version: 21 }
+    }
+  })
+  r.stageDefaultAvatar()
+  r.editNickname('确认昵称')
+  assert.equal(await r.savePersonalProfile(), false)
+  assert.equal(r.profilePartiallySaved.value, true)
+  assert.equal(await r.savePersonalProfile(), true)
+  assert.equal(r.profilePartiallySaved.value, false)
+  const changes = s.calls.filter((entry) => entry.method === 'DELETE' || entry.method === 'PUT')
+  assert.deepEqual(
+    changes.map((entry) => entry.method),
+    ['DELETE', 'PUT', 'PUT'],
+  )
+  assert.ok(changes[1]!.header?.['Idempotency-Key'])
+  assert.deepEqual(changes[2], changes[1])
+})
+
+test('随机资料首抽可重试，换一组保持弹窗和旧预览，确认仅暂存', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let finishReroll: ((result: typeof randomSecond) => void) | undefined
+  let attempt = 0
+  s.transport(async () => {
+    switch (++attempt) {
+      case 1:
+      case 3:
+        throw new RequestError('合成失败', -1)
+      case 2:
+        return randomFirst
+      default:
+        return new Promise<typeof randomSecond>((resolve) => {
+          finishReroll = resolve
+        })
+    }
+  })
+  await r.openRandomProfile()
+  assert.equal(r.randomSheetOpen.value, true)
+  assert.equal(r.randomChoice.value, null)
+  assert.match(r.randomError.value, /重试/)
+  await r.randomProfile()
+  assert.equal(r.randomChoice.value.nickname, randomFirst.nickname)
+  await r.randomProfile()
+  assert.equal(r.randomSheetOpen.value, true)
+  assert.equal(r.randomChoice.value.nickname, randomFirst.nickname)
+  assert.match(r.randomError.value, /重试/)
+  const reroll = r.randomProfile()
+  assert.equal(r.randomBusy.value, true)
+  assert.equal(r.randomChoice.value.nickname, randomFirst.nickname)
+  await r.randomProfile()
+  r.acceptRandomProfile()
+  assert.equal(r.displayedNickname.value, actor.nickname)
+  finishReroll!({ ...randomSecond, can_reroll: false })
+  await reroll
+  assert.equal(r.randomSheetOpen.value, true)
+  assert.equal(r.randomChoice.value.nickname, randomSecond.nickname)
+  assert.equal(r.randomError.value, '')
+  await r.randomProfile()
+  assert.deepEqual(
+    s.calls.map((entry) => [entry.url, entry.method, entry.data]),
+    [
+      ['/me/random-profile', 'POST', {}],
+      ['/me/random-profile', 'POST', {}],
+      [
+        '/me/random-profile',
+        'POST',
+        { previous_avatar_id: randomFirst.avatar_id, previous_nickname: randomFirst.nickname },
+      ],
+      [
+        '/me/random-profile',
+        'POST',
+        { previous_avatar_id: randomFirst.avatar_id, previous_nickname: randomFirst.nickname },
+      ],
+    ],
+  )
+  r.acceptRandomProfile()
+  assert.equal(r.randomSheetOpen.value, false)
+  assert.equal(r.displayedAvatar.value, apiBaseUrl + randomSecond.image_path)
+  assert.equal(r.displayedNickname.value, randomSecond.nickname)
+  assert.equal(s.downloads.length, 0)
+  r.cancelIdentityChoice()
+  assert.equal(r.displayedNickname.value, actor.nickname)
+})
+
+test('随机资料在关闭、重开或更换账号后不采用过期抽取回执', async () => {
+  const s = await setup()
+  const r = s.runtime
+  const answers: ((result: typeof randomFirst) => void)[] = []
+  s.transport(
+    async () =>
+      new Promise<typeof randomFirst>((resolve) => {
+        answers.push(resolve)
+      }),
+  )
+  const first = r.openRandomProfile()
+  r.closeRandomProfile()
+  const second = r.openRandomProfile()
+  answers[0]!(randomFirst)
+  await first
+  assert.equal(r.randomChoice.value, null)
+  assert.equal(r.randomBusy.value, true)
+  answers[1]!(randomSecond)
+  await second
+  assert.equal(r.randomChoice.value.nickname, randomSecond.nickname)
+  const reroll = r.randomProfile()
+  s.user.user = { ...actor, id: 'synthetic-other' }
+  answers[2]!(randomFirst)
+  await reroll
+  assert.equal(r.randomSheetOpen.value, false)
+  assert.equal(r.randomChoice.value, null)
+  assert.equal(r.randomBusy.value, false)
+})
+
+test('随机资料拒绝外域地址和不合约的昵称回执', async () => {
+  const s = await setup()
+  const r = s.runtime
+  for (const response of [
+    { ...randomFirst, image_path: 'https://external.invalid/avatar' },
+    { ...randomFirst, image_path: `${randomFirst.image_path}?redirect=https://external.invalid/` },
+    { ...randomFirst, nickname: '长'.repeat(41) },
+  ]) {
+    s.transport(async () => response)
+    await r.openRandomProfile()
+    assert.equal(r.randomChoice.value, null)
+    assert.match(r.randomError.value, /无法抽取/)
+    r.closeRandomProfile()
+  }
+  assert.equal(s.downloads.length, 0)
+})
+
+test('随机头像保存时下载并上传，失败后保留昵称草稿与原上传幂等键', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let uploads = 0
+  s.download(async (index) => ({
+    statusCode: index === 1 ? 502 : 200,
+    tempFilePath: `synthetic-temp-${index}`,
+  }))
+  s.transport(async (input) => {
+    if (input.url === '/me/random-profile') return randomFirst
+    if (input.url === '/me/avatar') {
+      if (++uploads === 1) throw new RequestError('合成超时', -1, 'UPLOAD_TIMEOUT')
+      if (uploads === 2) throw new RequestError('合成文件失效', -1, 'UPLOAD_FILE_UNREADABLE')
+      return { ...actor, version: 20, avatar_id: 'saved-avatar' }
+    }
+    if (input.url === '/me/profile') return { ...actor, ...input.data, version: 21 }
+  })
+  await r.openRandomProfile()
+  r.acceptRandomProfile()
+  r.editNickname('确认前手动修改昵称')
+  assert.equal(await r.savePersonalProfile(), false)
+  assert.match(r.avatarError.value, /下载/)
+  assert.equal(uploads, 0)
+  assert.equal(r.displayedNickname.value, '确认前手动修改昵称')
+  assert.equal(await r.savePersonalProfile(), false)
+  assert.match(r.avatarError.value, /原请求重试/)
+  assert.equal(await r.savePersonalProfile(), false)
+  assert.match(r.avatarError.value, /临时文件/)
+  assert.equal(await r.savePersonalProfile(), true)
+  assert.deepEqual(
+    s.downloads.map((entry) => [entry.url, entry.header]),
+    Array.from({ length: 3 }, () => [apiBaseUrl + randomFirst.image_path, undefined]),
+  )
+  const avatarCalls = s.calls.filter((entry) => entry.url === '/me/avatar')
+  assert.deepEqual(avatarCalls[1], avatarCalls[0])
+  assert.deepEqual(avatarCalls[2], { ...avatarCalls[0], filePath: 'synthetic-temp-3' })
+  const profile = s.calls.find((entry) => entry.url === '/me/profile')
+  assert.equal(profile?.data?.expected_version, 20)
+  assert.equal(profile?.data?.nickname, '确认前手动修改昵称')
+})
+
+test('随机头像下载期间离页，迟到临时文件不会提交', async () => {
+  const s = await setup()
+  const r = s.runtime
+  let finishDownload: ((result: { statusCode: number; tempFilePath: string }) => void) | undefined
+  s.download(
+    async () =>
+      new Promise((resolve) => {
+        finishDownload = resolve
+      }),
+  )
+  s.transport(async () => randomFirst)
+  await r.openRandomProfile()
+  r.acceptRandomProfile()
+  const saving = r.savePersonalProfile()
+  assert.equal(s.downloads.length, 1)
+  s.hooks.hide!()
+  finishDownload!({ statusCode: 200, tempFilePath: 'synthetic-stale-avatar' })
+  assert.equal(await saving, false)
+  assert.deepEqual(
+    s.calls.map((entry) => entry.url),
+    ['/me/random-profile'],
+  )
+  assert.equal(r.avatarDraft.value, '')
+})
+
+test('随机头像回执晚于离页时，回到同一账号用原请求确认后继续保存昵称', async () => {
+  const s = await setup()
+  const r = s.runtime
+  const committed = { ...actor, avatar_id: 'saved-avatar', version: 20 }
+  let respond: (value: UserInfo) => void = () => assert.fail('预期上传已发出')
+  let requests = 0
+  s.transport(async (input) => {
+    if (input.url === '/me/random-profile') return randomFirst
+    if (input.url === '/me/avatar') {
+      if (++requests === 1)
+        return new Promise<UserInfo>((resolve) => {
+          respond = resolve
+        })
+      return committed
+    }
+    if (input.url === '/me/profile') return { ...committed, ...input.data, version: 21 }
+    assert.fail(`意外请求：${input.url}`)
+  })
+  await r.openRandomProfile()
+  r.acceptRandomProfile()
+  const saving = r.savePersonalProfile()
+  await settle()
+  assert(r.avatarPending.value)
+  s.hooks.hide!()
+  s.user.user = committed
+  respond(committed)
+  assert.equal(await saving, false)
+  s.hooks.show!()
+  await settle()
+  assert(r.avatarPending.value)
+  assert.equal(r.displayedNickname.value, randomFirst.nickname)
+  assert.equal(await r.savePersonalProfile(), true)
+  const avatarCalls = s.calls.filter((entry) => entry.url === '/me/avatar')
+  assert.deepEqual(avatarCalls[1], avatarCalls[0])
+  assert.equal(
+    s.calls.find((entry) => entry.url === '/me/profile')?.data?.nickname,
+    randomFirst.nickname,
+  )
 })
