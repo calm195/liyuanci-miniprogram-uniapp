@@ -36,7 +36,7 @@ export async function loadRuntime(source: string, context: Record<string, unknow
   Object.assign(globalThis, { [key]: context })
   const body = source.replace(/^import\s[\s\S]*?from\s+'([^']+)'\n/gm, (_all, name) =>
     name === 'vue'
-      ? `import { computed, nextTick, ref, watch } from '${import.meta.resolve('vue')}'\n`
+      ? `import { computed, nextTick, reactive, ref, watch } from '${import.meta.resolve('vue')}'\n`
       : '',
   )
   const compiled = ts.transpileModule(

@@ -8,10 +8,11 @@ export function listStories(cursor?: string, search: ContentSearch = {}) {
   const params = contentSearchParams(search)
   return request<StoryPage>({
     url: `/stories?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${params ? '&' + params : ''}`,
+    publicRead: true,
   })
 }
 export const getStory = (id: string, auth = true) =>
-  request<WishPublicContent>({ url: `/stories/${encodeURIComponent(id)}`, auth })
+  request<WishPublicContent>({ url: `/stories/${encodeURIComponent(id)}`, auth, publicRead: auth })
 export function writeStory(wish: WishResult, body: string, update: boolean, key: string) {
   return request<StoryAccepted>({
     url: `/wishes/${encodeURIComponent(wish.id)}/${update ? 'story' : 'stories'}`,

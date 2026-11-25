@@ -128,6 +128,66 @@ test('T009 / REQ-018：仅开发环境放行本机与私网 HTTP，生产强制 
   }
 })
 
+test('公开读取可从并发会话过期恢复，游客请求与账号切换不会重放旧会话', async () => {
+  config.useMock = false
+  config.isDev = false
+  config.apiBaseUrl = 'https://synthetic.invalid/api/v1'
+  session.setToken('synthetic-expiring')
+  const previousRequest = uni.request
+  type Transport = {
+    url: string
+    header: Record<string, string>
+    success: (value: unknown) => void
+  }
+  const requests: Transport[] = []
+  const initialExpired = expired
+  const rejected = { statusCode: 401, data: { error_code: 'UNAUTHENTICATED', code: 401 } }
+  const success = { statusCode: 200, data: { code: 0, request_id: 'guest', data: '公开内容' } }
+  Object.assign(uni, { request: (transport: Transport) => requests.push(transport) })
+  try {
+    const list = request({ url: '/wishes', publicRead: true })
+    const detail = request({ url: '/stories/sample', publicRead: true })
+    assert.equal(requests[0]?.header.Authorization, 'Bearer synthetic-expiring')
+    requests[0]?.success(rejected)
+    requests[1]?.success(rejected)
+    await new Promise((resolve) => globalThis.setImmediate(resolve))
+    assert.equal(requests.length, 4)
+    assert.equal(expired, initialExpired + 1)
+    assert.equal(session.getToken(), '')
+    for (const retry of requests.slice(2)) {
+      assert.equal(retry.header.Authorization, undefined)
+      retry.success(success)
+    }
+    assert.deepEqual(await Promise.all([list, detail]), ['公开内容', '公开内容'])
+
+    const anonymous = request({ url: '/wishes', publicRead: true })
+    requests[4]?.success(rejected)
+    await assert.rejects(anonymous, { statusCode: 401 })
+    assert.equal(requests.length, 5)
+    assert.equal(expired, initialExpired + 1)
+
+    session.setToken('synthetic-before-switch')
+    const old = request({ url: '/wishes', publicRead: true })
+    session.setToken('synthetic-after-switch')
+    requests[5]?.success(rejected)
+    await assert.rejects(old, { error_code: 'SESSION_CHANGED' })
+    assert.equal(requests.length, 6)
+    assert.equal(session.getToken(), 'synthetic-after-switch')
+
+    const protectedWrite = request({
+      url: '/wishes/sample/support',
+      method: 'PUT',
+      publicRead: true,
+    })
+    requests[6]?.success(rejected)
+    await assert.rejects(protectedWrite, { statusCode: 401 })
+    assert.equal(requests.length, 7)
+  } finally {
+    Object.assign(uni, { request: previousRequest })
+    session.clear()
+  }
+})
+
 test('T013 / REQ-002、018：学生卡上传统一鉴权、幂等、202、401及会话失效隔离', async () => {
   config.useMock = false
   config.isDev = false

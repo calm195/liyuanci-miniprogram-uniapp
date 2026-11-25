@@ -10,6 +10,7 @@ import type {
 export const getWish = (id: string, trackView = false, silent = false) =>
   request<WishResult>({
     url: `/wishes/${encodeURIComponent(id)}${trackView ? '?view=1' : ''}`,
+    publicRead: true,
     silent,
   })
 
@@ -66,6 +67,7 @@ export async function listWishes(own: boolean, filters: WishFilters) {
   if (own) return request<WishPage>({ url: `/me/wishes${search ? '?' + search : ''}` })
   const page = await request<{ items: WishPublicContent[]; next_cursor: string | null }>({
     url: `/wishes${search ? '?' + search : ''}`,
+    publicRead: true,
   })
   // 公开接口返回正文投影；转换仅供卡片展示，不赋予任何本人写入动作。
   return {

@@ -212,6 +212,10 @@ test('REQ-023：游客及四种认证，禁言仍可读取但无反馈动作', a
     assert.equal(s.runtime.page.ready.value, false)
     assert.ok(s.runtime.page.gate.value)
   }
+  const guest = await setupResourcePage('detail', 'guest')
+  assert.equal(guest.api.calls.length, 0)
+  assert.equal(guest.runtime.detail.value, null)
+  assert.match(guest.runtime.page.gate.value, /登录后完成学生认证/)
   const s = await setupResourcePage('detail')
   s.setDetail({ ...s.detail(), allowed_actions: ['copy_download'] })
   await s.runtime.load()

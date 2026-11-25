@@ -145,9 +145,16 @@ useLoginRefresh(() => load())
     />
     <view class="ce-layout">
       <view v-if="gate" class="ui-section ce-panel ui-stack">
+        <text class="ui-section-title">关于资料广场</text>
+        <text class="ui-copy">资料广场提供学习资料检索、文件下载和资料状态反馈。</text>
         <text class="ui-copy">{{ gate }}</text>
-        <LoginLink v-if="!user.isLoggedIn" class="ui-button ui-button-primary">前往登录</LoginLink>
-        <navigator v-else class="ui-link" url="/pages/verification/index">查看学生认证</navigator>
+        <LoginLink v-if="!user.isLoggedIn" class="ui-button ui-button-primary">微信登录</LoginLink>
+        <navigator
+          v-else-if="user.user?.verification !== 'verified'"
+          class="ui-link"
+          url="/pages/verification/index"
+          >查看学生认证</navigator
+        >
       </view>
       <AppNotice :message="error" kind="error" /><AppNotice :message="notice" kind="info" />
       <text v-if="busy" class="ui-state">正在加载资料…</text>

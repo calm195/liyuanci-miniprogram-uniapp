@@ -24,6 +24,13 @@ function leave() {
   loginError.value = ''
   entry.cancelLogin()
 }
+function cancelLogin() {
+  generation++
+  loginError.value = ''
+  entry.cancelLogin()
+  user.cancelPendingLogin()
+  emit('loginCancel')
+}
 onShow(() => {
   visible = true
 })
@@ -46,7 +53,7 @@ watch(
   { immediate: true },
 )
 async function login() {
-  if (user.busy || !visible) return
+  if (user.busy || !visible || !entry.loginVisible) return
   const current = generation
   const active = () => visible && current === generation
   loginError.value = ''
@@ -65,29 +72,18 @@ async function login() {
 </script>
 <template>
   <view v-if="entry.loginVisible && !config.useMock" class="prompt-shade">
-    <view class="prompt-card" role="dialog" aria-label="微信登录">
-      <text class="title">欢迎来到鲤愿池</text>
-      <text>微信登录后可管理心愿与心事，发布和互动需完成学生认证。</text>
+    <view class="prompt-card" role="dialog" aria-label="登录鲤愿池">
+      <text class="title">登录鲤愿池</text>
+      <text>登录后可继续当前操作。公开内容可以直接浏览。</text>
       <AppNotice :message="loginError" kind="error" />
       <button
         :disabled="user.busy"
         :loading="isPageActionPending('src-components-EntryPrompts.vue-action-1')"
         @click="runPageAction(() => login(), 'src-components-EntryPrompts.vue-action-1')"
       >
-        微信登录
+        确认登录
       </button>
-      <button
-        :disabled="user.busy"
-        :loading="isPageActionPending('src-components-EntryPrompts.vue-action-2')"
-        @click="
-          runPageAction(() => {
-            entry.cancelLogin()
-            emit('loginCancel')
-          }, 'src-components-EntryPrompts.vue-action-2')
-        "
-      >
-        暂时逛逛
-      </button>
+      <button class="ui-button" @click="cancelLogin">暂不登录，继续浏览</button>
     </view>
   </view>
   <view v-else-if="!hideGuide && entry.guideVisible && entry.guide" class="prompt-shade">

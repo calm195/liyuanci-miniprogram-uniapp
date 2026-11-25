@@ -21,6 +21,8 @@ export interface RequestResponse {
 type RequestOptions = Omit<UniApp.RequestOptions, 'success' | 'fail' | 'complete' | 'url'> & {
   url: string
   auth?: boolean
+  // 只有服务端允许匿名读取的 GET 才可开启，保留有效会话下的个性化投影。
+  publicRead?: boolean
   silent?: boolean
   filePath?: string
   uploadFormData?: Record<string, string>
@@ -34,8 +36,10 @@ function responseErrorMessage(
   path: string,
   auth: boolean | undefined,
 ) {
-  if (status === 401)
-    return auth === false ? '微信登录凭据无效，请重新登录' : '登录已过期，请重新登录'
+  if (status === 401) {
+    if (path === '/auth/wechat-sessions') return '微信登录凭据无效，请重新登录'
+    if (auth !== false) return '登录已过期，请重新登录'
+  }
   if (path === '/me/student-card-assets') {
     if (status === 413 || code === 'STUDENT_CARD_IMAGE_TOO_LARGE')
       return '图片超过服务器大小上限，请压缩或裁剪后重新上传'
@@ -61,7 +65,7 @@ function uploadFailure(message: string | undefined) {
 }
 
 // 开发联调仅放行回环和私有局域网 HTTP，避免把令牌发送到公网明文地址。
-function isAllowedApiBaseUrl(value: string): boolean {
+export function isAllowedApiBaseUrl(value: string): boolean {
   if (/^https:\/\/[^/]+(?:\/[^?#]*)?$/.test(value)) return true
   if (!config.isDev) return false
   const match = /^http:\/\/(localhost|\[::1\]|[0-9.]+)(?::([0-9]{1,5}))?(?:\/[^?#]*)?$/.exec(value)
@@ -79,6 +83,9 @@ function isAllowedApiBaseUrl(value: string): boolean {
     (first === 192 && second === 168)
   )
 }
+// 同一过期会话的并发公开读取均可回到游客态；手动退出或换号后旧请求仍失效。
+let lastExpiration: { before: number; after: number } | undefined
+
 // 仅向配置的接口地址发送内存会话令牌；不记录请求正文或凭据。
 export async function request<T>(options: RequestOptions): Promise<T> {
   const epoch = session.getEpoch()
@@ -118,6 +125,16 @@ export async function request<T>(options: RequestOptions): Promise<T> {
     if (!/^\/(?!\/)[a-zA-Z0-9/_?=&%~.!'()*-]*$/.test(options.url) || invalidPath)
       throw new RequestError('接口路径无效', -1)
     const token = session.getToken()
+    const canRetryPublic =
+      options.publicRead &&
+      options.auth !== false &&
+      token &&
+      !options.filePath &&
+      (!options.method || options.method === 'GET')
+    async function readAsGuest() {
+      feedbackEpoch = session.getEpoch()
+      return request<T>({ ...options, auth: false, publicRead: false, silent: true })
+    }
     const response = await new Promise<RequestResponse>((resolve, reject) => {
       const transport = {
         ...options,
@@ -157,22 +174,39 @@ export async function request<T>(options: RequestOptions): Promise<T> {
       }
     })
     // 平台回调只交付响应；校验放在 Promise 之后，校验器抛错也会正常拒绝请求。
-    if (epoch !== session.getEpoch())
+    if (epoch !== session.getEpoch()) {
+      if (
+        canRetryPublic &&
+        !session.getToken() &&
+        lastExpiration?.before === epoch &&
+        lastExpiration.after === session.getEpoch()
+      )
+        return await readAsGuest()
       throw new RequestError('会话已变化，请重新操作', -1, 'SESSION_CHANGED')
+    }
     const body = response.data as ApiResponse<T>
-    if (response.statusCode === 401 && options.auth !== false) {
+    if (response.statusCode === 401 && options.auth !== false && token) {
       session.clear()
       feedbackEpoch = session.getEpoch()
       uni.$emit('auth:expired')
       // 账号订阅者会同步再次清理空会话；仍视为本次失效，不能误判成换号。
-      if (!session.getToken()) feedbackEpoch = session.getEpoch()
+      if (!session.getToken()) {
+        feedbackEpoch = session.getEpoch()
+        lastExpiration = { before: epoch, after: feedbackEpoch }
+        if (canRetryPublic) return await readAsGuest()
+      }
     }
     if (options.validateResponse && !options.validateResponse(response))
       throw new RequestError('接口返回格式不符合约定，请刷新后重试', -3)
     if (response.statusCode === 204) return undefined as T
     if (response.statusCode < 200 || response.statusCode >= 300 || body?.code !== 0)
       throw new RequestError(
-        responseErrorMessage(response.statusCode, body?.error_code, pathname, options.auth),
+        responseErrorMessage(
+          response.statusCode,
+          body?.error_code,
+          pathname,
+          options.publicRead && !token ? false : options.auth,
+        ),
         body?.code || response.statusCode,
         body?.error_code,
         body?.request_id,

@@ -14,7 +14,14 @@ import WishImages from '@/components/WishImages.vue'
 import WishComments from '@/components/WishComments.vue'
 import { useContentView } from '@/composables/use-content-view'
 import { computed, nextTick, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import {
+  onLoad,
+  onShow,
+  onHide,
+  onUnload,
+  onShareAppMessage,
+  onShareTimeline,
+} from '@dcloudio/uni-app'
 import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { useWishStore } from '@/stores/wishes'
@@ -180,11 +187,31 @@ function toggleContentVisibility() {
     actionError.value = '设置保存失败，请重试。'
   }
 }
-const shareTarget = useContentShare('wish', () =>
-  !sharedEntry.value && !busy.value && currentWish.value?.current_state === 'published'
-    ? publicShare.value
-    : null,
-)
+const {
+  target: shareTarget,
+  friendShare,
+  timelineShare,
+} = useContentShare('wish', () => {
+  const value = currentWish.value
+  const projection = publicShare.value
+  if (
+    sharedEntry.value ||
+    busy.value ||
+    writing.value ||
+    pendingAction.value ||
+    value?.current_state !== 'published' ||
+    value.privacy_review_required ||
+    (value.expires_at && !(Date.parse(value.expires_at) > Date.now())) ||
+    !projection ||
+    projection.id !== value.id ||
+    (value.content_version !== undefined && projection.content_version !== value.content_version)
+  )
+    return null
+  return projection
+})
+// uni-app 在页面脚本中识别这两个钩子并注册微信原生菜单回调。
+onShareAppMessage(friendShare)
+onShareTimeline(timelineShare)
 const operations = {
   withdraw: 'postWishesIdWithdraw',
   rollback: 'postWishesIdRollback',
@@ -317,7 +344,7 @@ async function load() {
         ? '心愿不存在或当前不可查看。'
         : status === 403
           ? '当前账号无权查看这条心愿。'
-          : '详情读取失败，请重新登录或刷新后重试。'
+          : '详情读取失败，请刷新后重试。'
   } finally {
     if (visible && current === generation) busy.value = false
   }
@@ -611,6 +638,12 @@ watch(
     }
   },
   { flush: 'sync' },
+)
+watch(
+  () => session.getEpoch(),
+  () => {
+    if (visible && !sharedEntry.value && !session.getToken()) void load()
+  },
 )
 onLoad((query) => {
   reference.value = shareReference(query)

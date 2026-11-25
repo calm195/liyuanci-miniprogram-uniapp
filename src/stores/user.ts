@@ -13,6 +13,7 @@ export const useUserStore = defineStore('user', () => {
   const expired = ref(false)
   let generation = 0
   let refreshGeneration = 0
+  let pendingLogin: { cancelled: boolean; sessionEpoch?: number } | null = null
   const isLoggedIn = computed(() => !!user.value)
   const label = computed(() => verificationLabel(user.value))
   function clear() {
@@ -32,7 +33,7 @@ export const useUserStore = defineStore('user', () => {
     if (!silent) validated.value = false
     if (!silent || includeVerification) verification.value = null
     try {
-      const me = await auth.getMe()
+      const me = await auth.getMe(silent)
       // 页面显示和应用恢复可能并发刷新，只接受最新一轮资格与审核资料。
       if (!active()) return
       user.value = me
@@ -67,20 +68,31 @@ export const useUserStore = defineStore('user', () => {
     if (busy.value) return
     busy.value = true
     const current = generation
+    const attempt: NonNullable<typeof pendingLogin> = { cancelled: false }
+    pendingLogin = attempt
+    const active = () => !attempt.cancelled && current === generation
     try {
       const code = await auth.wechatCode()
-      if (current !== generation) return
+      if (!active()) return
       // 每次重新登录成对获取凭据；同次网络重发必须复用这两个值，不单独更换请求标识。
       const clientRequestId = `wx-${Date.now()}-${Math.random().toString(36).slice(2)}`
       const result = await auth.login(code, clientRequestId)
-      if (current !== generation) return
+      if (!active()) return
       session.setToken(result.token)
+      attempt.sessionEpoch = session.getEpoch()
       user.value = result.me
       expired.value = false
       await refresh()
     } finally {
+      pendingLogin = null
       busy.value = false
     }
+  }
+  function cancelPendingLogin() {
+    if (!pendingLogin) return
+    pendingLogin.cancelled = true
+    // 用户取消时，撤销这次尚未完成资格复核的本机会话，并隔离迟到回执。
+    if (pendingLogin.sessionEpoch === session.getEpoch()) clear()
   }
   async function logout() {
     if (busy.value) return
@@ -121,6 +133,7 @@ export const useUserStore = defineStore('user', () => {
     isLoggedIn,
     label,
     login,
+    cancelPendingLogin,
     logout,
     refresh,
     acceptAvatarProfile,

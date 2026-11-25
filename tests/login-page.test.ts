@@ -7,6 +7,7 @@ async function setup() {
   const hooks: Record<string, () => void> = {}
   let resolve!: () => void
   let calls = 0
+  let cancellations = 0
   let navigations = 0
   const entry = reactive({
     loginVisible: true,
@@ -24,6 +25,9 @@ async function setup() {
     busy: false,
     isLoggedIn: false,
     validated: false,
+    cancelPendingLogin() {
+      cancellations++
+    },
     async login() {
       if (user.busy) return
       calls++
@@ -37,7 +41,7 @@ async function setup() {
   Object.assign(globalThis, { uni: { reLaunch: () => navigations++ } })
   const page = await loadRuntime(
     pageScript(new URL('../src/components/EntryPrompts.vue', import.meta.url)) +
-      '\nexport { login, loginError };',
+      '\nexport { login, loginError, cancelLogin };',
     {
       config: { useMock: false },
       defineProps: () => ({}),
@@ -57,6 +61,7 @@ async function setup() {
     user,
     resolve: () => resolve(),
     calls: () => calls,
+    cancellations: () => cancellations,
     navigations: () => navigations,
   }
 }
@@ -71,6 +76,18 @@ test('登录弹窗重复点击串行，完成后保留当前深链页面', async
   await pending
   assert.equal(s.navigations(), 0)
   assert.equal(s.entry.loginVisible, false)
+})
+
+test('主动取消会关闭弹窗，登录迟到回执不会续接或跳页', async () => {
+  const s = await setup()
+  const pending = s.page.login()
+  s.page.cancelLogin()
+  assert.equal(s.cancellations(), 1)
+  assert.equal(s.entry.loginVisible, false)
+  s.resolve()
+  await pending
+  assert.equal(s.navigations(), 0)
+  assert.equal(s.page.loginError.value, '')
 })
 
 test('REQ-002/018：登录中离开再返回，旧响应不能导航或恢复旧错误', async () => {

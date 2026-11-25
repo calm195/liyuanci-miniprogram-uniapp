@@ -43,7 +43,7 @@ export function useResourcePage(clear: () => void) {
     busy.value = false
     error.value = ''
     notice.value = ''
-    gate.value = ''
+    gate.value = session.getToken() ? '' : resourceGate(null, false, '', config.useMock)
     clear()
   }
   async function enter(load: (active: () => boolean) => Promise<void>) {

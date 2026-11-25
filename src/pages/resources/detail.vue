@@ -277,8 +277,16 @@ useLoginRefresh(() => load())
     <PageHeading :title="detail?.title || '资料详情'" />
     <view v-if="gate" class="ui-section ce-group">
       <text class="ui-copy">{{ gate }}</text>
-      <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
-      <navigator v-else class="ui-link" url="/pages/verification/index">查看学生认证</navigator>
+      <LoginLink v-if="!user.isLoggedIn" class="ui-link">微信登录</LoginLink>
+      <navigator
+        v-else-if="user.user?.verification !== 'verified'"
+        class="ui-link"
+        url="/pages/verification/index"
+        >查看学生认证</navigator
+      >
+      <navigator class="ui-link" url="/pages/resources/index" open-type="switchTab"
+        >返回资料广场</navigator
+      >
     </view>
     <AppNotice :message="error" kind="error" />
     <text v-if="busy" class="ui-copy">正在加载资料…</text

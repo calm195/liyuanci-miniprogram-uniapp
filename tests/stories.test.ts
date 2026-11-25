@@ -434,6 +434,13 @@ test('故事页注册原生分享，扫码打开时忽略额外目标参数并�
       useContentShare: (kind: string, getter: () => WishPublicContent | null) => {
         assert.equal(kind, 'story')
         contentForShare = getter
+        return { friendShare: getter, timelineShare: getter }
+      },
+      onShareAppMessage: (fn: () => unknown) => {
+        hooks.friend = fn
+      },
+      onShareTimeline: (fn: () => unknown) => {
+        hooks.timeline = fn
       },
       onLoad: (fn: () => unknown) => {
         hooks.load = fn
@@ -459,7 +466,10 @@ test('故事页注册原生分享，扫码打开时忽略额外目标参数并�
   page.publicStory.value = publicStory
   assert.equal(contentForShare(), null)
   page.sharedEntry.value = false
+  assert.equal(hooks.friend!(), null)
+  page.storyId.value = wish.id
   assert.equal(contentForShare()?.id, wish.id)
+  assert.equal(hooks.timeline!(), contentForShare())
   hide()
   assert.equal(contentForShare(), null)
   assert.deepEqual(calls, ['show', 'hide'])

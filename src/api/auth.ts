@@ -8,7 +8,7 @@ export function login(code: string, clientRequestId: string) {
     auth: false,
   })
 }
-export const getMe = () => request<UserInfo>({ url: '/me' })
+export const getMe = (silent = false) => request<UserInfo>({ url: '/me', silent })
 export const getVerification = (silent = false) =>
   request<Verification>({ url: '/me/verification-request', silent })
 export const revokeSession = (key: string) =>

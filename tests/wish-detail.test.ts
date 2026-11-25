@@ -55,6 +55,7 @@ async function setup(
   existingRecovery?: Awaited<ReturnType<typeof actionRecoveryStore>>,
 ) {
   const hooks: Record<string, (query?: Record<string, string>) => void> = {}
+  const shareHooks: Record<string, () => WishPublicContent | null> = {}
   const user = reactive({
     user: {
       id: 'synthetic-owner',
@@ -134,7 +135,16 @@ async function setup(
         },
       }),
       useContentView: () => async () => {},
-      useContentShare: () => {},
+      useContentShare: (_kind: string, content: () => WishPublicContent | null) => ({
+        friendShare: content,
+        timelineShare: content,
+      }),
+      onShareAppMessage: (fn: () => WishPublicContent | null) => {
+        shareHooks.friend = fn
+      },
+      onShareTimeline: (fn: () => WishPublicContent | null) => {
+        shareHooks.timeline = fn
+      },
       shareReference,
       isPublicContent,
       resolveShare: async (ref: string) => {
@@ -182,7 +192,7 @@ async function setup(
     .split('<script setup lang="ts">')[1]!
     .split('</script>')[0]!
   const page = await moduleFrom(
-    `const { useLogin, useContentView, useUserStore, useWishStore, useActionRecoveryStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, retryAction, pendingAction, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
+    `const { useLogin, useContentView, useUserStore, useWishStore, useActionRecoveryStore, useHiddenWishes, config, canWishAction, canApplyToWish, isShareBrowseOnly, prepareSharedWishBackStack, openWishActionGate, RequestError, session, categories, campuses, rewards, wishStateLabels, getWish, getPublicWish, changeWishState, useContentShare, shareReference, resolveShare, isPublicContent, onShareAppMessage, onShareTimeline, onPullDownRefresh, onLoad, onShow, onHide, onUnload } = globalThis.__detail;\n${strip(source)}\nexport { act, retryAction, pendingAction, load, wish, content, publicContent, currentWish, notice, error, actionError, writing, refreshExpiry, allowed, openSharedAction, sharedActions, applicationInProgress, toggleContentVisibility, contentHidden, openComments, commentsAvailable };`,
   )
   hooks.load!(query)
   hooks.show!()
@@ -190,6 +200,7 @@ async function setup(
   return {
     page,
     hooks,
+    shareHooks,
     calls,
     pages,
     scrolls,
@@ -343,6 +354,8 @@ test('微信卡片和扫码回流只读取公开投影，非法扫码参数不�
   assert.equal(friend.page.currentWish.value.own_content, undefined)
   assert.deepEqual(friend.page.currentWish.value.allowed_actions, [])
   assert.equal(friend.page.allowed('withdraw'), false)
+  assert.equal(friend.shareHooks.friend!(), null)
+  assert.equal(friend.shareHooks.timeline!(), null)
 
   const scan = await setup({ scene: shareRef.replace(/-/g, ''), id: 'other' })
   assert.deepEqual(
@@ -512,8 +525,17 @@ test('帖主本人详情也采用已校验的公开作者投影，隐私屏障�
   )
   assert.equal(current.page.content.value.body, '合成心愿正文')
   assert.equal(current.page.publicContent.value.author.nickname, '公开昵称')
+  assert.equal(current.shareHooks.friend!()?.title, publicWish.title)
+  assert.equal(current.shareHooks.timeline!()?.title, publicWish.title)
+  current.page.wish.value.content_version++
+  assert.equal(current.shareHooks.friend!(), null)
+  current.page.wish.value.content_version = publicWish.content_version
+  current.page.wish.value.expires_at = '2000-01-01T00:00:00Z'
+  assert.equal(current.shareHooks.timeline!(), null)
+  current.page.wish.value.expires_at = null
   current.page.wish.value.privacy_review_required = true
   assert.equal(current.page.publicContent.value, null)
+  assert.equal(current.shareHooks.friend!(), null)
 })
 
 test('评论入口在公开详情加载后定位一次，刷新不打断阅读，离页不滚动', async () => {

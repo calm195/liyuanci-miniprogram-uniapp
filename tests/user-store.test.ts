@@ -113,6 +113,32 @@ test('T009 / REQ-018：重复点击登录只交换一次 code', async () => {
   assert.equal(codes.length, 1)
   assert.equal(requestIds.length, 1)
 })
+
+test('主动取消登录会阻止新的凭据交换，并撤销仍在复核的本机会话', async () => {
+  const store = setup()
+  const beforeExchange = store.login()
+  store.cancelPendingLogin()
+  await beforeExchange
+  assert.equal(codes.length, 0)
+  assert.equal(session.getToken(), '')
+
+  const pending = deferred<UserInfo>()
+  const checking = deferred<void>()
+  loadMe = () => {
+    checking.resolve(undefined)
+    return pending.promise
+  }
+  const beforeValidation = store.login()
+  await checking.promise
+  assert.equal(session.getToken(), 'synthetic-token')
+  store.cancelPendingLogin()
+  assert.equal(session.getToken(), '')
+  pending.resolve(me)
+  await beforeValidation
+  assert.equal(store.user, null)
+  assert.equal(store.validated, false)
+  assert.equal(store.busy, false)
+})
 test('T009 / REQ-002：驳回展示建议，刷新失败关闭资格', async () => {
   const store = setup()
   loadMe = async () => ({ ...me, verification: 'rejected' })

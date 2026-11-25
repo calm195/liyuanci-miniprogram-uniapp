@@ -62,14 +62,18 @@ async function requestWhisper<K extends WhisperOperation>(
     .join('&')
   const params = [query, searchParams].filter(Boolean).join('&')
   if (params) url += '?' + params
+  const publicRead = !spec.private && spec.method === 'GET'
   const response = await request<unknown>({
     url,
     method: spec.method,
     data: snapshot.data,
     header: snapshot.key ? { 'Idempotency-Key': snapshot.key } : undefined,
+    publicRead,
     silent: true,
   })
-  if (epoch !== session.getEpoch()) throw new RequestError('会话已变化，请重新操作', -1)
+  // 公开读取由请求层管理过期后的游客重试；私有结果仍按原会话校验。
+  if (!publicRead && epoch !== session.getEpoch())
+    throw new RequestError('会话已变化，请重新操作', -1)
   const result = operation === 'whisperCapsuleGet' ? normalizeCapsuleDetail(response) : response
   if (spec.output ? !matchesSchema(spec.output, result, whisperSchemas) : result !== undefined)
     throw new RequestError('接口返回格式不符合约定，请刷新后重试', -3)

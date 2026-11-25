@@ -53,6 +53,7 @@ export function listWishComments(
     .join('&')
   return request<CommentPage>({
     url: `/wishes/${encodeURIComponent(id)}/comments${query ? '?' + query : ''}`,
+    publicRead: true,
     silent: true,
   })
 }

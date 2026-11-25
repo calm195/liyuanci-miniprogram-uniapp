@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { onHide, onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import {
+  onHide,
+  onLoad,
+  onPullDownRefresh,
+  onShow,
+  onShareAppMessage,
+  onShareTimeline,
+} from '@dcloudio/uni-app'
 import { ref } from 'vue'
 import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
@@ -13,7 +20,11 @@ const shareRef = ref<string>()
 const sharedEntry = ref(false)
 const publicStory = ref<WishPublicContent | null>(null)
 const storyWall = ref<InstanceType<typeof StoryWall> | null>(null)
-useContentShare('story', () => (sharedEntry.value ? null : publicStory.value))
+const { friendShare, timelineShare } = useContentShare('story', () =>
+  !sharedEntry.value && publicStory.value?.id === storyId.value ? publicStory.value : null,
+)
+onShareAppMessage(friendShare)
+onShareTimeline(timelineShare)
 onLoad((query) => {
   shareRef.value = shareReference(query)
   sharedEntry.value = shareRef.value !== undefined || query?.shared === '1'

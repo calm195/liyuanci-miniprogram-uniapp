@@ -24,7 +24,7 @@
     {
       "path": "pages/verification/index",
       "style": {
-        "navigationBarTitleText": "学生认证",
+        "navigationBarTitleText": "鲤愿池",
         "enablePullDownRefresh": true
       }
     },
@@ -145,21 +145,21 @@
     {
       "path": "pages/whispers/detail",
       "style": {
-        "navigationBarTitleText": "树洞详情",
+        "navigationBarTitleText": "鲤愿池",
         "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/editor",
       "style": {
-        "navigationBarTitleText": "我的树洞",
+        "navigationBarTitleText": "鲤愿池",
         "enablePullDownRefresh": true
       }
     },
     {
       "path": "pages/whispers/mine",
       "style": {
-        "navigationBarTitleText": "我的树洞记录",
+        "navigationBarTitleText": "鲤愿池",
         "enablePullDownRefresh": true
       }
     },

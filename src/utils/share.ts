@@ -1,6 +1,17 @@
 import type { ShareKind, ShareLink, ShareTarget } from '../types/story.ts'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+export const shareCover = '/static/share-cover.png'
+const brandTitle = '鲤愿池 · 心愿与还愿故事'
+
+export function brandFriendShare() {
+  return { title: brandTitle, imageUrl: shareCover, path: '/pages/index/index?fromShare=1' }
+}
+
+export function brandTimelineShare() {
+  // 朋友圈固定打开当前页，仅用这个标记进入公开品牌预览。
+  return { title: brandTitle, imageUrl: shareCover, query: 'brandShare=1' }
+}
 
 export function sharePage(kind: ShareKind) {
   return kind === 'wish' ? '/pages/wish-detail/index' : '/pages/stories/index'

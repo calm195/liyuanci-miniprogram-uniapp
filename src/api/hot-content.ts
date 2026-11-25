@@ -30,6 +30,7 @@ function whisperEntry(item: PublicPost): HotContentEntry {
 export async function listHotContent(kind: HotContentKind): Promise<HotContentEntry[]> {
   const result = await request<{ items: unknown[] }>({
     url: '/content/hot?kind=' + kind,
+    publicRead: true,
     silent: true,
   })
   const items = result?.items
