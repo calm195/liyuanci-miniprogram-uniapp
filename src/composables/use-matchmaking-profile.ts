@@ -37,8 +37,7 @@ export function useMatchmakingProfile() {
       traitSelections.value = []
       rejectedTraits.clear()
     },
-    () => profileScope,
-    false,
+    { activityId: () => profileScope, refreshSession: false },
   )
   const { busy, writing, pending, error } = page
   const locked = computed(() => busy.value || writing.value || !!pending.value)

@@ -3,13 +3,44 @@ import { session } from '@/utils/session'
 import {
   matchmakingID,
   parseTraitSuggestions,
+  parseMatchmakingActivity,
   parseMatchmakingDetail,
   parseMatchmakingAccountProfile,
   parseMatchmakingPage,
   parseMatchmakingPreferences,
   parseMatchmakingReceipt,
 } from '@/utils/matchmaking'
-import type { MatchmakingCommand, MatchmakingTraitCategory } from '@/types/matchmaking'
+import type {
+  MatchmakingActivity,
+  MatchmakingCommand,
+  MatchmakingTraitCategory,
+} from '@/types/matchmaking'
+
+const publicActivities = '/matchmaking/public/activities'
+
+function assertPublicActivity(activity: MatchmakingActivity) {
+  if (activity.status !== 'published' || activity.campuses !== undefined || activity.summary)
+    throw new Error('公开活动信息不符合约定，请重试。')
+}
+
+export async function listPublicMatchmaking(page = 1) {
+  if (!Number.isSafeInteger(page) || page < 1) throw new Error('活动页码无效。')
+  const result = parseMatchmakingPage(
+    await request({ url: `${publicActivities}?page=${page}&limit=20`, auth: false, silent: true }),
+  )
+  result.items.forEach(assertPublicActivity)
+  return result
+}
+
+export async function getPublicMatchmaking(id: string) {
+  if (!matchmakingID(id)) throw new Error('活动标识无效，请从活动列表重新进入。')
+  const activity = parseMatchmakingActivity(
+    await request({ url: `${publicActivities}/${id}`, auth: false, silent: true }),
+  )
+  if (activity.id !== id) throw new Error('活动返回目标不匹配，请刷新。')
+  assertPublicActivity(activity)
+  return activity
+}
 
 function path(id: string) {
   if (!matchmakingID(id)) throw new Error('活动标识无效，请从活动列表重新进入。')

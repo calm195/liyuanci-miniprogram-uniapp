@@ -67,6 +67,11 @@ function sample(): MatchmakingDetail {
     tasks: [],
   }
 }
+function publicActivitySample() {
+  const activity = sample().activity
+  delete activity.campuses
+  return activity
+}
 test('结束活动解析人数和组数，保留零值并拒绝进行中的统计', () => {
   const activity = sample().activity
   const summary = { enrollment_count: 0, successful_pair_count: 0 }
@@ -130,6 +135,7 @@ class RequestError extends Error {
 }
 type Call = {
   url: string
+  auth?: boolean
   method?: string
   data?: Record<string, unknown>
   header?: Record<string, string>
@@ -162,8 +168,12 @@ async function setup() {
   }
   const calls: Call[] = []
   let modal = (options: Modal) => options.success({ confirm: true })
-  let transport = async (call: Call): Promise<unknown> =>
-    call.method === 'GET' ? structuredClone(data) : { id: enrollmentId }
+  let transport = async (call: Call): Promise<unknown> => {
+    if (call.url.startsWith('/matchmaking/public/activities?'))
+      return { items: [publicActivitySample()], total: 1 }
+    if (call.url.startsWith('/matchmaking/public/activities/')) return publicActivitySample()
+    return call.method === 'GET' ? structuredClone(data) : { id: enrollmentId }
+  }
   const api = await loadRuntime(source('api/matchmaking.ts'), {
     ...contract,
     RequestError,
@@ -205,8 +215,9 @@ async function setup() {
     })
     const exports =
       name === 'detail'
-        ? 'detail, account, consent, profileProblem, editing, editVersion, locked, canEdit, canExit, exitReason, expandedTask, beginEdit, submit, withdraw, openTask, retry'
+        ? 'detail, activity, scheduleExpanded, account, consent, profileProblem, editing, editVersion, locked, canEdit, canExit, exitReason, expandedTask, beginEdit, resumeEnrollment, submit, withdraw, openTask, retry'
         : 'activities, total, currentPage, more'
+    let loginReady = () => {}
     const runtime = await loadRuntime(
       pageScript(new URL(`../src/pages/matchmaking/${name}.vue`, import.meta.url)) +
         `\nexport { page, load, ${exports} }`,
@@ -216,6 +227,10 @@ async function setup() {
         ...contract,
         ...api,
         ...composable,
+        session,
+        useLoginRefresh: (fn: () => void) => {
+          loginReady = fn
+        },
         campuses,
         beijingTime,
         uni: {
@@ -232,6 +247,10 @@ async function setup() {
       unload: () => hooks.unload.forEach((fn) => fn()),
       show: async () => {
         hooks.show.forEach((fn) => fn())
+        await settle()
+      },
+      loginReady: async () => {
+        loginReady()
         await settle()
       },
     }
@@ -257,6 +276,10 @@ async function setup() {
     },
     clearSession: () => {
       token = ''
+      epoch.value++
+    },
+    restoreSession: () => {
+      token = 'synthetic-token'
       epoch.value++
     },
     changeOwner: () => {
@@ -499,8 +522,11 @@ test('切换账号、隐藏和晚到响应不恢复私人资料或上个账号�
   assert.equal(p.runtime.detail.value, null)
   assert.equal(p.runtime.page.pending.value, null)
   assert.equal(p.runtime.page.notice.value, '')
+  s.transport(async () => publicActivitySample())
   s.clearSession()
-  assert.match(p.runtime.page.gate.value, /登录/)
+  await settle()
+  assert.equal(p.runtime.detail.value, null)
+  assert.equal(p.runtime.activity.value.title, '合成活动')
 })
 
 test('资格读取失效后不默默丢弃退出请求，明确提示重新校验', async () => {
@@ -633,7 +659,7 @@ test('每日任务只记录本人查看，未来任务不发送，结束后正�
   assert.deepEqual(last.data, { expected_version: 8, reason: '合成退出原因' })
 })
 
-test('活动列表处理空态和重复翻页；游客不请求，通知落到活动页，原找搭子入口保留', async () => {
+test('活动列表处理空态和重复翻页；游客读取公开列表，原通知与找搭子入口保留', async () => {
   const s = await setup()
   s.transport(async () => ({ items: [], total: 0 }))
   const p = await s.page('index')
@@ -643,11 +669,19 @@ test('活动列表处理空态和重复翻页；游客不请求，通知落到�
   await p.runtime.load(true)
   assert.match(p.runtime.page.error.value, /列表已变化/)
   assert.equal(p.runtime.activities.value.length, 0)
+  p.hide()
   s.clearSession()
   const count = s.calls.length
+  s.transport(async () => ({ items: [publicActivitySample()], total: 2 }))
   const guest = await s.page('index')
-  assert.equal(s.calls.length, count)
-  assert.match(guest.runtime.page.gate.value, /登录/)
+  assert.equal(s.calls.length, count + 1)
+  assert.equal(guest.runtime.page.gate.value, '')
+  assert.equal(guest.runtime.activities.value[0].title, '合成活动')
+  assert.deepEqual(s.calls.at(-1), {
+    url: '/matchmaking/public/activities?page=1&limit=20',
+    auth: false,
+    silent: true,
+  })
   assert.deepEqual(
     notificationDestination({
       id: 'synthetic-notice',
@@ -673,6 +707,52 @@ test('活动列表处理空态和重复翻页；游客不请求，通知落到�
     }).modules[0].module,
     'matchmaking',
   )
+})
+
+test('游客从活动直达可读完整日程，取消登录不发起报名，登录后继续确认', async () => {
+  const s = await setup()
+  s.clearSession()
+  const data = sample()
+  delete data.enrollment
+  s.setData(data)
+  const p = await s.page()
+  assert.deepEqual(p.runtime.activity.value, publicActivitySample())
+  assert.equal(p.runtime.scheduleExpanded.value, true)
+  assert.equal(p.runtime.detail.value, null)
+  assert.equal(p.runtime.account.value, null)
+  assert.deepEqual(
+    [...s.calls],
+    [{ url: `/matchmaking/public/activities/${activityId}`, auth: false, silent: true }],
+  )
+  await p.runtime.submit()
+  assert.equal(s.calls.length, 1)
+  s.restoreSession()
+  p.runtime.resumeEnrollment()
+  await p.loginReady()
+  assert.equal(p.runtime.editing.value, true)
+  assert.equal(p.runtime.consent.value, false)
+  assert.equal(s.calls.filter((call) => call.method === 'PUT').length, 0)
+  assert.equal(s.calls[1]?.url, `/matchmaking/activities/${activityId}`)
+})
+
+test('公开详情拒绝错配及非发布活动，取消后清除旧日程', async () => {
+  const s = await setup()
+  s.clearSession()
+  const p = await s.page()
+  s.transport(async () => ({ ...publicActivitySample(), id: secondId }))
+  await p.runtime.load()
+  assert.equal(p.runtime.activity.value, null)
+  assert.match(p.runtime.page.error.value, /目标不匹配/)
+  s.transport(async () => ({ ...publicActivitySample(), phase: 'cancelled', status: 'cancelled' }))
+  await p.runtime.load()
+  assert.equal(p.runtime.activity.value, null)
+  assert.match(p.runtime.page.error.value, /公开活动信息/)
+  s.transport(async () => {
+    throw new RequestError(404)
+  })
+  await p.runtime.load()
+  assert.equal(p.runtime.activity.value, null)
+  assert.match(p.runtime.page.error.value, /已不可访问/)
 })
 
 test('标签双向加分允许总分超过100，旧分数缺少标签明细时兼容为零', () => {

@@ -26,8 +26,7 @@ export function matchmakingFailure(failure: unknown): string {
 // 将敏感页面绑定到账号与可见代次；隐藏时清理展示，待确认命令跨页面保留在账号内存仓。
 export function useMatchmakingPage(
   clear: () => void,
-  activityId: () => string = () => '',
-  refreshSession = true,
+  { activityId = (): string => '', refreshSession = true, allowGuest = false } = {},
 ) {
   const user = useUserStore()
   const commands = useMatchmakingStore()
@@ -47,7 +46,7 @@ export function useMatchmakingPage(
     writing.value = false
     error.value = ''
     notice.value = ''
-    gate.value = session.getToken() ? '' : '登录后查看活动和本人的报名记录。'
+    gate.value = session.getToken() || allowGuest ? '' : '登录后管理本人的包分配资料。'
     clear()
   }
   function ticket() {
@@ -68,7 +67,7 @@ export function useMatchmakingPage(
       epoch === session.getEpoch() &&
       owner === user.user?.id
   }
-  async function read(load: (active: () => boolean) => Promise<void>) {
+  async function read(load: (active: () => boolean, guest: boolean) => Promise<void>) {
     if (!visible || busy.value || writing.value) return
     const current = ++generation,
       epoch = session.getEpoch()
@@ -77,17 +76,24 @@ export function useMatchmakingPage(
     error.value = ''
     gate.value = ''
     try {
-      if (!session.getToken() || config.useMock) {
-        gate.value = config.useMock
-          ? '包分配活动需连接真实服务。'
-          : '登录后查看活动和本人的报名记录。'
+      if (config.useMock) {
+        gate.value = '包分配活动需连接真实服务。'
+        clear()
+        return
+      }
+      if (!session.getToken()) {
+        if (allowGuest) {
+          await load(active, true)
+          return
+        }
+        gate.value = '登录后管理本人的包分配资料。'
         clear()
         return
       }
       if (refreshSession) await user.refresh(false, true)
       if (!active()) return
       if (!user.validated || !user.user) throw new Error('当前登录资格未能确认，请重试。')
-      await load(ticket())
+      await load(ticket(), false)
     } catch (failure) {
       if (active()) {
         clear()

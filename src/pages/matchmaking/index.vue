@@ -1,30 +1,34 @@
 <script setup lang="ts">
 import { useLoginRefresh } from '@/composables/use-login'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import PageHeading from '@/components/PageHeading.vue'
 import MatchmakingActivitySummary from '@/components/MatchmakingActivitySummary.vue'
-import { listMatchmaking } from '@/api/matchmaking'
+import { listMatchmaking, listPublicMatchmaking } from '@/api/matchmaking'
 import { useMatchmakingPage } from '@/composables/use-matchmaking-page'
 import { matchmakingPhaseLabel } from '@/utils/matchmaking'
 import { beijingTime } from '@/utils/capsules'
+import { session } from '@/utils/session'
 import type { MatchmakingActivity } from '@/types/matchmaking'
 
 const activities = ref<MatchmakingActivity[]>([])
 const total = ref(0)
 const currentPage = ref(1)
-const page = useMatchmakingPage(() => {
-  activities.value = []
-  total.value = 0
-  currentPage.value = 1
-})
-const { busy, error, notice, gate, user } = page
+const page = useMatchmakingPage(
+  () => {
+    activities.value = []
+    total.value = 0
+    currentPage.value = 1
+  },
+  { allowGuest: true },
+)
+const { busy, error, notice, gate } = page
 const more = computed(() => activities.value.length < total.value)
 async function load(append = false) {
   const next = append ? currentPage.value + 1 : 1
-  await page.read(async (active) => {
-    const result = await listMatchmaking(next)
+  await page.read(async (active, guest) => {
+    const result = await (guest ? listPublicMatchmaking(next) : listMatchmaking(next))
     if (!active()) return
     if (append && result.items.some((item) => activities.value.some((old) => old.id === item.id)))
       throw new Error('活动列表已变化，请下拉刷新后继续。')
@@ -46,6 +50,12 @@ onPullDownRefresh(async () => {
   }
 })
 useLoginRefresh(() => load())
+watch(
+  () => session.getEpoch(),
+  () => {
+    if (!session.getToken()) void load()
+  },
+)
 </script>
 <template>
   <AppPage responsive-padding>
@@ -60,8 +70,7 @@ useLoginRefresh(() => load())
       </PageHeading>
     </view>
     <view v-if="gate" class="ui-state"
-      ><text>{{ gate }}</text
-      ><LoginLink v-if="!user.isLoggedIn" class="ui-link">微信登录 ›</LoginLink></view
+      ><text>{{ gate }}</text></view
     >
     <view v-else-if="!busy && !error && !activities.length" class="ui-state"
       ><text class="ui-section-title">暂时没有可查看的活动</text

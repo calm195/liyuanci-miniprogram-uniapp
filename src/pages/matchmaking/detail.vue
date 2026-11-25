@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { useLoginRefresh } from '@/composables/use-login'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import AppPage from '@/components/AppPage.vue'
 import MatchmakingResult from '@/components/MatchmakingResult.vue'
 import { useThemeStore } from '@/stores/theme'
 import MatchmakingProfile from '@/components/MatchmakingProfile.vue'
 import MatchmakingActivitySummary from '@/components/MatchmakingActivitySummary.vue'
-import { getMatchmaking, getMatchmakingAccountProfile } from '@/api/matchmaking'
+import {
+  getMatchmaking,
+  getMatchmakingAccountProfile,
+  getPublicMatchmaking,
+} from '@/api/matchmaking'
 import { useMatchmakingPage } from '@/composables/use-matchmaking-page'
 import {
   canEditMatchmaking,
@@ -20,7 +24,9 @@ import {
   parseMatchmakingProfile,
 } from '@/utils/matchmaking'
 import { beijingTime } from '@/utils/capsules'
+import { session } from '@/utils/session'
 import type {
+  MatchmakingActivity,
   MatchmakingDetail,
   MatchmakingAccountProfile,
   MatchmakingTask,
@@ -31,6 +37,9 @@ const theme = useThemeStore()
 const enrollmentExpanded = ref(false)
 const scheduleExpanded = ref(false)
 const detail = ref<MatchmakingDetail | null>(null)
+const publicActivity = ref<MatchmakingActivity | null>(null)
+const activity = computed(() => detail.value?.activity ?? publicActivity.value)
+let continueEnrollment = false
 const editing = ref(false)
 const account = ref<MatchmakingAccountProfile | null>(null)
 const editVersion = ref(0)
@@ -41,6 +50,8 @@ const tasksExpanded = ref(false)
 const page = useMatchmakingPage(
   () => {
     detail.value = null
+    publicActivity.value = null
+    continueEnrollment = false
     editing.value = false
     account.value = null
     consent.value = false
@@ -50,7 +61,7 @@ const page = useMatchmakingPage(
     enrollmentExpanded.value = false
     scheduleExpanded.value = false
   },
-  () => id.value,
+  { activityId: () => id.value, allowGuest: true },
 )
 const { user, busy, writing, error, notice, gate, pending } = page
 const locked = computed(() => busy.value || writing.value || !!pending.value)
@@ -114,8 +125,15 @@ function gradeLabel(code: string) {
   return `${level}${match[2]}年级`
 }
 async function load() {
-  await page.read(async (active) => {
+  await page.read(async (active, guest) => {
     if (!matchmakingID(id.value)) throw new Error('活动地址无效，请返回活动列表。')
+    if (guest) {
+      const result = await getPublicMatchmaking(id.value)
+      if (!active()) return
+      if (!publicActivity.value) scheduleExpanded.value = true
+      publicActivity.value = result
+      return
+    }
     const result = await getMatchmaking(id.value)
     if (!active()) return
     detail.value = result
@@ -131,6 +149,13 @@ async function load() {
       }
     }
   })
+  if (continueEnrollment && !busy.value) {
+    continueEnrollment = false
+    if (!detail.value?.enrollment || detail.value.enrollment.status === 'withdrawn') beginEdit()
+  }
+}
+function resumeEnrollment() {
+  continueEnrollment = true
 }
 function beginEdit() {
   if (!canEdit.value || locked.value || !detail.value) return
@@ -246,13 +271,18 @@ onPullDownRefresh(async () => {
   }
 })
 useLoginRefresh(() => load())
+watch(
+  () => session.getEpoch(),
+  () => {
+    if (!session.getToken()) void load()
+  },
+)
 </script>
 <template>
   <AppPage responsive-padding>
     <view class="match-experience" :class="{ dark: theme.mode === 'dark' }">
       <view v-if="gate" class="match-card"
-        ><text class="content-text">{{ gate }}</text
-        ><LoginLink class="small-link">微信登录 ›</LoginLink></view
+        ><text class="content-text">{{ gate }}</text></view
       >
       <text v-if="busy" class="content-text notice">正在读取最新活动状态…</text>
       <template v-if="detail">
@@ -401,66 +431,65 @@ useLoginRefresh(() => load())
           >
           <button :disabled="locked" @click="cancelEdit">取消</button>
         </view>
-        <view class="match-card activity-summary">
-          <text class="content-text section-title">活动说明与日程</text>
-          <view class="summary-heading">
-            <text class="content-text category-pill">{{
-              matchmakingPhaseLabel(detail.activity.phase)
-            }}</text>
-            <text class="content-text muted">{{ detail.activity.days }} 天互动</text>
-          </view>
-          <text class="content-text activity-name">{{ detail.activity.title }}</text>
-          <text class="content-text match-description preserve-text">{{
-            detail.activity.description
-          }}</text>
-          <MatchmakingActivitySummary
-            v-if="detail.activity.summary"
-            :summary="detail.activity.summary"
-          />
-          <button
-            class="schedule-toggle"
-            :aria-expanded="scheduleExpanded"
-            @click="scheduleExpanded = !scheduleExpanded"
-          >
-            活动日程
-            <text class="content-text">{{ scheduleExpanded ? '收起 −' : '查看全部 +' }}</text>
-          </button>
-          <view v-show="scheduleExpanded" class="schedule"
-            ><text class="content-text">报名开始</text
-            ><text class="content-text">{{
-              beijingTime(detail.activity.registration_opens_at)
-            }}</text
-            ><text class="content-text">报名截止</text
-            ><text class="content-text">{{
-              beijingTime(detail.activity.registration_closes_at)
-            }}</text
-            ><text class="content-text">最早结果发布</text
-            ><text class="content-text">{{ beijingTime(detail.activity.results_at) }}</text
-            ><text class="content-text">活动开始</text
-            ><text class="content-text">{{ beijingTime(detail.activity.starts_at) }}</text
-            ><text class="content-text">活动结束</text
-            ><text class="content-text">{{ beijingTime(detail.activity.ends_at) }}</text></view
-          >
-          <text class="content-text muted">以上时间均为北京时间。结果以运营实际发布为准。</text>
-        </view>
-        <view v-if="canExit" class="match-card exit-card"
-          ><text class="content-text section-title">退出本次活动</text
-          ><text class="content-text muted"
-            >退出会解除当前配对，并停止访问本次活动的聊天、对方资料和任务。</text
-          ><input
-            v-model="exitReason"
-            :disabled="locked"
-            maxlength="200"
-            placeholder="请填写退出原因"
-          /><button
-            :disabled="locked"
-            :loading="isPageActionPending('matchmaking-withdraw')"
-            @click="runPageAction(() => withdraw(), 'matchmaking-withdraw')"
-          >
-            退出本次活动
-          </button></view
-        >
       </template>
+      <view v-if="activity" class="match-card activity-summary">
+        <text class="content-text section-title">活动说明与日程</text>
+        <view class="summary-heading">
+          <text class="content-text category-pill">{{
+            matchmakingPhaseLabel(activity.phase)
+          }}</text>
+          <text class="content-text muted">{{ activity.days }} 天互动</text>
+        </view>
+        <text class="content-text activity-name">{{ activity.title }}</text>
+        <text class="content-text match-description preserve-text">{{ activity.description }}</text>
+        <MatchmakingActivitySummary v-if="activity.summary" :summary="activity.summary" />
+        <button
+          class="schedule-toggle"
+          :aria-expanded="scheduleExpanded"
+          @click="scheduleExpanded = !scheduleExpanded"
+        >
+          活动日程
+          <text class="content-text">{{ scheduleExpanded ? '收起 −' : '查看全部 +' }}</text>
+        </button>
+        <view v-show="scheduleExpanded" class="schedule"
+          ><text class="content-text">报名开始</text
+          ><text class="content-text">{{ beijingTime(activity.registration_opens_at) }}</text
+          ><text class="content-text">报名截止</text
+          ><text class="content-text">{{ beijingTime(activity.registration_closes_at) }}</text
+          ><text class="content-text">最早结果发布</text
+          ><text class="content-text">{{ beijingTime(activity.results_at) }}</text
+          ><text class="content-text">活动开始</text
+          ><text class="content-text">{{ beijingTime(activity.starts_at) }}</text
+          ><text class="content-text">活动结束</text
+          ><text class="content-text">{{ beijingTime(activity.ends_at) }}</text></view
+        >
+        <text class="content-text muted">以上时间均为北京时间。结果以运营实际发布为准。</text>
+        <text v-if="publicActivity" class="content-text muted">报名需要通过平台学生认证。</text>
+        <LoginLink
+          v-if="publicActivity && activity.phase === 'registration'"
+          class="small-link"
+          @success="resumeEnrollment"
+          >登录后报名 ›</LoginLink
+        >
+        <LoginLink v-else-if="publicActivity" class="small-link">登录后查看我的报名 ›</LoginLink>
+      </view>
+      <view v-if="canExit" class="match-card exit-card"
+        ><text class="content-text section-title">退出本次活动</text
+        ><text class="content-text muted"
+          >退出会解除当前配对，并停止访问本次活动的聊天、对方资料和任务。</text
+        ><input
+          v-model="exitReason"
+          :disabled="locked"
+          maxlength="200"
+          placeholder="请填写退出原因"
+        /><button
+          :disabled="locked"
+          :loading="isPageActionPending('matchmaking-withdraw')"
+          @click="runPageAction(() => withdraw(), 'matchmaking-withdraw')"
+        >
+          退出本次活动
+        </button></view
+      >
       <view v-if="pending" class="match-card"
         ><text class="content-text">上次操作结果尚未确认，已保留原始请求。请原样重试核实结果。</text
         ><button
