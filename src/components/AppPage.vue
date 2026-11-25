@@ -36,7 +36,11 @@ if (capsule?.height && capsule.top >= statusBarHeight) {
     :class="{ 'has-tabs': tab, 'responsive-padding': responsivePadding }"
     :style="`${theme.variables};--status-bar-height:${statusBarHeight}px;--navigation-height:${navigationHeight}px;--navigation-right:${navigationRight}px`"
   >
-    <AppNoticeHost :items="notifications.items.value" @dismiss="notifications.dismiss" />
+    <AppNoticeHost
+      :items="notifications.items.value"
+      :with-app-header="!!tab"
+      @dismiss="notifications.dismiss"
+    />
     <view v-if="tab" class="app-header">
       <view class="app-header-inner">
         <image src="/static/illustrations/brand-koi.png" class="brand-koi" mode="aspectFit" />

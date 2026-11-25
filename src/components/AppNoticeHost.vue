@@ -1,18 +1,40 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { noticeCopy } from '@/utils/notices'
 import type { NoticeItem } from '@/utils/notices'
-defineProps<{ items: NoticeItem[] }>()
+const props = defineProps<{ items: NoticeItem[]; withAppHeader?: boolean }>()
+const notices = computed(() => props.items.map((item) => ({ ...item, ...noticeCopy(item) })))
 const emit = defineEmits<{ dismiss: [id: number] }>()
+const marks: Record<NoticeItem['kind'], string> = {
+  success: '✓',
+  info: 'i',
+  progress: '◌',
+  warning: '!',
+  error: '×',
+  uncertain: '?',
+}
 </script>
 <template>
-  <view v-if="isPageVisible && items.length" class="floating-notices" aria-live="polite">
+  <view
+    v-if="isPageVisible && items.length"
+    class="floating-notices"
+    :class="{ 'with-app-header': withAppHeader }"
+    aria-live="polite"
+  >
     <view
-      v-for="item in items"
+      v-for="item in notices"
       :key="item.id"
       class="floating-notice"
       :class="'floating-notice-' + item.kind"
       :role="item.kind === 'error' ? 'alert' : 'status'"
     >
-      <text class="floating-notice-message">{{ item.message }}</text>
+      <text class="floating-notice-mark" aria-hidden="true">{{ marks[item.kind] }}</text>
+      <view class="floating-notice-message">
+        <text class="floating-notice-title">{{ item.title }}</text>
+        <text v-if="item.description" class="floating-notice-description">{{
+          item.description
+        }}</text>
+      </view>
       <button class="floating-notice-close" aria-label="关闭提示" @click="emit('dismiss', item.id)">
         ×
       </button>
@@ -23,10 +45,9 @@ const emit = defineEmits<{ dismiss: [id: number] }>()
 .floating-notices {
   position: fixed;
   z-index: 3000;
-  top: 50%;
-  transform: translateY(-50%);
-  left: 48rpx;
-  right: 48rpx;
+  top: 8px;
+  left: 12px;
+  right: 12px;
   display: flex;
   flex-direction: column;
   gap: 16rpx;
@@ -34,47 +55,88 @@ const emit = defineEmits<{ dismiss: [id: number] }>()
   overflow-y: auto;
   pointer-events: none;
 }
+.floating-notices.with-app-header {
+  top: calc(var(--status-bar-height) + var(--navigation-height) + 8px);
+}
 .floating-notice {
+  --notice-accent: var(--theme-teal);
+  --notice-surface: var(--theme-mint);
   display: flex;
   align-items: flex-start;
-  gap: 16rpx;
+  gap: 10px;
   width: 100%;
   max-width: 620rpx;
   margin: 0 auto;
-  padding: 22rpx 18rpx 22rpx 26rpx;
-  border: 2rpx solid var(--theme-line);
-  border-left: 8rpx solid var(--theme-teal);
-  border-radius: 20rpx;
+  padding: 8px 4px 8px 12px;
+  border: 1px solid var(--theme-line);
+  border-radius: 12px;
   background: var(--theme-surface);
   color: var(--theme-ink);
-  box-shadow: 0 10rpx 32rpx rgb(0 0 0 / 18%);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 15%);
   pointer-events: auto;
 }
+.floating-notice-success {
+  --notice-accent: var(--theme-success-ink);
+  --notice-surface: var(--theme-success);
+}
 .floating-notice-warning,
-.floating-notice-uncertain,
+.floating-notice-uncertain {
+  --notice-accent: var(--theme-warning-ink);
+  --notice-surface: var(--theme-warning);
+}
 .floating-notice-error {
-  border-left-color: var(--theme-danger);
+  --notice-accent: var(--theme-danger);
+  --notice-surface: var(--theme-peach);
+}
+.floating-notice-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: 8px 0 0;
+  border-radius: 50%;
+  background: var(--notice-surface);
+  color: var(--notice-accent);
+  font-weight: 700;
 }
 .floating-notice .floating-notice-message {
   flex: 1;
   min-width: 0;
-  margin: 0;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
   max-height: 35vh;
   overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 27rpx;
+}
+.floating-notice .floating-notice-title,
+.floating-notice .floating-notice-description {
+  margin: 0;
+  line-height: 1.45;
+}
+.floating-notice-title {
+  font-size: 15px;
+  font-weight: 680;
+}
+.floating-notice-description {
+  color: var(--theme-muted);
+  font-size: 13px;
 }
 .floating-notice button.floating-notice-close {
   flex-shrink: 0;
-  width: 60rpx;
-  min-height: 60rpx;
-  margin: -10rpx -6rpx -10rpx auto;
+  width: 44px;
+  min-height: 44px;
+  margin: 0 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--theme-muted);
   font-size: 40rpx;
-  line-height: 60rpx;
+  line-height: 44px;
 }
 </style>

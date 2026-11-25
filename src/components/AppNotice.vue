@@ -6,7 +6,7 @@ const props = withDefaults(defineProps<{ message?: string | null; kind?: NoticeK
   message: '',
   kind: 'info',
 })
-const controller = inject(noticeContext)
+const controller = inject(noticeContext, undefined)
 const instance = getCurrentInstance()
 const mounted = ref(false)
 onMounted(() => {

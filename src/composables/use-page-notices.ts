@@ -17,8 +17,8 @@ export function usePageNotices() {
     items.value = value
   })
   const controller = {
-    show(message: string, kind?: NoticeKind, previous?: number) {
-      return visible.value ? queue.show(message, kind, previous) : 0
+    show(message: string, kind?: NoticeKind, previous?: number, description?: string) {
+      return visible.value ? queue.show(message, kind, previous, description) : 0
     },
     dismiss: queue.dismiss,
   }
@@ -26,7 +26,12 @@ export function usePageNotices() {
   const operations = new Map<string, number>()
   function receive(value: unknown) {
     if (!visible.value || !value || typeof value !== 'object') return
-    const input = value as { message?: unknown; kind?: unknown; key?: unknown }
+    const input = value as {
+      message?: unknown
+      kind?: unknown
+      key?: unknown
+      description?: unknown
+    }
     if (typeof input.message !== 'string') return
     const key = typeof input.key === 'string' ? input.key : ''
     if (!input.message.trim()) {
@@ -40,7 +45,8 @@ export function usePageNotices() {
     )
       ? (input.kind as NoticeKind)
       : 'info'
-    const id = controller.show(input.message, kind, operations.get(key))
+    const description = typeof input.description === 'string' ? input.description.trim() : undefined
+    const id = controller.show(input.message, kind, operations.get(key), description)
     if (key) operations.set(key, id)
   }
   uni.$on(noticeEvent, receive)

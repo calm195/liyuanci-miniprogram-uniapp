@@ -5,9 +5,10 @@ export interface NoticeItem {
   id: number
   message: string
   kind: NoticeKind
+  description?: string
 }
 export interface NoticeController {
-  show(message: string, kind?: NoticeKind, previous?: number): number
+  show(message: string, kind?: NoticeKind, previous?: number, description?: string): number
   dismiss(id: number): void
 }
 export const noticeContext: InjectionKey<NoticeController> = Symbol('page-notices')
@@ -31,15 +32,26 @@ export function createNoticeQueue(
     items = items.filter((item) => item.id !== id)
     update([...items])
   }
-  function show(message: string, kind: NoticeKind = 'info', previous?: number) {
+  function show(
+    message: string,
+    kind: NoticeKind = 'info',
+    previous?: number,
+    description?: string,
+  ) {
     if (!message.trim()) return 0
     const existing =
       items.find((item) => item.id === previous) ??
-      items.find((item) => item.message === message && item.kind === kind)
+      items.find(
+        (item) =>
+          item.message === message && item.kind === kind && item.description === description,
+      )
     const id = existing?.id ?? ++nextId
     const timer = timers.get(id)
     if (timer) cancel(timer.handle)
-    items = [...items.filter((item) => item.id !== id), { id, message, kind }]
+    items = [
+      ...items.filter((item) => item.id !== id),
+      { id, message, kind, ...(description ? { description } : {}) },
+    ]
     while (items.length > 1) dismiss(items[0]!.id)
     const current = ++generation
     if (kind !== 'progress')
@@ -61,8 +73,15 @@ export function createNoticeQueue(
   return { show, dismiss, clear }
 }
 
+export function noticeCopy(item: NoticeItem): { title: string; description?: string } {
+  if (item.description) return { title: item.message, description: item.description }
+  const match = /^(.{1,28}?[。！？]|.{1,28}?\n)([\s\S]+)$/.exec(item.message)
+  if (match?.[2]?.trim()) return { title: match[1]!.trim(), description: match[2].trim() }
+  return { title: item.message }
+}
+
 // 结果未知独立于失败，提示关闭不会丢失原请求的重试状态。
 export function resultNoticeKind(message: string, kind: NoticeKind): NoticeKind {
-  if (/尚未确认|结果不明|未能确认|结果未知/.test(message)) return 'uncertain'
+  if (/尚未确认|结果不明|未能确认|结果未知|结果待确认/.test(message)) return 'uncertain'
   return kind
 }
