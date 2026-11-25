@@ -63,7 +63,7 @@ useLoginRefresh(() => load())
 </script>
 <template>
   <AppPage responsive-padding>
-    <PageHeading title="你的来信" description="到期能否读取，以服务端当前状态为准。" />
+    <PageHeading title="你的来信" />
     <template v-if="record">
       <view class="ui-section ce-group capsule-receipt">
         <image src="/static/illustrations/entry-whisper.png" class="capsule-art" mode="aspectFit" />
@@ -75,9 +75,7 @@ useLoginRefresh(() => load())
               ? '有一份期待，正在路上'
               : '写给自己的一封信'
         }}</text>
-        <text class="ui-meta">预约时间 · {{ beijingTime(record.unlock_at) }}</text>
-        <text class="ui-meta">服务端时间 · {{ beijingTime(record.server_now) }}</text>
-        <text class="ui-meta">以上时间均为北京时间</text>
+        <text class="ui-meta">预约时间 · {{ beijingTime(record.unlock_at) }}（北京时间）</text>
         <button
           class="ui-button"
           :disabled="locked"
@@ -93,7 +91,9 @@ useLoginRefresh(() => load())
         ><text class="ui-section-title">给现在的你</text
         ><text class="ui-copy">{{ record.body }}</text></view
       >
-      <text v-else class="ui-state">当前未返回可读正文；到期后请刷新，以服务端当前状态为准。</text>
+      <text v-else-if="record.status === 'locked'" class="ui-state"
+        >到预约时间后，可刷新查看。</text
+      >
       <view v-if="record.review_result?.decision === 'rejected'" class="ui-section ce-group"
         ><text class="ui-section-title">审核意见</text
         ><text class="ui-copy">{{ record.review_result.reason }}</text

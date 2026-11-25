@@ -167,7 +167,7 @@ async function submit() {
       if (visible && isScoped()) notice.value = '权限、类型或目标状态已变化，请核对后手动提交。'
     } else {
       uncertain.value = true
-      error.value = '结果尚未确认，重试将复用原内容和幂等键，请勿重复新建举报。'
+      error.value = '尚未确认是否受理，可重试这次举报。'
     }
   } finally {
     finish(current, true)
@@ -217,9 +217,8 @@ useLoginRefresh(() => load())
 </script>
 <template>
   <AppPage responsive-padding>
-    <PageHeading title="举报与反馈" description="请说明具体情况，平台受理后会按规则核查。" />
+    <PageHeading title="举报与反馈" description="请选择举报类型，可补充具体情况。" />
     <LoginLink v-if="!user.isLoggedIn" class="ui-link">前往登录</LoginLink>
-    <text class="ui-copy">举报受理后由平台核查，请选择类型并说明情况。</text>
     <button
       class="ui-button"
       :disabled="busy || writing || uncertain"
