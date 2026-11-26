@@ -9,6 +9,7 @@ import { config } from '@/config'
 import { useUserStore } from '@/stores/user'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
+import { contentSafetyMessage } from '@/utils/content-safety'
 import { getWish } from '@/api/wishes'
 import { writeStory, withdrawStory } from '@/api/stories'
 import { canStoryAction } from '@/utils/story'
@@ -129,6 +130,12 @@ async function act(action: StoryAction) {
         action === 'withdraw' ? '撤回已受理，心愿仍为已还愿。' : '故事已受理，审核通过后才会公开。'
   } catch (failure) {
     if (!active()) return
+    const safetyMessage = contentSafetyMessage(failure)
+    if (safetyMessage) {
+      refresh = false
+      error.value = safetyMessage
+      return
+    }
     notice.value =
       failure instanceof RequestError && failure.statusCode === 409
         ? '状态或版本已变化，已重新读取；请确认后手动操作。'
@@ -198,12 +205,9 @@ useLoginRefresh(() => load())
             ]
           }}</text
         >
-        <text v-if="currentWish.story_review_result.reason" class="ui-copy">{{
-          currentWish.story_review_result.reason
-        }}</text>
-        <text v-if="currentWish.story_review_result.revision_suggestion" class="ui-copy">{{
-          currentWish.story_review_result.revision_suggestion
-        }}</text>
+        <text v-if="currentWish.story_review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
+        >
       </template>
       <text class="ui-copy">审核通过与当前公开状态可能不同，请以公开故事入口为准。</text>
       <navigator

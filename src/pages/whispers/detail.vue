@@ -335,12 +335,9 @@ useLoginRefresh(() => load())
         }}</text>
         <text class="ui-meta">{{ whisperStates[ownerPost.status] }}</text>
         <text v-if="ownerPost.body" class="ui-copy whitespace-pre-wrap">{{ ownerPost.body }}</text>
-        <text v-if="ownerPost.review_result?.reason" class="ui-meta notice">{{
-          ownerPost.review_result.reason
-        }}</text>
-        <text v-if="ownerPost.review_result?.revision_suggestion" class="ui-meta notice">{{
-          ownerPost.review_result.revision_suggestion
-        }}</text>
+        <text v-if="ownerPost.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
+        >
       </view>
       <template v-else-if="unavailable">
         <view class="whisper-detail-card">

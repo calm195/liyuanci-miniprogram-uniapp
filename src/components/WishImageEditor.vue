@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue'
+import { contentSafetyMessage } from '@/utils/content-safety'
+import { RequestError } from '@/utils/request'
 import { uploadWishImage, downloadWishImage } from '@/api/wish-images'
 import { interactionKey } from '@/api/interactions'
 import { session } from '@/utils/session'
@@ -13,7 +15,7 @@ type ImageEntry = {
   key: string
   id?: string
   path: string
-  status: 'ready' | 'uploading' | 'failed'
+  status: 'ready' | 'uploading' | 'reviewing' | 'rejected' | 'failed'
 }
 const entries = ref<ImageEntry[]>([])
 const error = ref('')
@@ -76,6 +78,7 @@ function sync() {
 async function upload(item: ImageEntry) {
   if (!mounted || props.disabled || !entries.value.includes(item)) return
   const active = ticket()
+  error.value = ''
   item.status = 'uploading'
   sync()
   try {
@@ -84,10 +87,15 @@ async function upload(item: ImageEntry) {
     item.id = result.id
     item.status = 'ready'
     uni.$emit('app:notice', { message: '照片上传成功', kind: 'success' })
-  } catch {
+  } catch (failure) {
     if (active() && entries.value.includes(item)) {
-      item.status = 'failed'
-      error.value = '图片上传尚未确认，请重试或移除后继续。'
+      if (failure instanceof RequestError && failure.error_code === 'MEDIA_REVIEW_PENDING') {
+        item.status = 'reviewing'
+      } else {
+        const safetyMessage = contentSafetyMessage(failure)
+        item.status = safetyMessage ? 'rejected' : 'failed'
+        error.value = safetyMessage || '图片上传尚未确认，请重试或移除后继续。'
+      }
     }
   } finally {
     if (active()) sync()
@@ -160,7 +168,15 @@ function preview(path: string) {
           mode="aspectFill"
           @click="preview(item.path)"
         /><text v-else>原图已保留</text><text v-if="item.status === 'uploading'">上传中…</text
-        ><button v-if="item.status === 'failed'" :disabled="disabled || busy" @click="upload(item)">
+        ><text v-if="item.status === 'reviewing'">审核中</text>
+        <button
+          v-if="item.status === 'reviewing'"
+          :disabled="disabled || busy"
+          @click="upload(item)"
+        >
+          查看审核结果
+        </button>
+        <button v-if="item.status === 'failed'" :disabled="disabled || busy" @click="upload(item)">
           原请求重试</button
         ><view class="photo-actions"
           ><button :disabled="disabled || busy || index === 0" @click="move(index)">前移</button

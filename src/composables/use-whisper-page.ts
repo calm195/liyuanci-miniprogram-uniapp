@@ -5,12 +5,15 @@ import { config } from '@/config'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 import { RequestError } from '@/utils/request'
+import { contentSafetyMessage } from '@/utils/content-safety'
 import { createWhisperScope } from '@/utils/whispers'
 import type { WhisperInputs, WhisperOperation, WhisperOutputs } from '@/types/whispers'
 
 export function whisperFailure(failure: unknown): string {
   if (!(failure instanceof RequestError))
     return failure instanceof Error ? failure.message : '操作未完成，请重试。'
+  const safetyMessage = contentSafetyMessage(failure)
+  if (safetyMessage) return safetyMessage
   if (failure.statusCode === 401) return '登录已过期，请重新登录。'
   if (failure.error_code === 'VERIFICATION_REQUIRED') return '发帖需要有效学生认证，请先认证。'
   if (failure.statusCode === 403) return '当前无法执行此操作，请核对账号与内容状态。'

@@ -89,9 +89,9 @@ onShow(load)
       <text v-if="candidate" class="nickname-setup-caption">
         {{ candidate.label }} · {{ statusLabels[candidate.status] }}
       </text>
-      <text v-if="candidate?.review_result?.reason" class="nickname-setup-caption">
-        {{ candidate.review_result.reason }}
-      </text>
+      <text v-if="candidate?.review_result?.decision === 'rejected'" class="ui-copy"
+        >你发布的内容含有违规信息</text
+      >
       <template v-if="canSave">
         <input
           v-model="label"

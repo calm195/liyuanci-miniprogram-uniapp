@@ -53,12 +53,10 @@ async function saveDraft() {
 <template>
   <view class="post-editor">
     <text v-if="record" class="editor-status">当前状态 · {{ whisperStates[record.status] }}</text>
-    <text v-if="record?.review_result?.reason" class="ui-copy"
-      >审核原因：{{ record.review_result.reason }}</text
+    <text v-if="record?.review_result?.decision === 'rejected'" class="ui-copy"
+      >你发布的内容含有违规信息</text
     >
-    <text v-if="record?.review_result?.revision_suggestion" class="ui-copy"
-      >修改建议：{{ record.review_result.revision_suggestion }}</text
-    >
+
     <LoginLink v-if="!user.isLoggedIn" class="ui-link"
       >登录后{{ id ? '编辑心事' : '写心事' }}</LoginLink
     >

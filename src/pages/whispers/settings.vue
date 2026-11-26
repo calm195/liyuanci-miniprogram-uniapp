@@ -239,9 +239,9 @@ useLoginRefresh(() => load())
       <view v-if="state.candidate" class="notice"
         ><text class="ui-copy"
           >{{ state.candidate.label }} · {{ candidateLabels[state.candidate.status] }}</text
-        ><text v-if="state.candidate.review_result?.reason" class="ui-copy">{{
-          state.candidate.review_result.reason
-        }}</text></view
+        ><text v-if="state.candidate.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
+        ></view
       >
       <input
         v-if="canSave"
@@ -272,12 +272,10 @@ useLoginRefresh(() => load())
           @click="runPageAction(() => openComment(comment), 'whisper-settings-open:' + comment.id)"
           >{{ comment.body }}</text
         >
-        <text v-if="comment.review_result?.reason" class="ui-meta notice">{{
-          comment.review_result.reason
-        }}</text>
-        <text v-if="comment.review_result?.revision_suggestion" class="ui-meta">{{
-          comment.review_result.revision_suggestion
-        }}</text>
+        <text v-if="comment.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
+        >
+
         <text v-if="!comment.post_id" class="ui-meta notice">原帖已关闭或当前不可查看。</text>
         <view class="comment-actions"
           ><navigator

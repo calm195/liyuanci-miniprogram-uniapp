@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { reactive } from 'vue'
 import { createPinia, defineStore } from 'pinia'
 import { loadRuntime, pageScript, settle } from './support/page-runtime.ts'
+import { WhisperTestError as RequestError } from './support/whispers-runtime.ts'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -90,6 +91,52 @@ test('多图上传中换号，旧响应不显示成功且后续照片不使用�
   assert.deepEqual(uploads, ['a.png'])
   assert.deepEqual(runtime.entries.value, [])
   assert.deepEqual(notices, [])
+})
+
+test('配图待审核不写进发布表单，原文件原键可查询通过或违规结果', async () => {
+  const props = reactive({ modelValue: [] as string[], disabled: false })
+  const uploads: string[][] = []
+  let key = 0
+  Object.assign(globalThis, {
+    uni: {
+      chooseImage: async () => ({ tempFilePaths: ['first.png', 'second.png'] }),
+      $emit() {},
+    },
+  })
+  const runtime = await loadRuntime(
+    pageScript(new URL('../src/components/WishImageEditor.vue', import.meta.url)) +
+      '\nexport { choose, entries, error, upload }',
+    {
+      RequestError,
+      defineProps: () => props,
+      defineEmits: () => (event: string, value: unknown) => {
+        if (event === 'update:modelValue') props.modelValue = value as string[]
+      },
+      onUnmounted() {},
+      interactionKey: () => `upload-${++key}`,
+      session: { getEpoch: () => 1 },
+      uploadWishImage: async (path: string, uploadKey: string) => {
+        uploads.push([path, uploadKey])
+        if (uploads.length <= 2)
+          throw new RequestError('待审核', 409, 'MEDIA_REVIEW_PENDING', '', 409)
+        if (path === 'second.png')
+          throw new RequestError('供应商的原始文案', 422, 'CONTENT_VIOLATION', '', 422)
+        return { id: 'checked-image' }
+      },
+    },
+  )
+  await runtime.choose()
+  assert.deepEqual(props.modelValue, [])
+  assert.deepEqual(
+    runtime.entries.value.map((entry: { status: string }) => entry.status),
+    ['reviewing', 'reviewing'],
+  )
+  await runtime.upload(runtime.entries.value[0])
+  await runtime.upload(runtime.entries.value[1])
+  assert.deepEqual(uploads.slice(2), uploads.slice(0, 2))
+  assert.deepEqual(props.modelValue, ['checked-image'])
+  assert.equal(runtime.entries.value[1].status, 'rejected')
+  assert.equal(runtime.error.value, '你发布的内容含有违规信息')
 })
 
 test('收藏页换号立即清除旧账号数据，旧请求晚到不能覆盖新账号列表', async () => {

@@ -146,12 +146,10 @@ watch(
       </template>
       <template v-if="record || (post && !post.comments_open)" #context>
         <text v-if="record" class="ui-copy">{{ whisperStates[record.status] }}</text>
-        <text v-if="record?.review_result?.reason" class="ui-copy"
-          >原因：{{ record.review_result.reason }}</text
+        <text v-if="record?.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
         >
-        <text v-if="record?.review_result?.revision_suggestion" class="ui-copy"
-          >建议：{{ record.review_result.revision_suggestion }}</text
-        >
+
         <text
           v-if="record && post && record.parent_content_version !== post.content_version"
           class="ui-copy"

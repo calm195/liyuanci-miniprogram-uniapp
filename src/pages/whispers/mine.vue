@@ -73,12 +73,9 @@ useLoginRefresh(() => load())
           <text class="whisper-mine-state">{{ whisperStates[post.status] }}</text>
           <text class="whisper-mine-meta">这条心事暂时无法查看。</text>
         </template>
-        <text v-if="post.review_result?.reason" class="ui-meta notice">{{
-          post.review_result.reason
-        }}</text>
-        <text v-if="post.review_result?.revision_suggestion" class="ui-meta notice">{{
-          post.review_result.revision_suggestion
-        }}</text>
+        <text v-if="post.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
+        >
       </view>
       <view v-if="!posts.length && !user.isLoggedIn" class="whisper-mine-card">
         <LoginLink class="ui-link">登录后查看我的心事</LoginLink>

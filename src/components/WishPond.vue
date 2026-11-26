@@ -18,6 +18,7 @@ import { useHiddenWishes } from '@/composables/use-hidden-wishes'
 import type { WishAction } from '@/utils/actions'
 import { session } from '@/utils/session'
 import { RequestError } from '@/utils/request'
+import { contentSafetyMessage } from '@/utils/content-safety'
 import {
   listWishes,
   createWish,
@@ -287,6 +288,12 @@ async function retryWrite() {
     await load()
   } catch (failure) {
     if (!isCurrent()) return
+    const safetyMessage = contentSafetyMessage(failure)
+    if (safetyMessage) {
+      pendingWrite.value = null
+      error.value = safetyMessage
+      return
+    }
     const status = failure instanceof RequestError ? failure.statusCode || failure.code : 0
     if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
       pendingWrite.value = null
@@ -683,12 +690,10 @@ useLoginRefresh(() => load())
       >
       <view v-for="wish in rows" :key="wish.id" :class="{ 'ui-section': own }">
         <WishPreview :wish="wish" :own="own" @support-change="sort === 'support' && load()" />
-        <text v-if="own && wish.review_result?.reason" class="ui-copy"
-          >驳回原因：{{ wish.review_result.reason }}</text
+        <text v-if="own && wish.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
         >
-        <text v-if="own && wish.review_result?.revision_suggestion" class="ui-copy"
-          >修改建议：{{ wish.review_result.revision_suggestion }}</text
-        >
+
         <navigator
           v-if="own && !config.useMock && canManageApplications(user.user, user.validated, wish)"
           class="ui-link application-queue-link"

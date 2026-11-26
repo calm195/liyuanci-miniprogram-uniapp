@@ -19,6 +19,7 @@ import { useUserStore } from '@/stores/user'
 import { useProfileDraftStore } from '@/stores/profile-drafts'
 import type { ProfileIdentityDraft } from '@/stores/profile-drafts'
 import { RequestError } from '@/utils/request'
+import { contentSafetyMessage } from '@/utils/content-safety'
 import { whisperKey } from '@/utils/whispers'
 import { updateProfile } from '@/api/settings'
 import type { ProfileUpdate, WechatProfileChoice } from '@/types/settings'
@@ -91,6 +92,7 @@ const wechatScope = ref<WechatScope | null>(null)
 const wechatRetryLabel = computed(() => {
   const scope = wechatScope.value
   if (!scope) return ''
+  if (avatarPending.value?.reviewing) return '查看头像审核结果'
   if (avatarPending.value || profilePending.value) return '确认保存结果'
   if (scope.avatar && (avatarDraft.value || identityChoice.value?.avatar)) return '继续保存'
   if (scope.nickname && (identityChoice.value?.nickname || profileDirty.value))
@@ -587,7 +589,20 @@ async function changeAvatar(remove = false, confirmed = false) {
     else notice.value = path ? '头像已更新。' : '已恢复默认头像。'
   } catch (failure) {
     if (!active()) return
-    if (failure instanceof RequestError && failure.error_code === 'UPLOAD_DOMAIN_NOT_ALLOWED') {
+    const safetyMessage = contentSafetyMessage(failure)
+    if (
+      failure instanceof RequestError &&
+      failure.error_code === 'MEDIA_REVIEW_PENDING' &&
+      avatarPending.value
+    ) {
+      avatarPending.value = { ...avatarPending.value, reviewing: true }
+    } else if (safetyMessage) {
+      avatarPending.value = null
+      avatarError.value = safetyMessage
+    } else if (
+      failure instanceof RequestError &&
+      failure.error_code === 'UPLOAD_DOMAIN_NOT_ALLOWED'
+    ) {
       avatarError.value = '头像暂时无法上传，请稍后再试。'
     } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_FILE_UNREADABLE') {
       avatarDraft.value = ''
@@ -741,6 +756,12 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
       gradeOverride.value = updated.grade_override ?? ''
   } catch (failure) {
     if (!active()) return
+    const safetyMessage = contentSafetyMessage(failure)
+    if (safetyMessage) {
+      profilePending.value = null
+      error.value = safetyMessage
+      return
+    }
     if (
       failure instanceof RequestError &&
       failure.statusCode === 409 &&
@@ -763,7 +784,7 @@ async function saveProfile(snapshot: UserInfo, active: () => boolean, epoch: num
 }
 
 async function act(manual = true) {
-  if (!visible || identityBusy.value) return false
+  if (!visible || identityBusy.value || avatarPending.value?.reviewing) return false
   if (gradeNumberError.value && !profilePending.value) {
     error.value = gradeNumberError.value
     return false
@@ -1029,11 +1050,13 @@ useLoginRefresh(() => load())
         :wechat-available="wechatAvailable"
         :can-save="hasUnsavedChanges"
         :save-label="
-          avatarPending || profilePending
-            ? '确认保存结果'
-            : profilePartiallySaved
-              ? '继续保存资料'
-              : '保存资料'
+          avatarPending?.reviewing
+            ? '查看头像审核结果'
+            : avatarPending || profilePending
+              ? '确认保存结果'
+              : profilePartiallySaved
+                ? '继续保存资料'
+                : '保存资料'
         "
         :choose-avatar="chooseAvatar"
         :save="savePersonalProfile"
@@ -1043,7 +1066,10 @@ useLoginRefresh(() => load())
         @cancel="cancelIdentityChoice"
         @nickname="editNickname"
       >
-        <text v-if="avatarPending && !identityBusy" class="ui-meta">头像保存结果待确认。</text>
+        <text v-if="avatarPending?.reviewing && !identityBusy" class="ui-meta">
+          头像审核中，通过后可保存新头像。
+        </text>
+        <text v-else-if="avatarPending && !identityBusy" class="ui-meta">头像保存结果待确认。</text>
         <text v-else-if="profilePartiallySaved" class="ui-meta">头像已保存，其余资料待保存。</text>
         <AppNotice :message="avatarError" kind="error" />
       </ProfileIdentityCard>

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
+import { contentSafetyMessage } from '../../src/utils/content-safety.ts'
 
 // 执行实际页面脚本及API适配器，仅替换平台、会话与传输边界。
 export async function loadRuntime(source: string, context: Record<string, unknown>) {
@@ -16,6 +17,7 @@ export async function loadRuntime(source: string, context: Record<string, unknow
     context.useWishCommentCommands = () => store
   }
   context = {
+    ...(source.includes('import { contentSafetyMessage }') ? { contentSafetyMessage } : {}),
     ...(source.includes('const recordView = useContentView')
       ? { useContentView: () => async () => {} }
       : {}),

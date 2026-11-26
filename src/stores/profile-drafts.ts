@@ -12,7 +12,7 @@ export interface ProfileIdentityDraft {
   } | null
   avatarPath: string
   restoreAvatar: boolean
-  pending: { path: string; version: number; key: string } | null
+  pending: { path: string; version: number; key: string; reviewing?: boolean } | null
   avatarSaved: boolean
 }
 

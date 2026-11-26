@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import ts from 'typescript'
 import { session } from '../src/utils/session.ts'
+import { contentSafetyMessage } from '../src/utils/content-safety.ts'
 import {
   studentCardMultipart,
   assertStudentCardSize,
@@ -18,7 +19,7 @@ let calls = 0
 let expired = 0
 let sent: Record<string, unknown> = {}
 Object.assign(globalThis, {
-  __requestTest: { config, session },
+  __requestTest: { config, session, contentSafetyMessage },
   uni: {
     request(options: { success: (value: unknown) => void }) {
       calls++
@@ -34,9 +35,10 @@ Object.assign(globalThis, {
 const source = readFileSync(new URL('../src/utils/request.ts', import.meta.url), 'utf8')
   .replace(
     "import { config } from '@/config'",
-    'const { config, session } = globalThis.__requestTest',
+    'const { config, session, contentSafetyMessage } = globalThis.__requestTest',
   )
   .replace("import { session } from './session'", '')
+  .replace("import { contentSafetyMessage } from './content-safety'", '')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText
@@ -666,4 +668,14 @@ test('当前401触发账号订阅者再次清理后仍保留过期状态和安�
   } finally {
     Object.assign(uni, { request: original.request, $emit: original.emit })
   }
+})
+
+test('公开内容违规只显示统一提示', async () => {
+  config.useMock = false
+  statusCode = 422
+  data = { code: 422, error_code: 'CONTENT_VIOLATION', message: '合成审核原因' }
+  await assert.rejects(request({ url: '/wishes/example/comments', method: 'POST' }), {
+    message: '你发布的内容含有违规信息',
+    error_code: 'CONTENT_VIOLATION',
+  })
 })

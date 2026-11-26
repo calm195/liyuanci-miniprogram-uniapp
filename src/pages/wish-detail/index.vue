@@ -878,11 +878,8 @@ onPullDownRefresh(async () => {
           更多操作
         </button>
         <template v-if="!currentWish.privacy_review_required && currentWish.own_content">
-          <text v-if="currentWish.review_result?.reason" class="content-text"
-            >驳回原因：{{ currentWish.review_result.reason }}</text
-          >
-          <text v-if="currentWish.review_result?.revision_suggestion" class="content-text"
-            >修改建议：{{ currentWish.review_result.revision_suggestion }}</text
+          <text v-if="currentWish.review_result?.decision === 'rejected'" class="ui-copy"
+            >你发布的内容含有违规信息</text
           >
         </template>
       </view>

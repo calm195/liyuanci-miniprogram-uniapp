@@ -20,6 +20,7 @@ import {
   type CommentCommand,
   type CommentControlCommand,
 } from '@/stores/wish-comment-commands'
+import { contentSafetyMessage } from '@/utils/content-safety'
 import { session } from '@/utils/session'
 import { useUserStore } from '@/stores/user'
 const props = defineProps<{
@@ -86,7 +87,7 @@ function statusLabel(status: string) {
     pending_review: '审核中',
     scanning: '扫描中',
     review_pending: '审核中',
-    rejected: '未通过',
+    rejected: '你发布的内容含有违规信息',
     withdrawn: '已撤回',
     context_changed: '原帖已变化',
   }
@@ -293,6 +294,13 @@ async function submit() {
     await load()
   } catch (failure) {
     if (!active()) return
+    const safetyMessage = contentSafetyMessage(failure)
+    if (safetyMessage) {
+      pending.value = null
+      rememberCommand()
+      error.value = safetyMessage
+      return
+    }
     const status = (failure as { statusCode?: number }).statusCode ?? 0
     if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
       pending.value = null

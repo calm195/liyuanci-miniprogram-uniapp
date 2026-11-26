@@ -78,10 +78,8 @@ useLoginRefresh(() => load())
       <view v-if="state.candidate"
         ><text class="ui-copy">新候选：{{ state.candidate.label }}</text
         ><text class="ui-copy">{{ candidateLabels[state.candidate.status] }}</text
-        ><text v-if="state.candidate.review_result?.reason" class="ui-copy"
-          >原因：{{ state.candidate.review_result.reason }}</text
-        ><text v-if="state.candidate.review_result?.revision_suggestion" class="ui-copy"
-          >修改建议：{{ state.candidate.review_result.revision_suggestion }}</text
+        ><text v-if="state.candidate.review_result?.decision === 'rejected'" class="ui-copy"
+          >你发布的内容含有违规信息</text
         ></view
       >
       <text class="ui-copy"

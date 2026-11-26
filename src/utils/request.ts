@@ -1,6 +1,7 @@
 import { config } from '@/config'
 import type { ApiResponse } from '@/types/api'
 import { session } from './session'
+import { contentSafetyMessage } from './content-safety'
 export class RequestError extends Error {
   constructor(
     message: string,
@@ -36,6 +37,8 @@ function responseErrorMessage(
   path: string,
   auth: boolean | undefined,
 ) {
+  const safetyMessage = contentSafetyMessage({ error_code: code })
+  if (safetyMessage) return safetyMessage
   if (status === 401) {
     if (path === '/auth/wechat-sessions') return '微信登录凭据无效，请重新登录'
     if (auth !== false) return '登录已过期，请重新登录'
