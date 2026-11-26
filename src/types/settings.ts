@@ -9,3 +9,7 @@ export interface ProfileUpdate {
   expected_version: number
 }
 export type { BlockEntry, BlockEntryPage as BlockPage } from './whispers'
+export interface WechatProfileChoice {
+  avatar: string
+  nickname: string
+}

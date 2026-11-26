@@ -7,6 +7,7 @@ import { matchmakingID, matchmakingMbtis } from '@/utils/matchmaking'
 import ProfileAvatar from '@/components/ProfileAvatar.vue'
 import ProfileIdentityCard from '@/components/ProfileIdentityCard.vue'
 import AppSheet from '@/components/AppSheet.vue'
+import WechatProfileSheet from '@/components/WechatProfileSheet.vue'
 import { deleteAvatar, maxAvatarBytes, uploadAvatar } from '@/api/avatar'
 import { downloadRandomAvatar, drawRandomProfile } from '@/api/random-profile'
 import type { RandomProfile } from '@/api/random-profile'
@@ -20,7 +21,7 @@ import type { ProfileIdentityDraft } from '@/stores/profile-drafts'
 import { RequestError } from '@/utils/request'
 import { whisperKey } from '@/utils/whispers'
 import { updateProfile } from '@/api/settings'
-import type { ProfileUpdate } from '@/types/settings'
+import type { ProfileUpdate, WechatProfileChoice } from '@/types/settings'
 import type { UserInfo } from '@/types/api'
 import { campuses, genders } from '@/types/wish'
 import type { IdentityTags } from '@/types/wish'
@@ -79,10 +80,23 @@ const randomBusy = ref(false)
 const randomError = ref('')
 let previousRandom: RandomProfile | null = null
 let randomGeneration = 0
-const choosingWechatProfile = ref(false)
-const wechatAvatar = ref('')
-const wechatCapabilities = ref({ avatar: false, nickname: false })
-let wechatEpoch = -1
+let wechatAvailable = false
+// #ifdef MP-WEIXIN
+wechatAvailable = true
+// #endif
+type WechatScope = { avatar: boolean; nickname: boolean }
+const wechatSheetOpen = ref(false)
+const wechatSaving = ref(false)
+const wechatScope = ref<WechatScope | null>(null)
+const wechatRetryLabel = computed(() => {
+  const scope = wechatScope.value
+  if (!scope) return ''
+  if (avatarPending.value || profilePending.value) return '确认保存结果'
+  if (scope.avatar && (avatarDraft.value || identityChoice.value?.avatar)) return '继续保存'
+  if (scope.nickname && (identityChoice.value?.nickname || profileDirty.value))
+    return scope.avatar && !profilePartiallySaved.value ? '仅保存昵称' : '继续保存昵称'
+  return ''
+})
 const displayedNickname = computed(() => identityChoice.value?.nickname ?? nickname.value)
 const displayedAvatar = computed(() =>
   restoreAvatar.value
@@ -129,12 +143,6 @@ function stageDefaultAvatar() {
   avatarDraft.value = ''
   if (identityChoice.value) identityChoice.value = { ...identityChoice.value, avatar: null }
   restoreAvatar.value = true
-  avatarError.value = ''
-}
-function cancelWechatProfile() {
-  choosingWechatProfile.value = false
-  wechatAvatar.value = ''
-  wechatEpoch = -1
   avatarError.value = ''
 }
 async function openRandomProfile() {
@@ -187,30 +195,51 @@ function acceptRandomProfile() {
   closeRandomProfile()
 }
 function startWechatProfile() {
-  if (identityChoicesLocked.value) return
-  wechatEpoch = session.getEpoch()
-  wechatAvatar.value = ''
-  choosingWechatProfile.value = true
+  if (
+    !wechatAvailable ||
+    !visible ||
+    wechatSheetOpen.value ||
+    identityChoicesLocked.value ||
+    !allowed('putMeProfile')
+  )
+    return
   avatarError.value = ''
+  error.value = ''
+  wechatSheetOpen.value = true
 }
-function acceptWechatAvatar(event: { detail: { avatarUrl?: string } }) {
-  if (choosingWechatProfile.value && wechatEpoch === session.getEpoch())
-    wechatAvatar.value = event.detail.avatarUrl || ''
+function closeWechatProfile() {
+  if (wechatSaving.value) return
+  wechatSheetOpen.value = false
+  wechatScope.value = null
+  if (saveQueued) queueSave()
 }
-function acceptWechatProfile(event: unknown) {
-  if (!choosingWechatProfile.value || wechatEpoch !== session.getEpoch()) return
-  const name =
-    (event as { detail?: { value?: { nickname?: string } } }).detail?.value?.nickname?.trim() ?? ''
-  if (Array.from(name).length > 40) {
-    avatarError.value = '昵称最多 40 字。'
+async function saveWechatProfile(choice?: WechatProfileChoice) {
+  if (
+    !visible ||
+    !wechatSheetOpen.value ||
+    wechatSaving.value ||
+    identityBusy.value ||
+    !allowed('putMeProfile')
+  )
     return
+  if (!wechatScope.value) {
+    if (!choice || (!choice.avatar && !choice.nickname) || identityChoicesLocked.value) return
+    wechatScope.value = { avatar: !!choice.avatar, nickname: !!choice.nickname }
+    acceptIdentityChoice(choice.avatar ? { src: choice.avatar } : null, choice.nickname || null)
+  } else if (!wechatRetryLabel.value) return
+  const scope = wechatScope.value
+  const epoch = session.getEpoch()
+  const owner = user.user?.id
+  wechatSaving.value = true
+  let saved = false
+  try {
+    saved = await savePersonalProfile(scope)
+  } finally {
+    if (wechatScope.value === scope && epoch === session.getEpoch() && owner === user.user?.id) {
+      wechatSaving.value = false
+      if (saved) closeWechatProfile()
+    }
   }
-  if (!wechatAvatar.value && !name) {
-    avatarError.value = '请选择头像或填写昵称。'
-    return
-  }
-  acceptIdentityChoice(wechatAvatar.value ? { src: wechatAvatar.value } : null, name || null)
-  cancelWechatProfile()
 }
 
 const selectingAvatar = ref(false)
@@ -348,9 +377,9 @@ function clear() {
   profilePartiallySaved.value = false
   closeRandomProfile()
   previousRandom = null
-  choosingWechatProfile.value = false
-  wechatAvatar.value = ''
-  wechatEpoch = -1
+  wechatSheetOpen.value = false
+  wechatSaving.value = false
+  wechatScope.value = null
   selectingAvatar.value = false
   avatarPickerHid = false
   finishAvatarPicker?.()
@@ -566,6 +595,8 @@ async function changeAvatar(remove = false, confirmed = false) {
         avatarError.value = '随机头像临时文件已失效，请再次保存。'
       } else {
         avatarPending.value = null
+        // 保留同次选用的昵称，让用户可以重新选图，也可以仅保存昵称。
+        if (identityChoice.value) identityChoice.value = { ...identityChoice.value, avatar: null }
         avatarError.value = '微信无法读取所选图片，请重新选择头像。'
       }
     } else if (failure instanceof RequestError && failure.error_code === 'UPLOAD_TIMEOUT') {
@@ -627,7 +658,13 @@ function queueSave() {
   globalThis.clearTimeout(saveTimer)
   saveQueued = true
   saveTimer = globalThis.setTimeout(() => {
-    if (!writing.value && !selectingAvatar.value && !preparingIdentity.value) void act(false)
+    if (
+      !writing.value &&
+      !selectingAvatar.value &&
+      !preparingIdentity.value &&
+      !wechatSheetOpen.value
+    )
+      void act(false)
   }, 600)
 }
 function editVisibility(value: boolean) {
@@ -776,15 +813,18 @@ async function act(manual = true) {
     }
   }
 }
-async function savePersonalProfile() {
+async function savePersonalProfile(scope?: WechatScope) {
   if (!visible || identityBusy.value || !allowed('putMeProfile')) return false
   const choice = identityChoice.value
+  const includeAvatar = scope?.avatar ?? true
+  const includeNickname = scope?.nickname ?? true
   const current = generation
   const epoch = session.getEpoch()
   const owner = user.user?.id
   const active = () =>
     visible && current === generation && epoch === session.getEpoch() && owner === user.user?.id
   if (
+    includeNickname &&
     choice?.nickname !== undefined &&
     choice.nickname !== null &&
     (!choice.nickname.trim() || Array.from(choice.nickname).length > 40)
@@ -794,7 +834,7 @@ async function savePersonalProfile() {
   }
   if (profilePending.value && !(await act())) return false
   if (!active()) return false
-  if (choice?.avatar && !avatarDraft.value) {
+  if (includeAvatar && choice?.avatar && !avatarDraft.value) {
     preparingIdentity.value = true
     try {
       const path = choice.avatar.randomImagePath
@@ -811,7 +851,7 @@ async function savePersonalProfile() {
       if (active()) preparingIdentity.value = false
     }
   }
-  const hadAvatar = !!(avatarDraft.value || restoreAvatar.value)
+  const hadAvatar = includeAvatar && !!(avatarDraft.value || restoreAvatar.value)
   if (hadAvatar) {
     const remove = restoreAvatar.value
     await changeAvatar(remove, true)
@@ -819,9 +859,15 @@ async function savePersonalProfile() {
     if (remove) restoreAvatar.value = false
   }
   if (choice) {
-    identityChoice.value = null
-    if (choice.nickname !== null) nickname.value = choice.nickname
+    const remainingAvatar = includeAvatar ? null : choice.avatar
+    const remainingNickname = includeNickname ? null : choice.nickname
+    identityChoice.value =
+      remainingAvatar || remainingNickname !== null
+        ? { avatar: remainingAvatar, nickname: remainingNickname }
+        : null
+    if (includeNickname && choice.nickname !== null) nickname.value = choice.nickname
   }
+  if (!includeNickname) return hadAvatar
   if (hadAvatar && profileDirty.value) profilePartiallySaved.value = true
   const saved = await act()
   if (active() && hadAvatar && !saved) profilePartiallySaved.value = true
@@ -888,13 +934,8 @@ watch(
 )
 onShow(() => {
   academicYear.value = currentAcademicYear()
-  // #ifdef MP-WEIXIN
-  wechatCapabilities.value = {
-    avatar: uni.canIUse?.('button.open-type.chooseAvatar') ?? false,
-    nickname: uni.canIUse?.('input.type.nickname') ?? false,
-  }
-  // #endif
   visible = true
+  if (wechatSheetOpen.value) return
   if (avatarPickerHid || selectingAvatar.value) {
     avatarPickerHid = false
     finishAvatarPicker?.()
@@ -904,8 +945,13 @@ onShow(() => {
   void load()
 })
 onHide(() => {
+  if (wechatSheetOpen.value && !wechatSaving.value) {
+    // 微信选图可能暂时遮住页面，原生事件仍由已打开的弹窗接收。
+    visible = false
+    return
+  }
   // 原生选图临时遮住页面，恢复后再校验并展示预览。
-  if (selectingAvatar.value || choosingWechatProfile.value) avatarPickerHid = true
+  if (selectingAvatar.value) avatarPickerHid = true
   else {
     // 离开前提交已编辑且尚未发出的内容，迟到回执仍按页面代次丢弃。
     if (saveQueued) void act(false)
@@ -980,7 +1026,7 @@ useLoginRefresh(() => load())
         :choices-locked="identityChoicesLocked"
         :has-pending="!!(avatarPending || profilePending)"
         :can-restore="!!(currentMe.avatar_id || currentMe.avatar_url) && !restoreAvatar"
-        :wechat-available="wechatCapabilities.avatar || wechatCapabilities.nickname"
+        :wechat-available="wechatAvailable"
         :can-save="hasUnsavedChanges"
         :save-label="
           avatarPending || profilePending
@@ -1002,30 +1048,16 @@ useLoginRefresh(() => load())
         <AppNotice :message="avatarError" kind="error" />
       </ProfileIdentityCard>
       <!-- #ifdef MP-WEIXIN -->
-      <AppSheet v-if="choosingWechatProfile" title="使用微信资料" @close="cancelWechatProfile">
-        <form class="profile-choice-sheet" @submit="acceptWechatProfile">
-          <ProfileAvatar v-if="wechatAvatar" :src="wechatAvatar" :size="100" />
-          <button
-            v-if="wechatCapabilities.avatar"
-            class="ui-button"
-            open-type="chooseAvatar"
-            @chooseavatar="acceptWechatAvatar"
-          >
-            {{ wechatAvatar ? '重新选择微信头像' : '选择微信头像' }}
-          </button>
-          <label v-if="wechatCapabilities.nickname" for="wechat-nickname">微信昵称</label>
-          <input
-            v-if="wechatCapabilities.nickname"
-            id="wechat-nickname"
-            class="ui-input"
-            name="nickname"
-            type="nickname"
-            placeholder="选择微信昵称或手动填写"
-          />
-          <AppNotice :message="avatarError" kind="error" />
-          <button class="ui-button ui-button-primary" form-type="submit">使用所选资料</button>
-        </form>
-      </AppSheet>
+      <WechatProfileSheet
+        v-if="wechatSheetOpen && allowed('putMeProfile')"
+        :busy="wechatSaving"
+        :submitted="!!wechatScope"
+        :retry-label="wechatRetryLabel"
+        :partially-saved="profilePartiallySaved"
+        :save-error="avatarError || error"
+        @close="closeWechatProfile"
+        @save="saveWechatProfile"
+      />
       <!-- #endif -->
       <AppSheet v-if="randomSheetOpen" title="随机头像和昵称" @close="closeRandomProfile">
         <view class="profile-choice-sheet">
@@ -1243,7 +1275,6 @@ useLoginRefresh(() => load())
   gap: 14rpx;
   padding: 18rpx 2rpx;
 }
-.profile-choice-sheet input,
 .profile-choice-sheet button,
 .random-preview text {
   margin: 0;

@@ -166,7 +166,7 @@ async function setup(
     pageScript(page) +
       (page === blacklistPage
         ? '\nexport { currentMe,rows,blocksReady,cursor,targetName,busy,writing,error,notice,load,act,retryWrite,retryReady,workspace }'
-        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,enrollmentYear,educationLevel,gradeOverride,selectEducation,restoreAutomaticGrade,adjustGradeNumber,stageDefaultAvatar,displayedAvatar,editNickname,displayedNickname,savePersonalProfile,cancelIdentityChoice,profilePartiallySaved,randomSheetOpen,randomChoice,randomBusy,randomError,openRandomProfile,randomProfile,closeRandomProfile,acceptRandomProfile }'),
+        : '\nexport { currentMe,nickname,hidden,busy,writing,error,notice,load,act,allowed,chooseAvatar,changeAvatar,avatarDraft,avatarPending,avatarError,activity,returnToActivity,queueSave,enrollmentYear,educationLevel,gradeOverride,selectEducation,restoreAutomaticGrade,adjustGradeNumber,stageDefaultAvatar,displayedAvatar,editNickname,displayedNickname,savePersonalProfile,cancelIdentityChoice,profilePartiallySaved,randomSheetOpen,randomChoice,randomBusy,randomError,openRandomProfile,randomProfile,closeRandomProfile,acceptRandomProfile,startWechatProfile,closeWechatProfile,saveWechatProfile,wechatSheetOpen,wechatRetryLabel }'),
     {
       config,
       session: useRealSession ? realSession : { getEpoch: () => epoch, getToken: () => token },
@@ -298,6 +298,114 @@ async function setup(
 function setupBlacklist(query: Record<string, string> = {}, useRealSession = false) {
   return setup(query, useRealSession, blacklistPage)
 }
+
+test('微信弹窗在确认前不写入，两项保存沿用头像回执版本', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.startWechatProfile()
+  s.hooks.hide!()
+  s.hooks.show!()
+  assert.equal(r.wechatSheetOpen.value, true)
+  assert.equal(r.displayedNickname.value, actor.nickname)
+  assert.equal(s.calls.length, 0)
+
+  s.transport(async (input) => {
+    const profile = {
+      ...actor,
+      avatar_id: 'saved-avatar',
+      avatar_url: 'https://synthetic.invalid/a',
+    }
+    return input.url === '/me/avatar'
+      ? { ...profile, version: 20 }
+      : { ...profile, ...input.data, version: 21 }
+  })
+  await r.saveWechatProfile({ avatar: 'wxfile://synthetic', nickname: '微信昵称样例' })
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    ['/me/avatar', '/me/profile'],
+  )
+  assert.equal(s.calls[0]?.filePath, 'wxfile://synthetic')
+  assert.equal(s.calls[1]?.data?.expected_version, 20)
+  assert.equal(r.wechatSheetOpen.value, false)
+})
+
+test('微信弹窗取消保留原草稿，换号后旧弹窗不能提交', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.editNickname('原草稿')
+  r.startWechatProfile()
+  r.closeWechatProfile()
+  assert.equal(r.displayedNickname.value, '原草稿')
+  r.startWechatProfile()
+  s.epoch()
+  s.user.user = { ...actor, id: 'other-synthetic-account', nickname: '另一个账号' }
+  s.hooks.show!()
+  await settle()
+  await r.saveWechatProfile({ avatar: '', nickname: '旧会话资料' })
+  assert.equal(r.displayedNickname.value, '另一个账号')
+  assert.equal(r.wechatSheetOpen.value, false)
+  assert.equal(s.calls.length, 0)
+})
+
+test('微信临时头像失效后弹窗明确提供仅保存已选昵称', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.startWechatProfile()
+  s.transport(async (input) => {
+    if (input.url === '/me/avatar') throw new RequestError('图片失效', -1, 'UPLOAD_FILE_UNREADABLE')
+    return { ...actor, ...input.data, version: 20 }
+  })
+  await r.saveWechatProfile({ avatar: 'wxfile://expired', nickname: '只保存昵称' })
+  assert.match(r.avatarError.value, /重新选择头像/)
+  assert.equal(r.displayedAvatar.value, undefined)
+  assert.equal(r.wechatRetryLabel.value, '仅保存昵称')
+  await r.saveWechatProfile()
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    ['/me/avatar', '/me/profile'],
+  )
+  assert.equal(s.calls[1]?.data?.nickname, '只保存昵称')
+  assert.equal(r.wechatSheetOpen.value, false)
+})
+
+test('微信头像成功而昵称结果待确认时原键重试昵称', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.startWechatProfile()
+  let profileAttempts = 0
+  const withAvatar = { ...actor, avatar_id: 'saved-avatar', version: 20 }
+  s.transport(async (input) => {
+    if (input.url === '/me/avatar') return withAvatar
+    if (++profileAttempts === 1) throw new Error('首个请求无回执')
+    return { ...withAvatar, ...input.data, version: 21 }
+  })
+  await r.saveWechatProfile({ avatar: 'wxfile://selected', nickname: '微信昵称' })
+  assert.equal(r.profilePartiallySaved.value, true)
+  assert.equal(r.wechatRetryLabel.value, '确认保存结果')
+  await r.saveWechatProfile()
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    ['/me/avatar', '/me/profile', '/me/profile'],
+  )
+  assert.deepEqual(s.calls[2]?.header, s.calls[1]?.header)
+  assert.deepEqual(s.calls[2]?.data, s.calls[1]?.data)
+  assert.equal(r.wechatSheetOpen.value, false)
+})
+
+test('微信只保存头像时保留原先未提交的昵称草稿', async () => {
+  const s = await setup()
+  const r = s.runtime
+  r.editNickname('原昵称草稿')
+  r.startWechatProfile()
+  s.transport(async () => ({ ...actor, avatar_id: 'avatar', version: 20 }))
+  await r.saveWechatProfile({ avatar: 'wxfile://selected', nickname: '' })
+  assert.equal(r.wechatSheetOpen.value, false)
+  assert.equal(r.displayedNickname.value, '原昵称草稿')
+  assert.deepEqual(
+    s.calls.map((call) => call.url),
+    ['/me/avatar'],
+  )
+})
 
 test('REQ-002/014：资料按本人版本提交，显式发送 false，成功采用服务端回执', async () => {
   const s = await setup()

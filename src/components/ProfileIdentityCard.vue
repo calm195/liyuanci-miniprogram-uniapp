@@ -45,7 +45,7 @@ function editNickname(event: unknown) {
         :disabled="choicesLocked"
         @click="emit('wechat')"
       >
-        <text>使用微信头像和昵称</text><text class="profile-choice-meta">微信资料 ›</text>
+        <text>从微信选用头像和昵称</text><text class="profile-choice-meta">›</text>
       </button>
       <button class="profile-choice" :disabled="choicesLocked" @click="emit('random')">
         <text>系统随机头像和昵称</text><text class="profile-choice-meta">换一组 ›</text>
